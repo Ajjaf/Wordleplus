@@ -24,6 +24,7 @@ export default function Keyboard({ onKeyPress, letterStates = {} }) {
   };
 
   return (
+    //change to push
     <div
       style={{
         display: "flex",
