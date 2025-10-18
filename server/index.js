@@ -54,26 +54,8 @@ function isValidWordLocal(word) {
 // ---------- Express app ----------
 const app = express();
 
-// CORS: allow localhost (dev) and your Vercel site (prod). Allow no-origin (curl/WS upgrades).
-// const corsOptions = {
-//   origin: (origin, cb) => {
-//     const allowed = [
-//       "http://localhost:5173",
-//       "http://localhost:8081",
-
-//       process.env.NODE_ENV === "production"
-//         ? "https://wordleplus-gamma.vercel.app"
-//         : null,
-//     ].filter(Boolean);
-//     if (!origin || allowed.includes(origin)) cb(null, true);
-//     else cb(new Error(`CORS blocked: ${origin}`), false);
-//   },
-//   methods: ["GET", "POST", "OPTIONS"],
-//   allowedHeaders: ["Content-Type"],
-// };
 const corsOptions = {
   origin: (origin, cb) => {
-    // In dev, allow all (React Native often sends no Origin)
     cb(null, true);
   },
   methods: ["GET", "POST", "OPTIONS"],
@@ -82,6 +64,12 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 app.use(express.json());
+
+// Serve static files from client build in production
+if (process.env.NODE_ENV === "production") {
+  const clientDistPath = path.join(__dirname, "..", "client", "dist");
+  app.use(express.static(clientDistPath));
+}
 
 // Health + validate
 app.get("/health", (_req, res) => res.json({ ok: true }));
@@ -560,6 +548,15 @@ function sanitizeRoom(room) {
     shared: sharedSnapshot,
   };
 }
+
+// ---------- Catch-all route for client-side routing (production only) ----------
+if (process.env.NODE_ENV === "production") {
+  app.get("*", (req, res) => {
+    const clientDistPath = path.join(__dirname, "..", "client", "dist");
+    res.sendFile(path.join(clientDistPath, "index.html"));
+  });
+}
+
 // ---------- Start server ----------
-const PORT = process.env.PORT || 8080; // Railway injects PORT in prod
-httpServer.listen(PORT, () => console.log("Server listening on", PORT));
+const PORT = process.env.PORT || 8080;
+httpServer.listen(PORT, "0.0.0.0", () => console.log("Server listening on", PORT));
