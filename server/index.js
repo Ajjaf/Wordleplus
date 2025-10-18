@@ -69,6 +69,11 @@ app.use(express.json());
 if (process.env.NODE_ENV === "production") {
   const clientDistPath = path.join(__dirname, "..", "client", "dist");
   app.use(express.static(clientDistPath));
+} else {
+  // In development, redirect root to frontend dev server
+  app.get("/", (req, res) => {
+    res.redirect("http://localhost:5000");
+  });
 }
 
 // Health + validate
