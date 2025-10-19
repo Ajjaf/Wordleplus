@@ -243,6 +243,15 @@ app.post("/api/daily/guess", async (req, res) => {
     const outOfGuesses = newGuesses.length >= MAX_DAILY_GUESSES;
     const completed = won || outOfGuesses;
     
+    console.log("[Daily Guess Logic]", {
+      guessCount: newGuesses.length,
+      maxGuesses: MAX_DAILY_GUESSES,
+      outOfGuesses,
+      won,
+      completed,
+      puzzleWord: puzzle.word
+    });
+    
     await createOrUpdateDailyResult(user.id, puzzle.id, {
       guesses: newGuesses,
       patterns: newPatterns,
