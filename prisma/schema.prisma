@@ -45,16 +45,15 @@ model WordLexicon {
 
 /// One "daily" row per date. `seed` is the method to derive the word deterministically.
 model DailyPuzzle {
-  id          String   @id // yyyy-mm-dd (in DAILY_TZ)
-  date        DateTime // stored in UTC
+  id          String   @id @default(cuid())
+  date        String   @unique // yyyy-mm-dd format
   word        String
+  difficulty  String   @default("medium")
   createdAt   DateTime @default(now())
   locked      Boolean  @default(false) // optional: prevent edits after roll
   checksum    String?  // optional: for integrity
 
   results     DailyResult[]
-
-  @@unique([word, date])
 }
 
 /// One row per user per daily.
@@ -66,8 +65,13 @@ model DailyResult {
   updatedAt   DateTime @updatedAt
 
   /// gameplay data
+  guesses      String[] // list of guessed words
+  patterns     Json[]   // list of patterns (arrays of color strings)
   attempts     Int      // 1..6 ; NULL => DNF
-  solved       Boolean  // true if solved
+  won          Boolean  // true if solved
+  completed    Boolean  @default(false) // true if game is over
+  completedAt  DateTime? // when completed
+  solved       Boolean  // true if solved (same as won)
   durationMs   Int?     // optional
   hardMode     Boolean  @default(false)
 
@@ -80,7 +84,7 @@ model DailyResult {
   puzzle      DailyPuzzle @relation(fields: [puzzleId], references: [id])
 
   @@unique([userId, puzzleId])
-  @@index([puzzleId, attempts, solved])
+  @@index([puzzleId, attempts, won])
 }
 
 /// Simple append-only analytics stream.

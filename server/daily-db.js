@@ -12,9 +12,7 @@ export async function getOrCreateAnonymousUser(cookieUserId) {
   }
 
   const user = await prisma.user.create({
-    data: {
-      isAnonymous: true,
-    }
+    data: {}
   });
 
   return user;
@@ -85,6 +83,7 @@ export async function createOrUpdateDailyResult(userId, puzzleId, data) {
       guesses,
       patterns,
       won,
+      solved: won,
       completed,
       completedAt: completed ? new Date() : null,
       attempts: guesses.length
@@ -95,6 +94,7 @@ export async function createOrUpdateDailyResult(userId, puzzleId, data) {
       guesses,
       patterns,
       won,
+      solved: won,
       completed,
       completedAt: completed ? new Date() : null,
       attempts: guesses.length
@@ -122,38 +122,54 @@ export async function getUserDailyStats(userId, limit = 30) {
 
   let currentStreak = 0;
   let maxStreak = 0;
+
+  const completedResults = results.filter(r => r.completed);
+  
+  const sortedAsc = [...completedResults].sort((a, b) => 
+    new Date(a.puzzle.date) - new Date(b.puzzle.date)
+  );
+
   let tempStreak = 0;
+  let prevDate = null;
 
-  const sortedResults = results
-    .filter(r => r.completed)
-    .sort((a, b) => new Date(b.puzzle.date) - new Date(a.puzzle.date));
-
-  for (let i = 0; i < sortedResults.length; i++) {
-    const result = sortedResults[i];
+  for (const result of sortedAsc) {
     const resultDate = DateTime.fromISO(result.puzzle.date);
     
     if (result.won) {
-      tempStreak++;
+      if (prevDate === null) {
+        tempStreak = 1;
+      } else {
+        const daysDiff = resultDate.diff(prevDate, 'days').days;
+        if (Math.abs(daysDiff) <= 1) {
+          tempStreak++;
+        } else {
+          tempStreak = 1;
+        }
+      }
+      
       if (tempStreak > maxStreak) {
         maxStreak = tempStreak;
       }
-      
-      if (i === 0) {
-        currentStreak = tempStreak;
-      } else {
-        const prevDate = DateTime.fromISO(sortedResults[i - 1].puzzle.date);
-        const daysDiff = resultDate.diff(prevDate, 'days').days;
-        if (Math.abs(daysDiff) > 1) {
-          if (i > 0) currentStreak = 0;
-          tempStreak = 1;
-        } else if (i === 0) {
-          currentStreak = tempStreak;
-        }
-      }
     } else {
       tempStreak = 0;
-      if (i === 0) currentStreak = 0;
     }
+    
+    prevDate = resultDate;
+  }
+
+  const mostRecentCompleted = completedResults[0];
+  if (mostRecentCompleted && mostRecentCompleted.won) {
+    const today = DateTime.now().startOf('day');
+    const mostRecentDate = DateTime.fromISO(mostRecentCompleted.puzzle.date);
+    const daysSinceLastWin = today.diff(mostRecentDate, 'days').days;
+    
+    if (daysSinceLastWin <= 1) {
+      currentStreak = tempStreak;
+    } else {
+      currentStreak = 0;
+    }
+  } else {
+    currentStreak = 0;
   }
 
   return {
