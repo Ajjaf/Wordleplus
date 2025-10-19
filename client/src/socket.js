@@ -3,6 +3,10 @@ import { io } from "socket.io-client";
 import { SERVER_URL } from "./config";
 
 export const socket = io(SERVER_URL, {
-  transports: ["websocket"],
+  path: "/socket.io",
+  transports: ["polling", "websocket"],
   withCredentials: false,
+  reconnection: true,
+  reconnectionDelay: 1000,
+  reconnectionAttempts: 10,
 });
