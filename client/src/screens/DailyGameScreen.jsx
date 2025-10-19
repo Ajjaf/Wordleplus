@@ -1,7 +1,6 @@
 import React from "react";
 import Board from "../components/Board.jsx";
 import Keyboard from "../components/Keyboard.jsx";
-import { Button } from "@/components/ui/button";
 
 export default function DailyGameScreen({
   challenge,
@@ -9,7 +8,6 @@ export default function DailyGameScreen({
   currentGuess,
   letterStates,
   onKeyPress,
-  onSubmit,
   statusMessage,
   loading = false,
   gameOver = false,
@@ -23,63 +21,57 @@ export default function DailyGameScreen({
       className="w-full flex flex-col bg-background relative overflow-hidden"
       style={{ minHeight: "calc(100dvh - 64px)" }}
     >
-      <main className="flex-1 px-3 md:px-4 pt-3 pb-3 min-h-0">
-        <div className="max-w-3xl mx-auto h-full flex flex-col gap-4">
-          <header className="text-center space-y-1">
-            <h1 className="text-xl font-semibold text-foreground tracking-wide">
-              {title}
-            </h1>
+      {/* Header */}
+      <div className="px-3 pt-3 pb-2">
+        <div className="max-w-7xl mx-auto">
+          <h2 className="text-2xl font-bold text-slate-800 text-center mb-1">
+            {title}
+          </h2>
+          <div className="text-center space-y-1">
             {subtitle && (
-              <p className="text-sm text-muted-foreground">{subtitle}</p>
+              <p className="text-xs text-muted-foreground">{subtitle}</p>
             )}
-            <p className="text-xs text-muted-foreground tracking-[0.35em] uppercase">
+            <p className="text-xs text-slate-600 font-medium tracking-[0.35em] uppercase">
               Guess the word in {maxGuesses} tries
             </p>
-          </header>
-
-          <section className="flex-1 flex items-center justify-center min-h-0">
-            <div className="w-full max-w-[min(96vw,520px)] flex items-center justify-center">
-              <Board
-                guesses={guesses}
-                activeGuess={gameOver ? "" : currentGuess}
-                maxTile={120}
-                minTile={48}
-                gap={10}
-                padding={12}
-                secretWord={null}
-                secretWordState="empty"
-              />
-            </div>
-          </section>
-
-          <footer className="space-y-3">
-            <div className="flex items-center justify-center gap-3">
-              <Button
-                onClick={onSubmit}
-                disabled={gameOver || loading}
-                className="px-6 py-2 font-semibold"
-              >
-                {gameOver ? "Completed" : loading ? "Checking..." : "Submit Guess"}
-              </Button>
-            </div>
             {statusMessage && (
-              <p className="text-center text-sm text-muted-foreground">
+              <p className="text-xs text-emerald-600 font-medium">
                 {statusMessage}
               </p>
             )}
-          </footer>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Board Area */}
+      <main className="flex-1 px-3 md:px-4 pt-2 pb-3 flex flex-col min-h-0">
+        <div className="flex-1 flex flex-col items-center min-h-0">
+          {/* Center board */}
+          <div className="flex-1 w-full max-w-[min(1100px,95vw)] max-h-[calc(100dvh-260px)] flex items-center justify-center min-h-0">
+            <Board
+              guesses={guesses}
+              activeGuess={gameOver ? "" : currentGuess}
+              maxTile={112}
+              minTile={56}
+              gap={10}
+              padding={12}
+              secretWord={null}
+              secretWordState="empty"
+            />
+          </div>
         </div>
       </main>
 
-      <div className="w-full px-2 sm:px-4 py-2 border-t border-border/40 flex-shrink-0">
-        <div className="mx-auto w-full max-w-[min(96vw,520px)]">
+      {/* Keyboard Footer */}
+      <footer className="px-2 sm:px-4 pb-2 flex-shrink-0">
+        <div className="max-w-5xl mx-auto">
           <Keyboard
             onKeyPress={onKeyPress}
             letterStates={letterStates}
             disabled={gameOver || loading}
           />
         </div>
-      </div>
+      </footer>
     </div>
   );
 }

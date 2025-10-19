@@ -311,8 +311,14 @@ export default function App() {
         /^[A-Z]$/.test(key) &&
         dailyCurrentGuess.length < dailyWordLength
       ) {
-        setDailyCurrentGuess((prev) => prev + key);
+        const newGuess = dailyCurrentGuess + key;
+        setDailyCurrentGuess(newGuess);
         setDailyStatus("");
+        
+        // Auto-submit when word is complete
+        if (newGuess.length === dailyWordLength) {
+          setTimeout(() => handleDailySubmit(), 100);
+        }
       }
     },
     [
@@ -712,7 +718,6 @@ export default function App() {
               currentGuess={dailyCurrentGuess}
               letterStates={dailyLetterStates}
               onKeyPress={handleDailyKey}
-              onSubmit={handleDailySubmit}
               statusMessage={dailyStatus}
               loading={dailyLoading}
               gameOver={dailyGameOver}
