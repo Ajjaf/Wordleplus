@@ -56,17 +56,29 @@ The project has TWO workflows configured:
 
 ## Recent Changes
 
-### October 19, 2025 (Evening) - Database Setup Completed
-- Set up Neon PostgreSQL database with Prisma ORM
-- Created complete database schema with models:
-  - **User**: Anonymous and registered users with optional email/password
-  - **WordLexicon**: 12,972 5-letter words seeded from words.txt
-  - **DailyPuzzle**: Daily challenge puzzles with deterministic generation
-  - **DailyResult**: User results for daily puzzles
-  - **Event**: Game events and leaderboard tracking for all modes
-- Successfully ran database migration and seed (12,972 words loaded)
-- Added database management scripts to package.json (db:push, db:seed, db:studio)
-- Configured DATABASE_URL via Replit Secrets
+### October 19, 2025 (Evening) - Daily Challenge Database Integration Completed
+- **Database Setup**: Set up Neon PostgreSQL database with Prisma ORM
+  - Created complete database schema with models:
+    - **User**: Anonymous users tracked by cookie-based IDs with optional upgrade to registered accounts
+    - **WordLexicon**: 12,972 5-letter words seeded from words.txt
+    - **DailyPuzzle**: Daily challenge puzzles with deterministic word generation
+    - **DailyResult**: Stores guesses, patterns, completion status, and win data per user per puzzle
+    - **Event**: Game events and leaderboard tracking for all modes
+  - Successfully ran database migration and seed (12,972 words loaded)
+  - Added database management scripts to package.json (db:push, db:seed, db:studio)
+  - Configured DATABASE_URL via Replit Secrets
+
+- **Daily Challenge Database Integration**:
+  - Created database helper module (server/daily-db.js) for user/puzzle/result operations
+  - Updated Daily Challenge API endpoints to use persistent storage:
+    - GET /api/daily: Loads puzzle from DailyPuzzle table, retrieves user progress from DailyResult
+    - POST /api/daily/guess: Validates and stores guesses with patterns in database
+    - GET /api/daily/stats: Returns user statistics including win rate, current streak, and max streak
+  - Anonymous user system: Auto-creates users on first visit, tracks via cookie (1-year expiration)
+  - Deterministic puzzle generation: Same word for all players each day, stored in database
+  - Progress persistence: All guesses, patterns, and completion status stored in DailyResult table
+  - Statistics tracking: Win streaks, completion rates, recent game history
+  - Re-enabled local Backend workflow on port 8080 for testing daily mode with database
 
 ### October 19, 2025 (Afternoon) - Daily Challenge Mode Completed
 - Implemented complete Daily Challenge mode functionality:
