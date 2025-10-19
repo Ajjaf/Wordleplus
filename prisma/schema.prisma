@@ -1,0 +1,99 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(cuid())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Basic identity
+  email         String?  @unique
+  username      String?  @unique
+  displayName   String?
+  avatarUrl     String?
+  // Optional external identities (fill later)
+  authProvider  String?   // 'supabase' | 'clerk' | 'authjs' | 'dev'
+  authExternalId String?  @unique
+
+  // Anonymous support (mobile first-run)
+  deviceId      String? @unique
+
+  // Game stats (denorm hints; keep truth in result tables)
+  totalWins     Int      @default(0)
+  totalGames    Int      @default(0)
+  streak        Int      @default(0)
+  longestStreak Int      @default(0)
+
+  results       DailyResult[]
+  events        Event[]
+}
+
+model WordLexicon {
+  id      Int     @id @default(autoincrement())
+  word    String  @unique
+  length  Int
+  active  Boolean @default(true)
+
+  @@index([length, active])
+}
+
+/// One "daily" row per date. `seed` is the method to derive the word deterministically.
+model DailyPuzzle {
+  id          String   @id // yyyy-mm-dd (in DAILY_TZ)
+  date        DateTime // stored in UTC
+  word        String
+  createdAt   DateTime @default(now())
+  locked      Boolean  @default(false) // optional: prevent edits after roll
+  checksum    String?  // optional: for integrity
+
+  results     DailyResult[]
+
+  @@unique([word, date])
+}
+
+/// One row per user per daily.
+model DailyResult {
+  id          String   @id @default(cuid())
+  userId      String
+  puzzleId    String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  /// gameplay data
+  attempts     Int      // 1..6 ; NULL => DNF
+  solved       Boolean  // true if solved
+  durationMs   Int?     // optional
+  hardMode     Boolean  @default(false)
+
+  /// anti-cheat hints (optional)
+  submittedIp  String? 
+  userAgent    String?
+  clientBuild  String?  // app version
+
+  user        User        @relation(fields: [userId], references: [id])
+  puzzle      DailyPuzzle @relation(fields: [puzzleId], references: [id])
+
+  @@unique([userId, puzzleId])
+  @@index([puzzleId, attempts, solved])
+}
+
+/// Simple append-only analytics stream.
+model Event {
+  id        String   @id @default(cuid())
+  userId    String?
+  type      String   // "battle.join", "duel.win", "daily.submit", etc.
+  ts        DateTime @default(now())
+  roomId    String?
+  meta      Json?
+
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@index([type, ts])
+  @@index([roomId, ts])
+}
