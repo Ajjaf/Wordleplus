@@ -37,3 +37,8 @@ lerna-debug.log*
 temp_*.txt
 *.tmp
 *.temp
+
+# Prisma
+.env
+.env.*.local
+prisma/migrations/**/migration.sql
