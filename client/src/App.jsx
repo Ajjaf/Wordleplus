@@ -51,6 +51,7 @@ export default function App() {
   const [dailyStatus, setDailyStatus] = useState("");
   const [dailyGameOver, setDailyGameOver] = useState(false);
   const [dailyLoading, setDailyLoading] = useState(false);
+  const [dailyCorrectWord, setDailyCorrectWord] = useState(null);
   const maxDailyGuessesDefault = 6;
   const dailyWordLengthDefault = 5;
   const [showVictory, setShowVictory] = useState(false);
@@ -152,6 +153,7 @@ export default function App() {
     setDailyStatus("");
     setDailyGameOver(false);
     setDailyLoading(false);
+    setDailyCorrectWord(null);
   }, []);
 
   const startDailyMode = useCallback(async () => {
@@ -269,6 +271,11 @@ export default function App() {
           Boolean(result?.complete || result?.gameOver)
       );
 
+      // Store correct word if game is over
+      if (result?.word) {
+        setDailyCorrectWord(result.word);
+      }
+
       if (result?.message) {
         setDailyStatus(result.message);
       } else if (solved) {
@@ -311,14 +318,8 @@ export default function App() {
         /^[A-Z]$/.test(key) &&
         dailyCurrentGuess.length < dailyWordLength
       ) {
-        const newGuess = dailyCurrentGuess + key;
-        setDailyCurrentGuess(newGuess);
+        setDailyCurrentGuess((prev) => prev + key);
         setDailyStatus("");
-        
-        // Auto-submit when word is complete
-        if (newGuess.length === dailyWordLength) {
-          setTimeout(() => handleDailySubmit(), 100);
-        }
       }
     },
     [
@@ -721,6 +722,8 @@ export default function App() {
               statusMessage={dailyStatus}
               loading={dailyLoading}
               gameOver={dailyGameOver}
+              correctWord={dailyCorrectWord}
+              won={dailyGuessEntries.some(g => g.pattern?.every(s => s === 'green'))}
             />
           </div>
           {/* Victory Modal for Daily Challenge */}

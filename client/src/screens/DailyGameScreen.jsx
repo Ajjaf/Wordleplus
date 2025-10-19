@@ -11,10 +11,15 @@ export default function DailyGameScreen({
   statusMessage,
   loading = false,
   gameOver = false,
+  correctWord = null,
+  won = false,
 }) {
   const title = challenge?.title || "Daily Challenge";
   const subtitle = challenge?.subtitle || challenge?.date || "";
   const maxGuesses = challenge?.maxGuesses || 6;
+
+  // Show correct word only when game is over and player lost
+  const showCorrectWord = gameOver && !won && correctWord;
 
   return (
     <div
@@ -46,6 +51,15 @@ export default function DailyGameScreen({
       {/* Main Board Area */}
       <main className="flex-1 px-3 md:px-4 pt-2 pb-3 flex flex-col min-h-0">
         <div className="flex-1 flex flex-col items-center min-h-0">
+          {/* Correct Word Display (only when lost) */}
+          {showCorrectWord && (
+            <div className="mb-3 px-4 py-2 bg-slate-100 rounded-lg border-2 border-slate-300">
+              <p className="text-2xl font-bold text-slate-700 tracking-widest">
+                {correctWord}
+              </p>
+            </div>
+          )}
+
           {/* Center board */}
           <div className="flex-1 w-full max-w-[min(1100px,95vw)] max-h-[calc(100dvh-260px)] flex items-center justify-center min-h-0">
             <Board

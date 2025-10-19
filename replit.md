@@ -58,10 +58,14 @@ The project has TWO workflows configured:
 ### October 19, 2025 (Evening) - Daily Challenge UI Updates & Bug Fixes
 - **UI Overhaul**: Updated Daily Challenge screen to match Battle player view layout
   - Removed "Submit Guess" button for cleaner interface
-  - Auto-submit functionality: guesses submit automatically when 5th letter is typed
   - Larger, centered board matching Battle mode design (maxTile=112, minTile=56)
   - Improved header styling with bold title and status messages
   - Persistent keyboard footer for better UX
+  - **Correct word display**: When player loses, the correct word is displayed above the board
+- **Gameplay Consistency**: Core gameplay matches other modes
+  - Press ENTER key to submit guess (no auto-submit)
+  - Board provides feedback for invalid guesses (wrong length, invalid word)
+  - Backend returns correct word when game ends
 - **Critical Bug Fix**: Fixed "Invalid response from server" error
   - Updated Vite proxy configuration to point to local backend (localhost:8080)
   - All API endpoints now correctly routed through local Express server

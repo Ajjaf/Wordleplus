@@ -252,6 +252,7 @@ app.post("/api/daily/guess", async (req, res) => {
       correct: won,
       gameOver: completed,
       won,
+      word: completed ? puzzle.word : undefined,
       message: won 
         ? "🎉 Congratulations! You solved today's puzzle!" 
         : outOfGuesses 
