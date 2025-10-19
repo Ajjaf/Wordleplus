@@ -13,6 +13,11 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "cookie-parser": "^1.4.7"
+    "@prisma/client": "^6.17.1",
+    "@types/luxon": "^3.7.1",
+    "cookie-parser": "^1.4.7",
+    "luxon": "^3.7.2",
+    "prisma": "^6.17.1",
+    "tsx": "^4.20.6"
   }
 }
