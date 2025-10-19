@@ -69,6 +69,40 @@ app.use(express.json());
 if (process.env.NODE_ENV === "production") {
   const clientDistPath = path.join(__dirname, "..", "client", "dist");
   app.use(express.static(clientDistPath));
+} else {
+  // In development, show helpful page with link to frontend
+  app.get("/", (_req, res) => {
+    const replitDomain = process.env.REPLIT_DEV_DOMAIN;
+    const frontendUrl = replitDomain 
+      ? `https://5000--${replitDomain}`
+      : "http://localhost:5000";
+    
+    res.send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>WordlePlus Backend</title>
+        <style>
+          body { font-family: Arial, sans-serif; text-align: center; padding: 50px; background: #f5f5f5; }
+          .container { background: white; padding: 40px; border-radius: 10px; max-width: 600px; margin: 0 auto; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+          h1 { color: #5b21b6; }
+          .button { display: inline-block; margin-top: 20px; padding: 15px 30px; background: #5b21b6; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; }
+          .button:hover { background: #7c3aed; }
+          p { color: #666; line-height: 1.6; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h1>🎮 WordlePlus Backend API</h1>
+          <p>You've reached the backend API server. The WordlePlus game frontend is running on a different port.</p>
+          <p><strong>Click the button below to access the game:</strong></p>
+          <a href="${frontendUrl}" class="button">Open WordlePlus Game →</a>
+          <p style="margin-top: 30px; font-size: 14px; color: #999;">Backend API running on port 8080 | Frontend on port 5000</p>
+        </div>
+      </body>
+      </html>
+    `);
+  });
 }
 
 // Health + validate
