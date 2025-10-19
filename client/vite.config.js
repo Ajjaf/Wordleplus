@@ -13,24 +13,24 @@ export default defineConfig({
     port: 5000,
     allowedHosts: true,
     proxy: {
-      // REST
+      // REST - Daily Challenge uses local backend for database
       "/api": {
-        target: "https://wordleplus-1-8f2s.onrender.com",
+        target: "http://localhost:8080",
         changeOrigin: true,
-        secure: true,
+        secure: false,
       },
-      // WebSocket (Socket.IO)
+      // WebSocket (Socket.IO) - Multiplayer uses local backend
       "/socket.io": {
-        target: "https://wordleplus-1-8f2s.onrender.com",
+        target: "http://localhost:8080",
         ws: true,
         changeOrigin: true,
-        secure: true,
+        secure: false,
       },
       // optional: health passthrough
       "/health": {
-        target: "https://wordleplus-1-8f2s.onrender.com",
+        target: "http://localhost:8080",
         changeOrigin: true,
-        secure: true,
+        secure: false,
       },
     },
   },

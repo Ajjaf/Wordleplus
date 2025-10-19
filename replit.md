@@ -35,17 +35,16 @@ WordlePlus is a multiplayer Wordle clone featuring competitive game modes includ
 ### Ports
 - **Frontend (Development)**: Port 5000 (Vite dev server)
 - **Backend (Development)**: Port 8080 (Express + Socket.IO)
-- **Production Backend**: Hosted externally at https://wordleplus-1-8f2s.onrender.com
 
 ### Running in Replit
 The project has TWO workflows configured:
 1. **Frontend**: Runs Vite dev server on port 5000 with proxy to backend
-2. **Backend**: Runs Express server on port 8080 (required for Daily Challenge mode testing)
+2. **Backend**: Runs Express server on port 8080 (required for Daily Challenge database integration)
 
 ### Key Configurations
 - Vite is configured to bind to `0.0.0.0:5000` to work with Replit's proxy
-- Backend proxies are set up in `vite.config.js` to forward `/api`, `/socket.io`, and `/health` to `localhost:8080` (development) or hosted backend (production)
-- The local `server/` directory contains Daily Challenge endpoints that must be deployed to the hosted backend for production use
+- Backend proxy is configured in `vite.config.js` to forward `/api`, `/socket.io`, and `/health` to `localhost:8080`
+- All game modes (Duel, Battle Royale, Shared, Daily Challenge) use the local backend for development
 
 ## Game Modes
 
@@ -55,6 +54,18 @@ The project has TWO workflows configured:
 4. **Daily Challenge**: Single-player daily puzzle with deterministic word generation; same word for all players each day; progress tracked via session cookies; 6 guesses max; victory modal on completion
 
 ## Recent Changes
+
+### October 19, 2025 (Evening) - Daily Challenge UI Updates & Bug Fixes
+- **UI Overhaul**: Updated Daily Challenge screen to match Battle player view layout
+  - Removed "Submit Guess" button for cleaner interface
+  - Auto-submit functionality: guesses submit automatically when 5th letter is typed
+  - Larger, centered board matching Battle mode design (maxTile=112, minTile=56)
+  - Improved header styling with bold title and status messages
+  - Persistent keyboard footer for better UX
+- **Critical Bug Fix**: Fixed "Invalid response from server" error
+  - Updated Vite proxy configuration to point to local backend (localhost:8080)
+  - All API endpoints now correctly routed through local Express server
+  - Database integration now fully functional in development
 
 ### October 19, 2025 (Evening) - Daily Challenge Database Integration Completed
 - **Database Setup**: Set up Neon PostgreSQL database with Prisma ORM
