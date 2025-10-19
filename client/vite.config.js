@@ -14,19 +14,22 @@ export default defineConfig({
     proxy: {
       // REST
       "/api": {
-        target: "http://localhost:8080",
+        target: "https://wordleplus-1-8f2s.onrender.com",
         changeOrigin: true,
+        secure: true,
       },
       // WebSocket (Socket.IO)
       "/socket.io": {
-        target: "http://localhost:8080",
+        target: "https://wordleplus-1-8f2s.onrender.com",
         ws: true,
         changeOrigin: true,
+        secure: true,
       },
       // optional: health passthrough
       "/health": {
-        target: "http://localhost:8080",
+        target: "https://wordleplus-1-8f2s.onrender.com",
         changeOrigin: true,
+        secure: true,
       },
     },
   },

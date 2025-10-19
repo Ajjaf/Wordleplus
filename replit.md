@@ -34,18 +34,16 @@ WordlePlus is a multiplayer Wordle clone featuring competitive game modes includ
 
 ### Ports
 - **Frontend (Development)**: Port 5000 (Vite dev server)
-- **Backend**: Port 8080 (Express + Socket.IO)
-- **Production**: Port 5000 (Express serves built frontend)
+- **Backend**: Hosted externally at https://wordleplus-1-8f2s.onrender.com
 
-### Running Locally
-The project has two workflows configured:
-1. **Backend**: Runs Express server on port 8080
-2. **Frontend**: Runs Vite dev server on port 5000 with proxy to backend
+### Running in Replit
+The project has ONE workflow configured:
+1. **Frontend**: Runs Vite dev server on port 5000 with proxy to hosted backend
 
 ### Key Configurations
 - Vite is configured to bind to `0.0.0.0:5000` to work with Replit's proxy
-- Backend proxies are set up in `vite.config.js` for `/api`, `/socket.io`, and `/health`
-- In production, the Express server serves the built frontend from `client/dist`
+- Backend proxies are set up in `vite.config.js` to forward `/api`, `/socket.io`, and `/health` to https://wordleplus-1-8f2s.onrender.com
+- The local `server/` directory is NOT used in Replit - backend is hosted externally
 
 ## Game Modes
 
@@ -54,13 +52,18 @@ The project has two workflows configured:
 3. **Shared Duel**: Players share a common word challenge
 4. **Daily Challenge**: Daily word challenge (marked as NEW)
 
-## Recent Changes (October 18, 2025)
+## Recent Changes
+
+### October 19, 2025
+- Removed local Backend workflow (backend hosted externally)
+- Updated Vite proxy configuration to connect to hosted backend at https://wordleplus-1-8f2s.onrender.com
+- Configured frontend-only setup in Replit
+
+### October 18, 2025
 - Initial import from GitHub
 - Removed deprecated npm packages (`badge`, `button`, `card`) that contained security vulnerabilities
 - Configured Vite for Replit environment (0.0.0.0:5000, proxy setup)
-- Updated backend to serve static frontend files in production
 - Set up workflows for both frontend and backend
-- Configured deployment for VM target with production build process
 
 ## Deployment
 - **Target**: VM (required for WebSocket support and stateful game rooms)
