@@ -80,6 +80,15 @@ The project has TWO workflows configured:
   - Statistics tracking: Win streaks, completion rates, recent game history
   - Re-enabled local Backend workflow on port 8080 for testing daily mode with database
 
+- **Learning Documentation Created**:
+  - Created comprehensive documentation in `docs/` folder:
+    - `DATABASE_INTEGRATION_GUIDE.md` - Complete overview of database integration
+    - `PRISMA_BASICS.md` - Prisma ORM tutorial with real examples
+    - `DATABASE_SCHEMA_EXPLAINED.md` - Detailed explanation of all tables
+    - `API_ENDPOINTS_GUIDE.md` - Step-by-step API endpoint walkthrough
+    - `TESTING_AND_DEBUGGING.md` - Practical testing and debugging guide
+    - `README.md` - Documentation index with learning paths
+
 ### October 19, 2025 (Afternoon) - Daily Challenge Mode Completed
 - Implemented complete Daily Challenge mode functionality:
   - Backend API endpoints: GET /api/daily and POST /api/daily/guess
