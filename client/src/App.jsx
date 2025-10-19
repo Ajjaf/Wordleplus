@@ -273,6 +273,7 @@ export default function App() {
         setDailyStatus(result.message);
       } else if (solved) {
         setDailyStatus("You solved today's puzzle!");
+        setShowVictory(true);
       } else if (exhausted) {
         setDailyStatus("No more guesses left. Come back tomorrow!");
       } else {
@@ -717,6 +718,16 @@ export default function App() {
               gameOver={dailyGameOver}
             />
           </div>
+          {/* Victory Modal for Daily Challenge */}
+          {showVictory && dailyGameOver && (
+            <VictoryModal
+              open={showVictory}
+              onOpenChange={setShowVictory}
+              mode="daily"
+              winnerName={name}
+              showPlayAgain={false}
+            />
+          )}
         </div>
       )}
 

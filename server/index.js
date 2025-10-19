@@ -1,6 +1,7 @@
 // server/index.js
 import express from "express";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 import { createServer } from "http";
 import { Server } from "socket.io";
 import fs from "fs";
@@ -60,10 +61,11 @@ const corsOptions = {
   },
   methods: ["GET", "POST", "OPTIONS"],
   allowedHeaders: ["Content-Type"],
-  credentials: false,
+  credentials: true,
 };
 app.use(cors(corsOptions));
 app.use(express.json());
+app.use(cookieParser());
 
 // Serve static files from client build in production
 if (process.env.NODE_ENV === "production") {
@@ -135,6 +137,155 @@ app.post("/api/reload-words", (_req, res) => {
     console.error("reload-words failed:", e);
     res.status(500).json({ ok: false });
   }
+});
+
+// ---------- Daily Challenge ----------
+// In-memory store for daily progress (sessionId -> dailyData)
+const dailySessions = new Map();
+const MAX_DAILY_GUESSES = 6;
+const DAILY_WORD_LENGTH = 5;
+
+// Generate deterministic daily word based on date
+function getDailyWord(date = new Date()) {
+  const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD
+  // Simple hash function to get consistent index for the date
+  let hash = 0;
+  for (let i = 0; i < dateStr.length; i++) {
+    hash = ((hash << 5) - hash) + dateStr.charCodeAt(i);
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  const index = Math.abs(hash) % WORDS.length;
+  return WORDS[index];
+}
+
+function getTodayDateString() {
+  return new Date().toISOString().split('T')[0];
+}
+
+function getSessionId(req) {
+  // Use session cookie or generate one
+  let sessionId = req.cookies?.dailySessionId;
+  if (!sessionId) {
+    sessionId = Math.random().toString(36).substring(2) + Date.now().toString(36);
+  }
+  return sessionId;
+}
+
+// GET /api/daily - Load daily challenge
+app.get("/api/daily", (req, res) => {
+  const sessionId = getSessionId(req);
+  const today = getTodayDateString();
+  const todayWord = getDailyWord();
+  
+  // Get or create session data
+  let sessionData = dailySessions.get(sessionId);
+  
+  // Reset if it's a new day
+  if (!sessionData || sessionData.date !== today) {
+    sessionData = {
+      date: today,
+      secret: todayWord,
+      guesses: [],
+      patterns: [],
+      gameOver: false,
+      won: false,
+    };
+    dailySessions.set(sessionId, sessionData);
+  }
+  
+  // Set session cookie
+  res.cookie('dailySessionId', sessionId, {
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    sameSite: 'lax'
+  });
+  
+  // Return challenge data (without revealing the secret word)
+  res.json({
+    title: "Daily Challenge",
+    subtitle: `Challenge for ${today}`,
+    date: today,
+    wordLength: DAILY_WORD_LENGTH,
+    maxGuesses: MAX_DAILY_GUESSES,
+    guesses: sessionData.guesses,
+    patterns: sessionData.patterns,
+    gameOver: sessionData.gameOver,
+    won: sessionData.won,
+  });
+});
+
+// POST /api/daily/guess - Submit a guess
+app.post("/api/daily/guess", (req, res) => {
+  const sessionId = getSessionId(req);
+  const { guess } = req.body;
+  
+  if (!guess || typeof guess !== 'string') {
+    return res.status(400).json({ error: "Invalid guess" });
+  }
+  
+  const guessUpper = guess.toUpperCase();
+  
+  // Validate word
+  if (!isValidWordLocal(guessUpper)) {
+    return res.status(400).json({ error: "Not a valid word" });
+  }
+  
+  // Get session data
+  const sessionData = dailySessions.get(sessionId);
+  if (!sessionData) {
+    return res.status(400).json({ error: "No active challenge. Please reload." });
+  }
+  
+  // Check if game is already over
+  if (sessionData.gameOver) {
+    return res.json({
+      error: "Challenge already completed",
+      gameOver: true,
+      won: sessionData.won,
+    });
+  }
+  
+  // Check if already guessed
+  if (sessionData.guesses.includes(guessUpper)) {
+    return res.status(400).json({ error: "Already guessed that word" });
+  }
+  
+  // Check guess limit
+  if (sessionData.guesses.length >= MAX_DAILY_GUESSES) {
+    return res.status(400).json({ error: "No more guesses left" });
+  }
+  
+  // Score the guess
+  const pattern = scoreGuess(sessionData.secret, guessUpper);
+  
+  // Update session
+  sessionData.guesses.push(guessUpper);
+  sessionData.patterns.push(pattern);
+  
+  // Check if won
+  const won = pattern.every(state => state === 'green' || state === 'correct');
+  const outOfGuesses = sessionData.guesses.length >= MAX_DAILY_GUESSES;
+  
+  if (won) {
+    sessionData.gameOver = true;
+    sessionData.won = true;
+  } else if (outOfGuesses) {
+    sessionData.gameOver = true;
+    sessionData.won = false;
+  }
+  
+  // Return result
+  res.json({
+    pattern,
+    correct: won,
+    gameOver: sessionData.gameOver,
+    won: sessionData.won,
+    message: won 
+      ? "🎉 Congratulations! You solved today's puzzle!" 
+      : outOfGuesses 
+      ? `Game over! The word was ${sessionData.secret}` 
+      : "",
+  });
 });
 
 // ---------- Rooms ----------
