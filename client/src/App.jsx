@@ -207,6 +207,9 @@ export default function App() {
       if (response?.gameOver) {
         setDailyGameOver(true);
       }
+      if (response?.word) {
+        setDailyCorrectWord(response.word.toUpperCase());
+      }
     } catch (err) {
       setDailyStatus(err?.message || "Unable to load daily challenge");
       setDailyChallenge(null);
@@ -273,7 +276,7 @@ export default function App() {
 
       // Store correct word if game is over
       if (result?.word) {
-        setDailyCorrectWord(result.word);
+        setDailyCorrectWord(result.word.toUpperCase());
       }
 
       if (result?.message) {

@@ -184,6 +184,7 @@ app.get("/api/daily", async (req, res) => {
       patterns,
       gameOver,
       won,
+      word: gameOver ? puzzle.word : undefined,
     });
   } catch (error) {
     console.error("Error in GET /api/daily:", error);
