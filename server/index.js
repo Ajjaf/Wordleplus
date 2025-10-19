@@ -174,7 +174,7 @@ app.get("/api/daily", async (req, res) => {
       sameSite: 'lax'
     });
     
-    res.json({
+    const responseData = {
       title: "Daily Challenge",
       subtitle: `Challenge for ${puzzle.date}`,
       date: puzzle.date,
@@ -185,7 +185,9 @@ app.get("/api/daily", async (req, res) => {
       gameOver,
       won,
       word: gameOver ? puzzle.word : undefined,
-    });
+    };
+    console.log("[GET /api/daily] Response:", { gameOver, won, word: responseData.word, guessCount: guesses.length });
+    res.json(responseData);
   } catch (error) {
     console.error("Error in GET /api/daily:", error);
     res.status(500).json({ error: "Failed to load daily challenge" });
@@ -248,7 +250,7 @@ app.post("/api/daily/guess", async (req, res) => {
       completed
     });
     
-    res.json({
+    const guessResponse = {
       pattern,
       correct: won,
       gameOver: completed,
@@ -259,7 +261,9 @@ app.post("/api/daily/guess", async (req, res) => {
         : outOfGuesses 
         ? `Game over! The word was ${puzzle.word}` 
         : "",
-    });
+    };
+    console.log("[POST /api/daily/guess] Response:", { completed, won, word: guessResponse.word });
+    res.json(guessResponse);
   } catch (error) {
     console.error("Error in POST /api/daily/guess:", error);
     res.status(500).json({ error: "Failed to process guess" });
