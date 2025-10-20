@@ -71,7 +71,7 @@ export default function HomeScreen({
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Enter your name"
-                  className="w-full rounded-lg border border-input bg-background/50 px-3 py-2 text-foreground outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
+                  className="w-full rounded-lg border border-input bg-background/50 px-3 py-3 min-h-[48px] text-foreground outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
                 />
               </div>
               {/* Mode Selection */}
@@ -83,7 +83,7 @@ export default function HomeScreen({
                   <Button
                     onClick={() => setMode("duel")}
                     variant={mode === "duel" ? "default" : "outline"}
-                    className={`h-10 transition-all ${
+                    className={`min-h-[48px] transition-all ${
                       mode === "duel"
                         ? "bg-gradient-primary hover:shadow-glow"
                         : "hover:bg-primary/10"
@@ -94,7 +94,7 @@ export default function HomeScreen({
                   <Button
                     onClick={() => setMode("battle")}
                     variant={mode === "battle" ? "default" : "outline"}
-                    className={`h-10 transition-all ${
+                    className={`min-h-[48px] transition-all ${
                       mode === "battle"
                         ? "bg-gradient-primary hover:shadow-glow"
                         : "hover:bg-primary/10"
@@ -105,7 +105,7 @@ export default function HomeScreen({
                   <Button
                     onClick={() => setMode("shared")}
                     variant={mode === "shared" ? "default" : "outline"}
-                    className={`h-10 transition-all ${
+                    className={`min-h-[48px] transition-all ${
                       mode === "shared"
                         ? "bg-gradient-primary hover:shadow-glow"
                         : "hover:bg-primary/10"
@@ -116,7 +116,7 @@ export default function HomeScreen({
                   <Button
                     onClick={() => setMode("daily")}
                     variant={mode === "daily" ? "default" : "outline"}
-                    className={`h-10 transition-all ${
+                    className={`min-h-[48px] transition-all ${
                       mode === "daily"
                         ? "bg-gradient-primary hover:shadow-glow"
                         : "hover:bg-primary/10"
@@ -139,7 +139,7 @@ export default function HomeScreen({
                     onClick={submitCreate}
                     disabled={creating || !name.trim()}
                     size="lg"
-                    className="bg-gradient-primary hover:shadow-glow transition-all duration-300 h-10"
+                    className="bg-gradient-primary hover:shadow-glow transition-all duration-300 min-h-[48px]"
                   >
                     {creating ? "Loading..." : "Play Daily Challenge"}
                   </Button>
@@ -153,7 +153,7 @@ export default function HomeScreen({
                     onClick={submitCreate}
                     disabled={creating || !name.trim()}
                     size="lg"
-                    className="bg-gradient-primary hover:shadow-glow transition-all duration-300 h-10"
+                    className="bg-gradient-primary hover:shadow-glow transition-all duration-300 min-h-[48px]"
                   >
                     {creating ? "Creating..." : "Create Room"}
                   </Button>
@@ -163,14 +163,14 @@ export default function HomeScreen({
                       value={roomId}
                       onChange={(e) => setRoomId(e.target.value.toUpperCase())}
                       placeholder="Room code"
-                      className="flex-1 h-10 rounded-lg border border-input bg-background/50 px-3 text-foreground outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
+                      className="flex-1 min-h-[48px] rounded-lg border border-input bg-background/50 px-3 text-foreground outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all"
                     />
                     <Button
                       onClick={submitJoin}
                       disabled={joining || !roomId.trim()}
                       size="lg"
                       variant="outline"
-                      className="h-10 px-4 hover:bg-primary/10"
+                      className="min-h-[48px] px-4 hover:bg-primary/10"
                     >
                       {joining ? "Joining..." : "Join"}
                     </Button>

@@ -134,7 +134,7 @@ export default function Keyboard({
           isAction
             ? "text-[11px] sm:text-xs basis-[18%] sm:basis-[10%]"
             : "text-sm sm:text-base basis-[9%] sm:basis-[7%]",
-          "min-h-[44px] sm:min-h-[36px] touch-manipulation",
+          "min-h-[48px] sm:min-h-[40px] touch-manipulation",
           disabled && "opacity-40 cursor-not-allowed hover:scale-100 grayscale"
         )}
         style={{
@@ -186,12 +186,12 @@ export default function Keyboard({
               </div>
             </div>
           )}
-          <div className="flex flex-col gap-0.5 md:gap-1 items-center justify-center">
+          <div className="flex flex-col gap-2 md:gap-1 items-center justify-center">
             {rows.map((row, idx) => (
               <div
                 key={idx}
                 className={cn(
-                  "w-full flex items-center justify-center gap-0.5 md:gap-1",
+                  "w-full flex items-center justify-center gap-1.5 md:gap-1",
                   idx === 1 && "px-2 md:px-3",
                   idx === 2 && "px-0"
                 )}
