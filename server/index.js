@@ -215,12 +215,9 @@ app.post("/api/daily/guess", async (req, res) => {
       return res.status(400).json({ error: "Not a valid word" });
     }
     
-    // If no userId, create one
-    let userId = cookieUserId;
-    if (!userId) {
-      const user = await getOrCreateAnonymousUser(null);
-      userId = user.id;
-    }
+    // Always create or get user record to ensure userId exists in database
+    const user = await getOrCreateAnonymousUser(cookieUserId);
+    const userId = user.id;
     
     const puzzle = await getTodaysPuzzle();
     const existingResult = await getUserDailyResult(userId, puzzle.id);

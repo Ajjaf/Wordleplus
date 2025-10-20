@@ -9,8 +9,15 @@ export async function getOrCreateAnonymousUser(cookieUserId) {
       where: { id: cookieUserId }
     });
     if (existing) return existing;
+    
+    // Create user with the provided cookieUserId
+    const user = await prisma.user.create({
+      data: { id: cookieUserId }
+    });
+    return user;
   }
 
+  // No userId provided, create a new one (should rarely happen now)
   const user = await prisma.user.create({
     data: {}
   });
