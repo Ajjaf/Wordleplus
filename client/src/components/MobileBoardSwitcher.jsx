@@ -28,37 +28,6 @@ export default function MobileBoardSwitcher({
 
   return (
     <div className={cn("relative w-full h-full", className)}>
-      {/* Progress Indicator */}
-      <div className="absolute top-2 left-1/2 transform -translate-x-1/2 z-10">
-        <div className="flex items-center gap-2 bg-black/80 text-white px-3 py-1 rounded-full text-xs">
-          <div className="flex items-center gap-1">
-            <div
-              className={cn(
-                "w-2 h-2 rounded-full",
-                view === "me" ? "bg-blue-400" : "bg-gray-400"
-              )}
-            />
-            <span className="font-medium">You</span>
-            <span className="text-gray-300">
-              ({myBoard.guesses?.length || 0}/6)
-            </span>
-          </div>
-          <div className="w-px h-3 bg-gray-500" />
-          <div className="flex items-center gap-1">
-            <div
-              className={cn(
-                "w-2 h-2 rounded-full",
-                view === "opponent" ? "bg-blue-400" : "bg-gray-400"
-              )}
-            />
-            <span className="font-medium">Opponent</span>
-            <span className="text-gray-300">
-              ({opponentBoard.guesses?.length || 0}/6)
-            </span>
-          </div>
-        </div>
-      </div>
-
       {/* Board Container */}
       <div className="relative w-full h-full overflow-hidden">
         <div
