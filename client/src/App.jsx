@@ -564,15 +564,14 @@ export default function App() {
   }, [room?.mode, isHost]);
 
   return (
-    <ErrorNotificationProvider>
-      <div 
-        className="overflow-x-hidden" 
-        style={{
-          paddingTop: 'env(safe-area-inset-top)',
-          paddingBottom: 'env(safe-area-inset-bottom)'
-        }}
-      >
-        <Backdrop />
+    <div 
+      className="overflow-x-hidden" 
+      style={{
+        paddingTop: 'env(safe-area-inset-top)',
+        paddingBottom: 'env(safe-area-inset-bottom)'
+      }}
+    >
+      <Backdrop />
 
       {/* Game screens break out of main container - Full viewport */}
       {screen === "game" && (
@@ -856,7 +855,6 @@ export default function App() {
           </div>
         </div>
       )}
-      </div>
-    </ErrorNotificationProvider>
+    </div>
   );
 }

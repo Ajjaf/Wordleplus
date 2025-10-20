@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { socket } from "../socket";
+import { useErrorNotification } from "../contexts/ErrorNotificationContext";
 
 const LS_ROOM = "wp.lastRoomId";
 const LS_SOCKET = "wp.lastSocketId";
@@ -8,9 +9,11 @@ const LS_LAST_NAME = "wp.lastName";
 export function useSocketConnection(room, setScreen) {
   const [connected, setConnected] = useState(socket.connected);
   const [rejoinOffered, setRejoinOffered] = useState(false);
+  const { showNotification } = useErrorNotification();
 
   // Prevent multiple resume attempts (StrictMode or rapid reconnects)
   const triedResumeRef = useRef(false);
+  const hasShownDisconnectRef = useRef(false);
 
   // Read these once; they rarely change during a session
   const savedRoomId = useMemo(() => localStorage.getItem(LS_ROOM) || "", []);
@@ -19,6 +22,12 @@ export function useSocketConnection(room, setScreen) {
   useEffect(() => {
     const onConnect = () => {
       setConnected(true);
+      
+      // Show reconnected notification if we previously disconnected
+      if (hasShownDisconnectRef.current) {
+        showNotification("Reconnected to server", "success");
+        hasShownDisconnectRef.current = false;
+      }
 
       // If we already have a room in state, nothing to resume.
       if (room?.id) {
@@ -58,17 +67,26 @@ export function useSocketConnection(room, setScreen) {
       const last = localStorage.getItem(LS_SOCKET);
       if (last) localStorage.setItem(LS_SOCKET + ".old", last);
       setConnected(false);
+      hasShownDisconnectRef.current = true;
+      showNotification("Connection lost - Reconnecting...", "warning");
       // Allow a new resume attempt on next connect
       triedResumeRef.current = false;
     };
 
+    const onConnectError = (error) => {
+      console.error("Socket connection error:", error);
+      showNotification("Connection error - Please check your network", "error");
+    };
+
     socket.on("connect", onConnect);
     socket.on("disconnect", onDisconnect);
+    socket.on("connect_error", onConnectError);
     return () => {
       socket.off("connect", onConnect);
       socket.off("disconnect", onDisconnect);
+      socket.off("connect_error", onConnectError);
     };
-  }, [room?.id, savedRoomId, savedName, setScreen]);
+  }, [room?.id, savedRoomId, savedName, setScreen, showNotification]);
 
   const canRejoin = connected && !room?.id && rejoinOffered;
 
