@@ -191,7 +191,7 @@ export default function Keyboard({
               <div
                 key={idx}
                 className={cn(
-                  "w-full flex items-center justify-center gap-1.5 md:gap-1",
+                  "w-full flex items-center justify-center gap-2 md:gap-1",
                   idx === 1 && "px-2 md:px-3",
                   idx === 2 && "px-0"
                 )}
