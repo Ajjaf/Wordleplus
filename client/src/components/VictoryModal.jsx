@@ -79,7 +79,9 @@ export default function VictoryModal({
   };
 
   const title =
-    winnerName
+    mode === "daily"
+      ? "🎉 Puzzle Solved!"
+      : winnerName
       ? `${winnerName} wins`
       : "Round complete";
 
@@ -103,7 +105,21 @@ export default function VictoryModal({
             {title}
           </h3>
 
-          {mode === "duel" ? (
+          {mode === "daily" ? (
+            <div className="mt-4">
+              <div className="p-4 bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 rounded-lg">
+                <p className="text-center text-lg font-semibold">
+                  Congratulations, {winnerName || "Player"}!
+                </p>
+                <p className="text-center text-sm text-muted-foreground mt-2">
+                  You solved today's Daily Challenge!
+                </p>
+                <p className="text-center text-xs text-muted-foreground mt-3">
+                  Come back tomorrow for a new puzzle! 🌟
+                </p>
+              </div>
+            </div>
+          ) : mode === "duel" ? (
             <div className="mt-4 space-y-4">
               <div className="flex items-center gap-4">
                 <Avatar name={leftName} />

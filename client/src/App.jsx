@@ -51,6 +51,7 @@ export default function App() {
   const [dailyStatus, setDailyStatus] = useState("");
   const [dailyGameOver, setDailyGameOver] = useState(false);
   const [dailyLoading, setDailyLoading] = useState(false);
+  const [dailyCorrectWord, setDailyCorrectWord] = useState(null);
   const maxDailyGuessesDefault = 6;
   const dailyWordLengthDefault = 5;
   const [showVictory, setShowVictory] = useState(false);
@@ -152,6 +153,7 @@ export default function App() {
     setDailyStatus("");
     setDailyGameOver(false);
     setDailyLoading(false);
+    setDailyCorrectWord(null);
   }, []);
 
   const startDailyMode = useCallback(async () => {
@@ -204,6 +206,9 @@ export default function App() {
       }
       if (response?.gameOver) {
         setDailyGameOver(true);
+      }
+      if (response?.word) {
+        setDailyCorrectWord(response.word.toUpperCase());
       }
     } catch (err) {
       setDailyStatus(err?.message || "Unable to load daily challenge");
@@ -269,10 +274,16 @@ export default function App() {
           Boolean(result?.complete || result?.gameOver)
       );
 
+      // Store correct word if game is over
+      if (result?.word) {
+        setDailyCorrectWord(result.word.toUpperCase());
+      }
+
       if (result?.message) {
         setDailyStatus(result.message);
       } else if (solved) {
         setDailyStatus("You solved today's puzzle!");
+        setShowVictory(true);
       } else if (exhausted) {
         setDailyStatus("No more guesses left. Come back tomorrow!");
       } else {
@@ -711,12 +722,23 @@ export default function App() {
               currentGuess={dailyCurrentGuess}
               letterStates={dailyLetterStates}
               onKeyPress={handleDailyKey}
-              onSubmit={handleDailySubmit}
               statusMessage={dailyStatus}
               loading={dailyLoading}
               gameOver={dailyGameOver}
+              correctWord={dailyCorrectWord}
+              won={dailyGuessEntries.some(g => g.pattern?.every(s => s === 'green'))}
             />
           </div>
+          {/* Victory Modal for Daily Challenge */}
+          {showVictory && dailyGameOver && (
+            <VictoryModal
+              open={showVictory}
+              onOpenChange={setShowVictory}
+              mode="daily"
+              winnerName={name}
+              showPlayAgain={false}
+            />
+          )}
         </div>
       )}
 

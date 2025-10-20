@@ -1,6 +1,7 @@
 // server/index.js
 import express from "express";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 import { createServer } from "http";
 import { Server } from "socket.io";
 import fs from "fs";
@@ -8,6 +9,13 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { scoreGuess } from "./game.js";
 import { duelMode, sharedMode, battleMode } from "./modes/index.js";
+import {
+  getOrCreateAnonymousUser,
+  getTodaysPuzzle,
+  getUserDailyResult,
+  createOrUpdateDailyResult,
+  getUserDailyStats
+} from "./daily-db.js";
 
 // ---------- Word list loader (.txt) ----------
 const __filename = fileURLToPath(import.meta.url);
@@ -54,34 +62,57 @@ function isValidWordLocal(word) {
 // ---------- Express app ----------
 const app = express();
 
-// CORS: allow localhost (dev) and your Vercel site (prod). Allow no-origin (curl/WS upgrades).
-// const corsOptions = {
-//   origin: (origin, cb) => {
-//     const allowed = [
-//       "http://localhost:5173",
-//       "http://localhost:8081",
-
-//       process.env.NODE_ENV === "production"
-//         ? "https://wordleplus-gamma.vercel.app"
-//         : null,
-//     ].filter(Boolean);
-//     if (!origin || allowed.includes(origin)) cb(null, true);
-//     else cb(new Error(`CORS blocked: ${origin}`), false);
-//   },
-//   methods: ["GET", "POST", "OPTIONS"],
-//   allowedHeaders: ["Content-Type"],
-// };
 const corsOptions = {
   origin: (origin, cb) => {
-    // In dev, allow all (React Native often sends no Origin)
     cb(null, true);
   },
   methods: ["GET", "POST", "OPTIONS"],
   allowedHeaders: ["Content-Type"],
-  credentials: false,
+  credentials: true,
 };
 app.use(cors(corsOptions));
 app.use(express.json());
+app.use(cookieParser());
+
+// Serve static files from client build in production
+if (process.env.NODE_ENV === "production") {
+  const clientDistPath = path.join(__dirname, "..", "client", "dist");
+  app.use(express.static(clientDistPath));
+} else {
+  // In development, show helpful page with link to frontend
+  app.get("/", (_req, res) => {
+    const replitDomain = process.env.REPLIT_DEV_DOMAIN;
+    const frontendUrl = replitDomain 
+      ? `https://5000--${replitDomain}`
+      : "http://localhost:5000";
+    
+    res.send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>WordlePlus Backend</title>
+        <style>
+          body { font-family: Arial, sans-serif; text-align: center; padding: 50px; background: #f5f5f5; }
+          .container { background: white; padding: 40px; border-radius: 10px; max-width: 600px; margin: 0 auto; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+          h1 { color: #5b21b6; }
+          .button { display: inline-block; margin-top: 20px; padding: 15px 30px; background: #5b21b6; color: white; text-decoration: none; border-radius: 5px; font-weight: bold; }
+          .button:hover { background: #7c3aed; }
+          p { color: #666; line-height: 1.6; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h1>🎮 WordlePlus Backend API</h1>
+          <p>You've reached the backend API server. The WordlePlus game frontend is running on a different port.</p>
+          <p><strong>Click the button below to access the game:</strong></p>
+          <a href="${frontendUrl}" class="button">Open WordlePlus Game →</a>
+          <p style="margin-top: 30px; font-size: 14px; color: #999;">Backend API running on port 8080 | Frontend on port 5000</p>
+        </div>
+      </body>
+      </html>
+    `);
+  });
+}
 
 // Health + validate
 app.get("/health", (_req, res) => res.json({ ok: true }));
@@ -112,6 +143,186 @@ app.post("/api/reload-words", (_req, res) => {
   } catch (e) {
     console.error("reload-words failed:", e);
     res.status(500).json({ ok: false });
+  }
+});
+
+// ---------- Daily Challenge ----------
+const MAX_DAILY_GUESSES = 6;
+const DAILY_WORD_LENGTH = 5;
+
+function getUserIdFromRequest(req) {
+  // Try header first (for iframe environments where cookies don't work)
+  const headerUserId = req.headers['x-user-id'];
+  if (headerUserId) return headerUserId;
+  
+  // Fallback to cookie
+  return req.cookies?.dailyUserId || null;
+}
+
+// GET /api/daily - Load daily challenge
+app.get("/api/daily", async (req, res) => {
+  try {
+    let userId = getUserIdFromRequest(req);
+    
+    // If no userId from client, create one
+    if (!userId) {
+      const user = await getOrCreateAnonymousUser(null);
+      userId = user.id;
+    }
+    
+    const puzzle = await getTodaysPuzzle();
+    const existingResult = await getUserDailyResult(userId, puzzle.id);
+    
+    const guesses = existingResult?.guesses || [];
+    const patterns = existingResult?.patterns || [];
+    const gameOver = existingResult?.completed || false;
+    const won = existingResult?.won || false;
+    
+    const responseData = {
+      title: "Daily Challenge",
+      subtitle: `Challenge for ${puzzle.date}`,
+      date: puzzle.date,
+      wordLength: DAILY_WORD_LENGTH,
+      maxGuesses: MAX_DAILY_GUESSES,
+      guesses,
+      patterns,
+      gameOver,
+      won,
+      word: gameOver ? puzzle.word : undefined,
+      userId, // Send back the userId for client to store
+    };
+    console.log("[GET /api/daily] Response:", { userId, gameOver, won, word: responseData.word, guessCount: guesses.length });
+    res.json(responseData);
+  } catch (error) {
+    console.error("Error in GET /api/daily:", error);
+    res.status(500).json({ error: "Failed to load daily challenge" });
+  }
+});
+
+// POST /api/daily/guess - Submit a guess
+app.post("/api/daily/guess", async (req, res) => {
+  try {
+    const cookieUserId = getUserIdFromRequest(req);
+    const { guess } = req.body;
+    
+    if (!guess || typeof guess !== 'string') {
+      return res.status(400).json({ error: "Invalid guess" });
+    }
+    
+    const guessUpper = guess.toUpperCase();
+    
+    if (!isValidWordLocal(guessUpper)) {
+      return res.status(400).json({ error: "Not a valid word" });
+    }
+    
+    // Always create or get user record to ensure userId exists in database
+    const user = await getOrCreateAnonymousUser(cookieUserId);
+    const userId = user.id;
+    
+    const puzzle = await getTodaysPuzzle();
+    const existingResult = await getUserDailyResult(userId, puzzle.id);
+    
+    const guesses = existingResult?.guesses || [];
+    const patterns = existingResult?.patterns || [];
+    const gameOver = existingResult?.completed || false;
+    
+    console.log("[Daily Guess - Load Existing]", {
+      userId,
+      puzzleId: puzzle.id,
+      hasExistingResult: !!existingResult,
+      existingGuessCount: guesses.length,
+      existingGuesses: guesses
+    });
+    
+    if (gameOver) {
+      return res.json({
+        error: "Challenge already completed",
+        gameOver: true,
+        won: existingResult.won,
+      });
+    }
+    
+    if (guesses.includes(guessUpper)) {
+      return res.status(400).json({ error: "Already guessed that word" });
+    }
+    
+    if (guesses.length >= MAX_DAILY_GUESSES) {
+      return res.status(400).json({ error: "No more guesses left" });
+    }
+    
+    const pattern = scoreGuess(puzzle.word, guessUpper);
+    
+    const newGuesses = [...guesses, guessUpper];
+    const newPatterns = [...patterns, pattern];
+    
+    const won = pattern.every(state => state === 'green' || state === 'correct');
+    const outOfGuesses = newGuesses.length >= MAX_DAILY_GUESSES;
+    const completed = won || outOfGuesses;
+    
+    console.log("[Daily Guess Logic]", {
+      guessCount: newGuesses.length,
+      maxGuesses: MAX_DAILY_GUESSES,
+      outOfGuesses,
+      won,
+      completed,
+      puzzleWord: puzzle.word
+    });
+    
+    const savedResult = await createOrUpdateDailyResult(userId, puzzle.id, {
+      guesses: newGuesses,
+      patterns: newPatterns,
+      won,
+      completed
+    });
+    
+    console.log("[Daily Result Saved]", {
+      userId,
+      puzzleId: puzzle.id,
+      savedGuessCount: savedResult.guesses.length,
+      savedGuesses: savedResult.guesses
+    });
+    
+    const guessResponse = {
+      pattern,
+      correct: won,
+      gameOver: completed,
+      won,
+      word: completed ? puzzle.word : undefined,
+      message: won 
+        ? "🎉 Congratulations! You solved today's puzzle!" 
+        : outOfGuesses 
+        ? `Game over! The word was ${puzzle.word}` 
+        : "",
+    };
+    console.log("[POST /api/daily/guess] Response:", { completed, won, word: guessResponse.word });
+    res.json(guessResponse);
+  } catch (error) {
+    console.error("Error in POST /api/daily/guess:", error);
+    res.status(500).json({ error: "Failed to process guess" });
+  }
+});
+
+// GET /api/daily/stats - Get user's daily challenge statistics
+app.get("/api/daily/stats", async (req, res) => {
+  try {
+    const cookieUserId = getUserIdFromRequest(req);
+    
+    if (!cookieUserId) {
+      return res.json({
+        totalPlayed: 0,
+        totalWins: 0,
+        winRate: 0,
+        currentStreak: 0,
+        maxStreak: 0,
+        recentResults: []
+      });
+    }
+    
+    const stats = await getUserDailyStats(cookieUserId);
+    res.json(stats);
+  } catch (error) {
+    console.error("Error in GET /api/daily/stats:", error);
+    res.status(500).json({ error: "Failed to load stats" });
   }
 });
 
@@ -560,6 +771,15 @@ function sanitizeRoom(room) {
     shared: sharedSnapshot,
   };
 }
+
+// ---------- Catch-all route for client-side routing (production only) ----------
+if (process.env.NODE_ENV === "production") {
+  app.get("*", (req, res) => {
+    const clientDistPath = path.join(__dirname, "..", "client", "dist");
+    res.sendFile(path.join(clientDistPath, "index.html"));
+  });
+}
+
 // ---------- Start server ----------
-const PORT = process.env.PORT || 8080; // Railway injects PORT in prod
-httpServer.listen(PORT, () => console.log("Server listening on", PORT));
+const PORT = process.env.PORT || 8080;
+httpServer.listen(PORT, "0.0.0.0", () => console.log("Server listening on", PORT));
