@@ -28,14 +28,14 @@ export default function GameNotification({ message, duration = 1000, onDismiss }
     <>
       <style>
         {`
-          @keyframes slideDown {
+          @keyframes fadeInScale {
             from {
               opacity: 0;
-              transform: translateY(-10px);
+              transform: translateX(-50%) scale(0.95);
             }
             to {
               opacity: 1;
-              transform: translateY(0);
+              transform: translateX(-50%) scale(1);
             }
           }
           @keyframes fadeOut {
@@ -47,7 +47,7 @@ export default function GameNotification({ message, duration = 1000, onDismiss }
             }
           }
           .game-notification {
-            animation: slideDown 200ms ease-out;
+            animation: fadeInScale 200ms ease-out;
           }
           .game-notification.fade-out {
             animation: fadeOut 200ms ease-in;
