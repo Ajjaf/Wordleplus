@@ -90,17 +90,18 @@ export default function MobileBoardSwitcher({
         </div>
       </div>
 
-      {/* Floating Toggle Button */}
+      {/* Floating Toggle Button - 48px minimum touch target */}
       <button
         onClick={() => switchView(view === "me" ? "opponent" : "me")}
         className={cn(
-          "absolute bottom-4 right-4 w-12 h-12 rounded-full",
+          "absolute bottom-4 right-4 min-w-[48px] min-h-[48px] w-12 h-12 rounded-full",
           "bg-blue-600 hover:bg-blue-700 text-white",
           "shadow-lg hover:shadow-xl transition-all duration-200",
           "flex items-center justify-center text-lg font-bold",
-          "z-20"
+          "z-20 touch-manipulation"
         )}
         disabled={isTransitioning}
+        aria-label={view === "me" ? "View opponent's board" : "View your board"}
       >
         {view === "me" ? "👤" : "🧑‍💻"}
       </button>
