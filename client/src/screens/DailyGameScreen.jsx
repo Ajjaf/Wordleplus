@@ -40,7 +40,7 @@ export default function DailyGameScreen({
               Guess the word in {maxGuesses} tries
             </p>
             {statusMessage && (
-              <p className="text-xs text-emerald-600 font-medium">
+              <p className="text-xs text-red-600 font-medium">
                 {statusMessage}
               </p>
             )}

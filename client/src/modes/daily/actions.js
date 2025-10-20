@@ -39,7 +39,14 @@ export function createActions() {
           const errorPayload = await safeJson(res);
           throw new Error(errorPayload?.error || "Failed to load daily challenge");
         }
-        return await safeJson(res);
+        const data = await safeJson(res);
+        
+        // Save the userId from server if returned
+        if (data?.userId) {
+          localStorage.setItem(LS_DAILY_USER, data.userId);
+        }
+        
+        return data;
       } catch (err) {
         return { error: err.message || "Unable to load daily challenge" };
       }

@@ -162,23 +162,21 @@ function getUserIdFromRequest(req) {
 // GET /api/daily - Load daily challenge
 app.get("/api/daily", async (req, res) => {
   try {
-    const cookieUserId = getUserIdFromRequest(req);
-    const user = await getOrCreateAnonymousUser(cookieUserId);
-    const puzzle = await getTodaysPuzzle();
+    let userId = getUserIdFromRequest(req);
     
-    const existingResult = await getUserDailyResult(user.id, puzzle.id);
+    // If no userId from client, create one
+    if (!userId) {
+      const user = await getOrCreateAnonymousUser(null);
+      userId = user.id;
+    }
+    
+    const puzzle = await getTodaysPuzzle();
+    const existingResult = await getUserDailyResult(userId, puzzle.id);
     
     const guesses = existingResult?.guesses || [];
     const patterns = existingResult?.patterns || [];
     const gameOver = existingResult?.completed || false;
     const won = existingResult?.won || false;
-    
-    res.cookie('dailyUserId', user.id, {
-      httpOnly: true,
-      maxAge: 365 * 24 * 60 * 60 * 1000, // 1 year
-      sameSite: 'none',
-      secure: true
-    });
     
     const responseData = {
       title: "Daily Challenge",
@@ -191,8 +189,9 @@ app.get("/api/daily", async (req, res) => {
       gameOver,
       won,
       word: gameOver ? puzzle.word : undefined,
+      userId, // Send back the userId for client to store
     };
-    console.log("[GET /api/daily] Response:", { gameOver, won, word: responseData.word, guessCount: guesses.length });
+    console.log("[GET /api/daily] Response:", { userId, gameOver, won, word: responseData.word, guessCount: guesses.length });
     res.json(responseData);
   } catch (error) {
     console.error("Error in GET /api/daily:", error);
@@ -216,16 +215,22 @@ app.post("/api/daily/guess", async (req, res) => {
       return res.status(400).json({ error: "Not a valid word" });
     }
     
-    const user = await getOrCreateAnonymousUser(cookieUserId);
+    // If no userId, create one
+    let userId = cookieUserId;
+    if (!userId) {
+      const user = await getOrCreateAnonymousUser(null);
+      userId = user.id;
+    }
+    
     const puzzle = await getTodaysPuzzle();
-    const existingResult = await getUserDailyResult(user.id, puzzle.id);
+    const existingResult = await getUserDailyResult(userId, puzzle.id);
     
     const guesses = existingResult?.guesses || [];
     const patterns = existingResult?.patterns || [];
     const gameOver = existingResult?.completed || false;
     
     console.log("[Daily Guess - Load Existing]", {
-      userId: user.id,
+      userId,
       puzzleId: puzzle.id,
       hasExistingResult: !!existingResult,
       existingGuessCount: guesses.length,
@@ -266,7 +271,7 @@ app.post("/api/daily/guess", async (req, res) => {
       puzzleWord: puzzle.word
     });
     
-    const savedResult = await createOrUpdateDailyResult(user.id, puzzle.id, {
+    const savedResult = await createOrUpdateDailyResult(userId, puzzle.id, {
       guesses: newGuesses,
       patterns: newPatterns,
       won,
@@ -274,7 +279,7 @@ app.post("/api/daily/guess", async (req, res) => {
     });
     
     console.log("[Daily Result Saved]", {
-      userId: user.id,
+      userId,
       puzzleId: puzzle.id,
       savedGuessCount: savedResult.guesses.length,
       savedGuesses: savedResult.guesses
