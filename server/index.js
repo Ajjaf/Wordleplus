@@ -171,7 +171,8 @@ app.get("/api/daily", async (req, res) => {
     res.cookie('dailyUserId', user.id, {
       httpOnly: true,
       maxAge: 365 * 24 * 60 * 60 * 1000, // 1 year
-      sameSite: 'lax'
+      sameSite: 'none',
+      secure: true
     });
     
     const responseData = {
