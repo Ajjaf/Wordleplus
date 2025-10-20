@@ -11,7 +11,7 @@ export default function GradientBackground({ children, className = '' }) {
         }}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ duration: 0.6 }}
+        transition={{ duration: 0.3 }}
       >
         <motion.div
           className="absolute top-0 left-1/4 w-96 h-96 rounded-full blur-3xl opacity-30"

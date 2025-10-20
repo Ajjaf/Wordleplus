@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Swords, Users, Shield, Trophy, Star } from 'lucide-react';
+import { Swords, Users, Shield, Trophy, Star, Calendar } from 'lucide-react';
 import GradientBackground from '../components/ui/GradientBackground';
 import NavHeaderV2 from '../components/ui/NavHeaderV2';
 import DailyChallengeHero from '../components/ui/DailyChallengeHero';
@@ -52,6 +52,30 @@ export default function HomeScreenV2({
     }
   };
 
+  const gameModes = [
+    {
+      icon: <Swords className="w-8 h-8 text-violet-400" />,
+      title: "Duel",
+      subtitle: "vs. Friend",
+      description: "1v1 competitive",
+      mode: "duel"
+    },
+    {
+      icon: <Users className="w-8 h-8 text-cyan-400" />,
+      title: "Battle Royale",
+      subtitle: "Multiplayer",
+      description: "Last one standing",
+      mode: "battle"
+    },
+    {
+      icon: <Shield className="w-8 h-8 text-purple-400" />,
+      title: "Shared Duel",
+      subtitle: "Co-op",
+      description: "Share the challenge",
+      mode: "shared"
+    }
+  ];
+
   if (!isNameSet) {
     return (
       <GradientBackground>
@@ -61,7 +85,7 @@ export default function HomeScreenV2({
             className="w-full max-w-md"
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.4 }}
+            transition={{ duration: 0.3 }}
           >
             <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-3xl p-8 shadow-2xl">
               <h2 className="text-3xl font-bold text-white mb-2 text-center">
@@ -99,16 +123,18 @@ export default function HomeScreenV2({
     <GradientBackground>
       <NavHeaderV2 />
       
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-12">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-12 pb-24 md:pb-12">
         <div className="max-w-7xl mx-auto space-y-8">
-          <DailyChallengeHero 
-            onPlay={() => handlePlayMode('daily')}
-            stats={{
-              currentStreak: 0,
-              maxStreak: 0,
-              winRate: 0,
-            }}
-          />
+          <div className="hidden md:block">
+            <DailyChallengeHero 
+              onPlay={() => handlePlayMode('daily')}
+              stats={{
+                currentStreak: 0,
+                maxStreak: 0,
+                winRate: 0,
+              }}
+            />
+          </div>
 
           <section>
             <motion.h2
@@ -120,39 +146,46 @@ export default function HomeScreenV2({
               Game Modes
             </motion.h2>
 
-            <div className="grid md:grid-cols-3 gap-4 md:gap-6">
-              <AnimatedGameCard
-                icon={<Swords className="w-8 h-8 text-violet-400" />}
-                title="Duel"
-                subtitle="vs. Friend"
-                onClick={() => handlePlayMode('duel')}
-              >
-                <div className="mt-auto">
-                  <div className="text-xs text-white/50">1v1 competitive</div>
-                </div>
-              </AnimatedGameCard>
+            <div className="hidden md:grid md:grid-cols-3 gap-4 md:gap-6">
+              {gameModes.map((gameMode, index) => (
+                <AnimatedGameCard
+                  key={gameMode.mode}
+                  icon={gameMode.icon}
+                  title={gameMode.title}
+                  subtitle={gameMode.subtitle}
+                  onClick={() => handlePlayMode(gameMode.mode)}
+                >
+                  <div className="mt-auto">
+                    <div className="text-xs text-white/50">{gameMode.description}</div>
+                  </div>
+                </AnimatedGameCard>
+              ))}
+            </div>
 
-              <AnimatedGameCard
-                icon={<Users className="w-8 h-8 text-cyan-400" />}
-                title="Battle Royale"
-                subtitle="Multiplayer"
-                onClick={() => handlePlayMode('battle')}
-              >
-                <div className="mt-auto">
-                  <div className="text-xs text-white/50">Last one standing</div>
-                </div>
-              </AnimatedGameCard>
-
-              <AnimatedGameCard
-                icon={<Shield className="w-8 h-8 text-purple-400" />}
-                title="Shared Duel"
-                subtitle="Co-op"
-                onClick={() => handlePlayMode('shared')}
-              >
-                <div className="mt-auto">
-                  <div className="text-xs text-white/50">Share the challenge</div>
-                </div>
-              </AnimatedGameCard>
+            <div className="md:hidden overflow-x-auto -mx-4 px-4 pb-4">
+              <div className="flex gap-4" style={{ 
+                scrollSnapType: 'x mandatory',
+                WebkitOverflowScrolling: 'touch'
+              }}>
+                {gameModes.map((gameMode, index) => (
+                  <div
+                    key={gameMode.mode}
+                    className="flex-shrink-0 w-[280px]"
+                    style={{ scrollSnapAlign: 'start' }}
+                  >
+                    <AnimatedGameCard
+                      icon={gameMode.icon}
+                      title={gameMode.title}
+                      subtitle={gameMode.subtitle}
+                      onClick={() => handlePlayMode(gameMode.mode)}
+                    >
+                      <div className="mt-auto">
+                        <div className="text-xs text-white/50">{gameMode.description}</div>
+                      </div>
+                    </AnimatedGameCard>
+                  </div>
+                ))}
+              </div>
             </div>
           </section>
 
@@ -231,6 +264,22 @@ export default function HomeScreenV2({
           </footer>
         </div>
       </div>
+
+      <motion.button
+        onClick={() => handlePlayMode('daily')}
+        className="md:hidden fixed bottom-6 right-6 w-16 h-16 rounded-full bg-gradient-to-br from-violet-500 to-cyan-500 shadow-2xl flex items-center justify-center z-50"
+        style={{
+          boxShadow: '0 0 32px rgba(124, 58, 237, 0.5), 0 0 48px rgba(34, 211, 238, 0.5)',
+        }}
+        whileHover={{ scale: 1.1 }}
+        whileTap={{ scale: 0.9 }}
+        initial={{ scale: 0 }}
+        animate={{ scale: 1 }}
+        transition={{ delay: 0.6, type: 'spring' }}
+        aria-label="Play Daily Challenge"
+      >
+        <Calendar className="w-7 h-7 text-white" />
+      </motion.button>
     </GradientBackground>
   );
 }

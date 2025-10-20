@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { socket } from "./socket";
 
 // Extracted Components
-import HomeScreen from "./screens/HomeScreen.jsx";
+import HomeScreen from "./screens/HomeScreenV2.jsx";
 import DuelGameScreen from "./screens/DuelGameScreen.jsx";
 import SharedDuelGameScreen from "./screens/SharedDuelGameScreen.jsx";
 import DailyGameScreen from "./screens/DailyGameScreen.jsx";

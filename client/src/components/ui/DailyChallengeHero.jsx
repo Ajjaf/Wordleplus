@@ -15,7 +15,7 @@ export default function DailyChallengeHero({ onPlay, stats = {} }) {
       }}
       initial={{ opacity: 0, y: -20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
+      transition={{ duration: 0.3 }}
       whileHover={{ boxShadow: SHADOWS.glow.accent }}
     >
       <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-violet-500/20 to-cyan-500/20 rounded-full blur-3xl -z-10" />
