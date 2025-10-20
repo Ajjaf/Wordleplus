@@ -174,7 +174,7 @@ export default function Keyboard({
         className={cn(
           "mx-auto w-full max-w-7xl",
           sticky
-            ? "bg-white/95 dark:bg-neutral-900/95 md:bg-transparent backdrop-blur supports-[backdrop-filter]:backdrop-blur md:backdrop-blur-0 border-t md:border-0 border-neutral-200/80 dark:border-neutral-800/80"
+            ? "md:bg-transparent border-t md:border-0 border-neutral-200/80 dark:border-neutral-800/30"
             : ""
         )}
       >
