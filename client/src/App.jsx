@@ -52,6 +52,9 @@ export default function App() {
   const [dailyGameOver, setDailyGameOver] = useState(false);
   const [dailyLoading, setDailyLoading] = useState(false);
   const [dailyCorrectWord, setDailyCorrectWord] = useState(null);
+  const [dailyShakeKey, setDailyShakeKey] = useState(0);
+  const [dailyShowActiveError, setDailyShowActiveError] = useState(false);
+  const [dailyNotificationMessage, setDailyNotificationMessage] = useState("");
   const maxDailyGuessesDefault = 6;
   const dailyWordLengthDefault = 5;
   const [showVictory, setShowVictory] = useState(false);
@@ -154,6 +157,9 @@ export default function App() {
     setDailyGameOver(false);
     setDailyLoading(false);
     setDailyCorrectWord(null);
+    setDailyShakeKey(0);
+    setDailyShowActiveError(false);
+    setDailyNotificationMessage("");
   }, []);
 
   const startDailyMode = useCallback(async () => {
@@ -224,16 +230,22 @@ export default function App() {
     if (dailyGameOver) return;
     if (dailyLoading) return;
     if (dailyGuesses.length >= maxDailyGuesses) {
-      setDailyStatus("No more guesses left. Come back tomorrow!");
+      setDailyNotificationMessage("No more guesses left");
       setDailyGameOver(true);
       return;
     }
     if (dailyCurrentGuess.length !== dailyWordLength) {
-      setDailyStatus(`Need ${dailyWordLength} letters`);
+      setDailyNotificationMessage(`Need ${dailyWordLength} letters`);
+      setDailyShakeKey(prev => prev + 1);
+      setDailyShowActiveError(true);
+      setTimeout(() => setDailyShowActiveError(false), 250);
       return;
     }
     if (dailyGuesses.includes(dailyCurrentGuess)) {
-      setDailyStatus("You've already tried that word.");
+      setDailyNotificationMessage("Already tried that word");
+      setDailyShakeKey(prev => prev + 1);
+      setDailyShowActiveError(true);
+      setTimeout(() => setDailyShowActiveError(false), 250);
       return;
     }
 
@@ -243,7 +255,10 @@ export default function App() {
         dailyCurrentGuess.toLowerCase()
       );
       if (result?.error) {
-        setDailyStatus(result.error);
+        setDailyNotificationMessage(result.error);
+        setDailyShakeKey(prev => prev + 1);
+        setDailyShowActiveError(true);
+        setTimeout(() => setDailyShowActiveError(false), 250);
         return;
       }
 
@@ -277,20 +292,20 @@ export default function App() {
       // Store correct word if game is over
       if (result?.word) {
         setDailyCorrectWord(result.word.toUpperCase());
+        // Show correct word in notification if player lost
+        if (!solved && (exhausted || result?.gameOver)) {
+          setDailyNotificationMessage(`The word was: ${result.word.toUpperCase()}`);
+        }
       }
 
-      if (result?.message) {
-        setDailyStatus(result.message);
-      } else if (solved) {
-        setDailyStatus("You solved today's puzzle!");
+      if (solved) {
         setShowVictory(true);
-      } else if (exhausted) {
-        setDailyStatus("No more guesses left. Come back tomorrow!");
-      } else {
-        setDailyStatus("");
       }
     } catch (err) {
-      setDailyStatus(err?.message || "Unable to submit guess");
+      setDailyNotificationMessage(err?.message || "Unable to submit guess");
+      setDailyShakeKey(prev => prev + 1);
+      setDailyShowActiveError(true);
+      setTimeout(() => setDailyShowActiveError(false), 250);
     } finally {
       setDailyLoading(false);
     }
@@ -316,13 +331,13 @@ export default function App() {
         handleDailySubmit();
       } else if (key === "BACKSPACE") {
         setDailyCurrentGuess((prev) => prev.slice(0, -1));
-        setDailyStatus("");
+        setDailyNotificationMessage("");
       } else if (
         /^[A-Z]$/.test(key) &&
         dailyCurrentGuess.length < dailyWordLength
       ) {
         setDailyCurrentGuess((prev) => prev + key);
-        setDailyStatus("");
+        setDailyNotificationMessage("");
       }
     },
     [
@@ -727,6 +742,10 @@ export default function App() {
               gameOver={dailyGameOver}
               correctWord={dailyCorrectWord}
               won={dailyGuessEntries.some(g => g.pattern?.every(s => s === 'green'))}
+              shakeKey={dailyShakeKey}
+              showActiveError={dailyShowActiveError}
+              notificationMessage={dailyNotificationMessage}
+              onNotificationDismiss={() => setDailyNotificationMessage("")}
             />
           </div>
           {/* Victory Modal for Daily Challenge */}
