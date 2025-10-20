@@ -55,6 +55,24 @@ The project has TWO workflows configured:
 
 ## Recent Changes
 
+### October 20, 2025 - Daily Challenge Notification System
+- **Unified Feedback System**: Daily Challenge now uses same feedback approach as Duel and Battle modes
+  - Created **GameNotification** component for transient tooltip-style notifications
+  - Notifications appear near top of game grid and auto-dismiss after 1.5 seconds
+  - Absolutely positioned to prevent layout shifts
+  - Shake animation triggers on invalid submissions (matching Duel/Battle behavior)
+  
+- **Removed Layout-Affecting Status Text**: 
+  - Eliminated static status messages from header that caused layout jumps
+  - All feedback now delivered via transient notifications
+  - Invalid word errors: "Not in word list", "Need 5 letters", "Already tried that word"
+  - Loss notification: "The word was: [WORD]" (auto-dismisses)
+  
+- **Improved UX Consistency**:
+  - Daily Challenge feedback matches multiplayer modes
+  - No permanent text affecting board position
+  - Clean, predictable layout throughout game
+
 ### October 20, 2025 - Render Deployment & User Persistence Fixes
 - **Backend Deployment Fix**: Updated `server/package.json` for Render compatibility
   - Added missing dependencies: `@prisma/client`, `cookie-parser`, `luxon`, `prisma`
