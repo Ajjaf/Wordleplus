@@ -2,6 +2,17 @@ const JSON_HEADERS = {
   "Content-Type": "application/json",
 };
 
+const LS_DAILY_USER = "wp.dailyUserId";
+
+function getOrCreateUserId() {
+  let userId = localStorage.getItem(LS_DAILY_USER);
+  if (!userId) {
+    userId = crypto.randomUUID();
+    localStorage.setItem(LS_DAILY_USER, userId);
+  }
+  return userId;
+}
+
 export function createActions() {
   const safeJson = async (response) => {
     const text = await response.text();
@@ -16,9 +27,13 @@ export function createActions() {
   return {
     async loadChallenge() {
       try {
+        const userId = getOrCreateUserId();
         const res = await fetch("/api/daily", {
           method: "GET",
           credentials: "include",
+          headers: {
+            "X-User-Id": userId,
+          },
         });
         if (!res.ok) {
           const errorPayload = await safeJson(res);
@@ -32,10 +47,14 @@ export function createActions() {
 
     async submitGuess(guess) {
       try {
+        const userId = getOrCreateUserId();
         const res = await fetch("/api/daily/guess", {
           method: "POST",
           credentials: "include",
-          headers: JSON_HEADERS,
+          headers: {
+            ...JSON_HEADERS,
+            "X-User-Id": userId,
+          },
           body: JSON.stringify({ guess }),
         });
         if (!res.ok) {

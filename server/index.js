@@ -150,14 +150,19 @@ app.post("/api/reload-words", (_req, res) => {
 const MAX_DAILY_GUESSES = 6;
 const DAILY_WORD_LENGTH = 5;
 
-function getUserIdFromCookie(req) {
+function getUserIdFromRequest(req) {
+  // Try header first (for iframe environments where cookies don't work)
+  const headerUserId = req.headers['x-user-id'];
+  if (headerUserId) return headerUserId;
+  
+  // Fallback to cookie
   return req.cookies?.dailyUserId || null;
 }
 
 // GET /api/daily - Load daily challenge
 app.get("/api/daily", async (req, res) => {
   try {
-    const cookieUserId = getUserIdFromCookie(req);
+    const cookieUserId = getUserIdFromRequest(req);
     const user = await getOrCreateAnonymousUser(cookieUserId);
     const puzzle = await getTodaysPuzzle();
     
@@ -198,7 +203,7 @@ app.get("/api/daily", async (req, res) => {
 // POST /api/daily/guess - Submit a guess
 app.post("/api/daily/guess", async (req, res) => {
   try {
-    const cookieUserId = getUserIdFromCookie(req);
+    const cookieUserId = getUserIdFromRequest(req);
     const { guess } = req.body;
     
     if (!guess || typeof guess !== 'string') {
@@ -298,7 +303,7 @@ app.post("/api/daily/guess", async (req, res) => {
 // GET /api/daily/stats - Get user's daily challenge statistics
 app.get("/api/daily/stats", async (req, res) => {
   try {
-    const cookieUserId = getUserIdFromCookie(req);
+    const cookieUserId = getUserIdFromRequest(req);
     
     if (!cookieUserId) {
       return res.json({
