@@ -9,6 +9,12 @@ import { useSwipeGestures } from "../hooks/useSwipeGestures.js";
 import { Button } from "@/components/ui/button";
 import { getRandomWord } from "../api";
 import { useRef } from "react";
+import { motion } from "framer-motion";
+import { Copy, Check } from "lucide-react";
+import GradientBackground from "../components/ui/GradientBackground";
+import GlowButton from "../components/ui/GlowButton";
+import { COLORS, GRADIENTS, SHADOWS } from "../design-system";
+
 function DuelGameScreen({
   room,
   me,
@@ -35,6 +41,7 @@ function DuelGameScreen({
   const [showSecretReveal, setShowSecretReveal] = useState(false);
   const [guessFlipKey, setGuessFlipKey] = useState(0);
   const [lastStreak, setLastStreak] = useState(0);
+  const [copied, setCopied] = useState(false);
 
   // Mobile UX
   const [mobileView, setMobileView] = useState("me");
@@ -244,6 +251,12 @@ function DuelGameScreen({
     setMySubmittedSecret("");
   };
 
+  const handleCopyRoom = () => {
+    navigator.clipboard.writeText(room?.id || "");
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   // Mobile detection
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768);
@@ -304,7 +317,7 @@ function DuelGameScreen({
         return;
       }
 
-      // If BOTH secrets are set (mine locally locked or server-provided, AND opponent’s server-provided),
+      // If BOTH secrets are set (mine locally locked or server-provided, AND opponent's server-provided),
       // route physical keys to game input
       const mySecretReady = secretLocked || !!me?.secret;
       const oppSecretReady = !!opponent?.secret;
@@ -420,371 +433,359 @@ function DuelGameScreen({
     ? "set"
     : "empty";
   return (
-    <div
-      className="w-full flex flex-col bg-background relative overflow-hidden"
-      style={{ minHeight: "calc(100dvh - 64px)" }}
-      {...swipeGestures}
-    >
-      <ParticleEffect
-        trigger={showParticles}
-        type="wordComplete"
-        position={particlePosition}
-      />
-      <ParticleEffect
-        trigger={showCorrectParticles}
-        type="correctGuess"
-        position={particlePosition}
-        intensity={1.2}
-      />
-      <ParticleEffect
-        trigger={showStreakParticles}
-        type="streak"
-        position={particlePosition}
-        intensity={me?.streak >= 10 ? 2.5 : me?.streak >= 5 ? 2.0 : 1.5}
-      />
-      <ConfettiEffect trigger={showConfetti} />
+    <GradientBackground>
+      <div
+        className="w-full flex flex-col relative overflow-hidden"
+        style={{ minHeight: "calc(100dvh - 64px)" }}
+        {...swipeGestures}
+      >
+        <ParticleEffect
+          trigger={showParticles}
+          type="wordComplete"
+          position={particlePosition}
+        />
+        <ParticleEffect
+          trigger={showCorrectParticles}
+          type="correctGuess"
+          position={particlePosition}
+          intensity={1.2}
+        />
+        <ParticleEffect
+          trigger={showStreakParticles}
+          type="streak"
+          position={particlePosition}
+          intensity={me?.streak >= 10 ? 2.5 : me?.streak >= 5 ? 2.0 : 1.5}
+        />
+        <ConfettiEffect trigger={showConfetti} />
 
-      {/* Game Status */}
-      <div className="px-3 pt-2 pb-1.5">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-base md:text-lg font-semibold text-center text-muted-foreground flex-1 pl-40">
-            {isGameEnded ? (
-              bothRequestedRematch ? (
-                "Rematch starting..."
-              ) : (
-                "Game ended - ready for rematch?"
-              )
-            ) : (
-              <>
-                {deadline && (
-                  <span
-                    className={[
-                      "ml-2 font-mono px-2 py-0.5 rounded border",
-                      low
-                        ? "bg-red-100 text-red-700 border-red-200"
-                        : warn
-                        ? "bg-amber-100 text-amber-700 border-amber-200"
-                        : "bg-slate-100 text-slate-700 border-slate-200",
-                    ].join(" ")}
-                  >
-                    {timerLabel}
+        {/* Game Status */}
+        <div className="px-3 pt-3 pb-2">
+          <div className="flex items-center justify-between gap-4 mb-3">
+            <div className="flex-1 text-center">
+              <h2 className="text-base md:text-lg font-semibold text-white">
+                {isGameEnded ? (
+                  bothRequestedRematch ? (
+                    "Rematch starting..."
+                  ) : (
+                    "Game ended - ready for rematch?"
+                  )
+                ) : deadline ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <span className="text-white/70">Time Remaining:</span>
+                    <span
+                      className={`font-mono px-3 py-1 rounded-xl ${
+                        low
+                          ? "bg-red-500/20 text-red-300 border border-red-500/30"
+                          : warn
+                          ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                          : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                      }`}
+                    >
+                      {timerLabel}
+                    </span>
                   </span>
-                )}
-              </>
-            )}
-          </h2>
+                ) : null}
+              </h2>
+            </div>
 
-          {/* Room ID Display */}
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-lg">
-            <span className="text-xs text-slate-600 font-medium">Room:</span>
-            <span className="font-mono font-bold text-slate-800 text-sm">
-              {room?.id}
-            </span>
-            <button
-              onClick={() => {
-                navigator.clipboard.writeText(room?.id || "");
-              }}
-              className="text-slate-500 hover:text-slate-700 transition-colors"
-              aria-label="Copy room ID"
-              title="Copy room ID"
+            {/* Room ID Display */}
+            <motion.div
+              className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl px-3 py-2 flex items-center gap-2"
+              whileHover={{ borderColor: "rgba(255, 255, 255, 0.3)" }}
             >
-              📋
-            </button>
+              <span className="text-xs text-white/60 font-medium">Room:</span>
+              <span className="font-mono font-bold text-white text-sm">
+                {room?.id}
+              </span>
+              <motion.button
+                onClick={handleCopyRoom}
+                className="text-white/60 hover:text-white transition-colors min-h-[48px] min-w-[48px] flex items-center justify-center"
+                whileTap={{ scale: 0.95 }}
+                aria-label="Copy room ID"
+                title="Copy room ID"
+              >
+                {copied ? (
+                  <Check className="w-4 h-4 text-green-400" />
+                ) : (
+                  <Copy className="w-4 h-4" />
+                )}
+              </motion.button>
+            </motion.div>
           </div>
+
+          {/* Modern gradient progress bar when round is live */}
+          {!isGameEnded && deadline && (
+            <div className="mx-auto mt-2 w-full max-w-xl h-2 rounded-full bg-white/10 overflow-hidden">
+              <motion.div
+                className={`h-full rounded-full ${
+                  low
+                    ? "bg-gradient-to-r from-red-500 to-red-600"
+                    : warn
+                    ? "bg-gradient-to-r from-amber-500 to-amber-600"
+                    : "bg-gradient-to-r from-emerald-500 to-cyan-500"
+                }`}
+                style={{ width: `${pct ?? 100}%` }}
+                initial={{ width: "100%" }}
+                animate={{ width: `${pct ?? 100}%` }}
+                transition={{ duration: 0.3 }}
+              />
+            </div>
+          )}
+
+          {isGameEnded && (
+            <div className="text-center mt-3">
+              <div className="inline-flex flex-col gap-2 bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl px-6 py-4">
+                <div className="text-sm text-white/90">
+                  {hasRequestedRematch
+                    ? "✅ You requested rematch"
+                    : "⏳ Waiting for your rematch request"}
+                </div>
+                <div className="text-sm text-white/90">
+                  {opponentRequestedRematch
+                    ? "✅ Opponent requested rematch"
+                    : "⏳ Waiting for opponent's rematch request"}
+                </div>
+                {bothRequestedRematch && (
+                  <div className="text-sm text-emerald-300 font-medium mt-1">
+                    🚀 Both players ready! Starting rematch...
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Slim progress bar when round is live */}
-        {!isGameEnded && deadline && (
-          <div className="mx-auto mt-2 w-full max-w-xl h-1.5 rounded bg-slate-200 overflow-hidden">
-            <div
-              className={[
-                "h-full",
-                low ? "bg-red-500" : warn ? "bg-amber-500" : "bg-emerald-500",
-              ].join(" ")}
-              style={{ width: `${pct ?? 100}%` }}
-            />
-          </div>
-        )}
+        {/* Main */}
+        <main className="flex-1 px-3 md:px-4 pt-2 pb-3 min-h-0">
+          {isMobile ? (
+            <div className="h-full flex flex-col">
+              <MobileBoardSwitcher
+                currentView={mobileView}
+                onViewChange={setMobileView}
+                myBoard={{
+                  guesses: me?.guesses || [],
+                  activeGuess: activeGuessForMe,
+                  errorShakeKey: shakeKey,
+                  errorActiveRow: showActiveError,
+                  secretWord: mySecretWord,
+                  secretWordState: mySecretState,
+                  onSecretWordSubmit: canSetSecret ? handleSecretSubmit : null, // harmless (Board ignores click)
+                  isOwnBoard: true,
+                  maxTile: tileCap,
+                  minTile: 50,
+                  player: me,
+                  secretErrorActive: secretErrorActive,
+                  secretErrorKey: secretErrorKey,
+                  secretWordReveal: showSecretReveal,
+                  guessFlipKey: guessFlipKey,
+                }}
+                opponentBoard={{
+                  guesses: opponent?.guesses || [],
+                  activeGuess: "",
+                  secretWord: oppSecretWord,
+                  secretWordState: oppSecretState,
+                  isOwnBoard: false,
+                  maxTile: tileCap,
+                  minTile: 50,
+                  player: opponent,
+                  secretWordReveal: showSecretReveal,
+                  guessFlipKey: guessFlipKey,
+                }}
+                className="flex-1"
+              />
 
-        {isGameEnded && (
-          <div className="text-center mt-2">
-            <div className="text-sm text-slate-600">
-              {hasRequestedRematch
-                ? "✅ You requested rematch"
-                : "⏳ Waiting for your rematch request"}
-            </div>
-            <div className="text-sm text-slate-600">
-              {opponentRequestedRematch
-                ? "✅ Opponent requested rematch"
-                : "⏳ Waiting for opponent's rematch request"}
-            </div>
-            {bothRequestedRematch && (
-              <div className="text-sm text-green-600 font-medium mt-1">
-                🚀 Both players ready! Starting rematch...
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Main */}
-      <main className="flex-1 px-3 md:px-4 pt-2 pb-3 min-h-0">
-        {isMobile ? (
-          <div className="h-full flex flex-col">
-            <MobileBoardSwitcher
-              currentView={mobileView}
-              onViewChange={setMobileView}
-              myBoard={{
-                guesses: me?.guesses || [],
-                activeGuess: activeGuessForMe,
-                errorShakeKey: shakeKey,
-                errorActiveRow: showActiveError,
-                secretWord: mySecretWord,
-                secretWordState: mySecretState,
-                onSecretWordSubmit: canSetSecret ? handleSecretSubmit : null, // harmless (Board ignores click)
-                isOwnBoard: true,
-                maxTile: tileCap,
-                minTile: 50,
-                player: me,
-                secretErrorActive: secretErrorActive,
-                secretErrorKey: secretErrorKey,
-                secretWordReveal: showSecretReveal,
-                guessFlipKey: guessFlipKey,
-              }}
-              opponentBoard={{
-                guesses: opponent?.guesses || [],
-                activeGuess: "",
-                secretWord: oppSecretWord,
-                secretWordState: oppSecretState,
-                isOwnBoard: false,
-                maxTile: tileCap,
-                minTile: 50,
-                player: opponent,
-                secretWordReveal: showSecretReveal,
-                guessFlipKey: guessFlipKey,
-              }}
-              className="flex-1"
-            />
-
-            {/* Mobile generate button */}
-            {canSetSecret && mobileView === "me" && (
-              <div className="flex justify-center py-2">
-                <button
-                  type="button"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={handleGenerateSecret}
-                  disabled={genBusy}
-                  title="Generate a random word"
-                  aria-label="Generate a random word"
-                  className="px-4 py-2 text-sm rounded-lg border border-slate-300 bg-white hover:bg-slate-50 shadow-sm active:scale-95 flex items-center gap-2"
-                >
-                  {genBusy ? "…" : "🎲"} Generate
-                </button>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="w-full h-full min-h-0 flex flex-col md:flex-row md:items-start gap-3 md:gap-4">
-            {/* YOU */}
-            <section className="w-full md:flex-1 flex flex-col gap-3">
-              <div className="w-full max-w-[min(92vw,820px)] mx-auto">
-                <DuelPlayerCard
-                  name={me?.name || "You"}
-                  wins={me?.wins}
-                  streak={me?.streak}
-                  avatar="🧑"
-                  host={room?.hostId === me?.id}
-                  isTyping={canSetSecret && !!secretWordInput}
-                  hasSecret={myReady}
-                  disconnected={!!me?.disconnected}
-                  highlight={
-                    isGameEnded && room?.winner === me?.id ? "winner" : "none"
-                  }
-                />
-              </div>
-
-              <div className="text-[10px] uppercase tracking-[0.35em] text-muted-foreground text-center">
-                Secret Word
-              </div>
-              {canSetSecret && secretWordInput.length === 5 && (
-                <div className="text-center text-xs text-muted-foreground">
-                  Press <span className="font-semibold">Enter</span> to lock
-                  your word
+              {/* Mobile generate button */}
+              {canSetSecret && mobileView === "me" && (
+                <div className="flex justify-center py-2">
+                  <GlowButton
+                    type="button"
+                    variant="secondary"
+                    size="md"
+                    onClick={handleGenerateSecret}
+                    disabled={genBusy}
+                  >
+                    {genBusy ? "…" : "🎲"} Generate
+                  </GlowButton>
                 </div>
               )}
+            </div>
+          ) : (
+            <div className="w-full h-full min-h-0 flex flex-col md:flex-row md:items-start gap-3 md:gap-4">
+              {/* YOU */}
+              <section className="w-full md:flex-1 flex flex-col gap-3">
+                <div className="w-full max-w-[min(92vw,820px)] mx-auto">
+                  <DuelPlayerCard
+                    name={me?.name || "You"}
+                    wins={me?.wins}
+                    streak={me?.streak}
+                    avatar="🧑"
+                    host={room?.hostId === me?.id}
+                    isTyping={canSetSecret && !!secretWordInput}
+                    hasSecret={myReady}
+                    disconnected={!!me?.disconnected}
+                    highlight={
+                      isGameEnded && room?.winner === me?.id ? "winner" : "none"
+                    }
+                  />
+                </div>
 
-              <div className="flex-1 w-full flex items-center justify-center min-h-0">
-                <div className="relative inline-block">
+                <div className="text-[10px] uppercase tracking-[0.35em] text-white/50 text-center">
+                  Secret Word
+                </div>
+                {canSetSecret && secretWordInput.length === 5 && (
+                  <div className="text-center text-xs text-white/70">
+                    Press <span className="font-semibold text-white">Enter</span> to lock
+                    your word
+                  </div>
+                )}
+
+                <div className="flex-1 w-full flex items-center justify-center min-h-0">
+                  <div className="relative inline-block">
+                    <div
+                      className="relative w-full h-full flex items-center justify-center"
+                      style={{ maxWidth: "min(96vw, 2000px)", maxHeight: "100%" }}
+                    >
+                      <Board
+                        guesses={me?.guesses || []}
+                        activeGuess={activeGuessForMe}
+                        errorShakeKey={shakeKey}
+                        errorActiveRow={showActiveError}
+                        secretWord={mySecretWord}
+                        secretWordState={mySecretState}
+                        onSecretWordSubmit={
+                          canSetSecret ? handleSecretSubmit : null
+                        }
+                        isOwnBoard={true}
+                        maxTile={tileCap}
+                        minTile={50}
+                        secretErrorActive={secretErrorActive}
+                        secretErrorKey={secretErrorKey}
+                        onMeasure={setBoardMetrics}
+                        secretWordReveal={showSecretReveal}
+                        guessFlipKey={guessFlipKey}
+                      />
+                    </div>
+
+                    {/* 🎲 generate button — appears only while you're setting your secret */}
+                    {/* 🎲 exactly aligned with the secret row center */}
+                    {canSetSecret && boardMetrics && (
+                      <motion.button
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()} // keep keyboard focus
+                        onClick={handleGenerateSecret}
+                        disabled={genBusy}
+                        title="Generate a random word"
+                        aria-label="Generate a random word"
+                        className="absolute left-full ml-3 w-12 h-12 rounded-full border border-white/20 bg-white/10 backdrop-blur-sm shadow-lg grid place-items-center text-xl"
+                        style={{
+                          // align to secret row's vertical center
+                          top:
+                            (boardMetrics.padding ?? 0) +
+                            (boardMetrics.tile ?? 0) / 2 -
+                            24,
+                        }}
+                        whileHover={{ scale: 1.1, backgroundColor: "rgba(255, 255, 255, 0.15)" }}
+                        whileTap={{ scale: 0.95 }}
+                      >
+                        {genBusy ? "…" : "🎲"}
+                      </motion.button>
+                    )}
+                  </div>
+                </div>
+              </section>
+
+              {/* OPPONENT */}
+              <section className="w-full md:flex-1 flex flex-col gap-3">
+                <div className="w-full max-w-[min(92vw,820px)] mx-auto">
+                  <DuelPlayerCard
+                    name={opponent?.name || "—"}
+                    wins={opponent?.wins}
+                    streak={opponent?.streak}
+                    avatar="🧑‍💻"
+                    host={room?.hostId === opponent?.id}
+                    isTyping={false}
+                    hasSecret={oppReady || isGameStarted}
+                    disconnected={!!opponent?.disconnected}
+                    highlight={
+                      isGameEnded && room?.winner === opponent?.id
+                        ? "winner"
+                        : "none"
+                    }
+                  />
+                </div>
+
+                <div className="text-[10px] uppercase tracking-[0.35em] text-white/50 text-center">
+                  Secret Word
+                </div>
+
+                <div className="flex-1 w-full flex items-center justify-center min-h-0">
                   <div
-                    className="relative w-full h-full flex items-center justify-center"
+                    className="w-full h-full flex items-center justify-center"
                     style={{ maxWidth: "min(96vw, 2000px)", maxHeight: "100%" }}
                   >
                     <Board
-                      guesses={me?.guesses || []}
-                      activeGuess={activeGuessForMe}
-                      errorShakeKey={shakeKey}
-                      errorActiveRow={showActiveError}
-                      secretWord={mySecretWord}
-                      secretWordState={mySecretState}
-                      onSecretWordSubmit={
-                        canSetSecret ? handleSecretSubmit : null
-                      }
-                      isOwnBoard={true}
+                      guesses={opponent?.guesses || []}
+                      activeGuess=""
+                      secretWord={oppSecretWord}
+                      secretWordState={oppSecretState}
+                      isOwnBoard={false}
                       maxTile={tileCap}
                       minTile={50}
-                      secretErrorActive={secretErrorActive}
-                      secretErrorKey={secretErrorKey}
-                      onMeasure={setBoardMetrics}
                       secretWordReveal={showSecretReveal}
                       guessFlipKey={guessFlipKey}
                     />
                   </div>
-
-                  {/* 🎲 generate button — appears only while you're setting your secret */}
-                  {/* 🎲 exactly aligned with the secret row center */}
-                  {canSetSecret && boardMetrics && (
-                    <button
-                      type="button"
-                      onMouseDown={(e) => e.preventDefault()} // keep keyboard focus
-                      onClick={handleGenerateSecret}
-                      disabled={genBusy}
-                      title="Generate a random word"
-                      aria-label="Generate a random word"
-                      className="absolute left-full ml-3 w-10 h-10 rounded-full border border-slate-300 bg-white hover:bg-slate-50 shadow-sm active:scale-95 grid place-items-center"
-                      style={{
-                        // align to secret row’s vertical center
-                        top:
-                          (boardMetrics.padding ?? 0) +
-                          (boardMetrics.tile ?? 0) / 2 -
-                          20,
-                      }}
-                    >
-                      {genBusy ? "…" : "🎲"}
-                    </button>
-                  )}
                 </div>
-              </div>
-            </section>
+              </section>
+            </div>
+          )}
+        </main>
 
-            {/* OPPONENT */}
-            <section className="w-full md:flex-1 flex flex-col gap-3">
-              <div className="w-full max-w-[min(92vw,820px)] mx-auto">
-                <DuelPlayerCard
-                  name={opponent?.name || "—"}
-                  wins={opponent?.wins}
-                  streak={opponent?.streak}
-                  avatar="🧑‍💻"
-                  host={room?.hostId === opponent?.id}
-                  isTyping={false}
-                  hasSecret={oppReady || isGameStarted}
-                  disconnected={!!opponent?.disconnected}
-                  highlight={
-                    isGameEnded && room?.winner === opponent?.id
-                      ? "winner"
-                      : "none"
-                  }
-                />
-              </div>
-
-              <div className="text-[10px] uppercase tracking-[0.35em] text-muted-foreground text-center">
-                Secret Word
-              </div>
-
-              <div className="flex-1 w-full flex items-center justify-center min-h-0">
-                <div
-                  className="w-full h-full flex items-center justify-center"
-                  style={{ maxWidth: "min(96vw, 2000px)", maxHeight: "100%" }}
+        {/* Footer */}
+        <footer className="w-full px-2 sm:px-4 py-2">
+          <div className="mx-auto w-full max-w-5xl">
+            {isGameEnded ? (
+              <div className="text-center">
+                <GlowButton
+                  onClick={handleRematch}
+                  disabled={hasRequestedRematch}
+                  size="lg"
+                  variant={hasRequestedRematch ? "secondary" : "primary"}
                 >
-                  <Board
-                    guesses={opponent?.guesses || []}
-                    activeGuess=""
-                    secretWord={oppSecretWord}
-                    secretWordState={oppSecretState}
-                    isOwnBoard={false}
-                    maxTile={tileCap}
-                    minTile={50}
-                    secretWordReveal={showSecretReveal}
-                    guessFlipKey={guessFlipKey}
-                  />
-                </div>
+                  {hasRequestedRematch
+                    ? "✅ Rematch Requested"
+                    : "🚀 Request Rematch"}
+                </GlowButton>
+                <p className="text-sm text-white/60 mt-2">
+                  {hasRequestedRematch
+                    ? "Waiting for opponent to request rematch..."
+                    : "Click to request a rematch (both players must request)"}
+                </p>
               </div>
-            </section>
+            ) : !canSetSecret && !canGuess ? (
+              <div className="text-center py-4">
+                <p className="text-lg font-medium text-white/80">
+                  {!myReady
+                    ? "Set your secret word to continue..."
+                    : !oppReady
+                    ? "Waiting for opponent to set their secret word..."
+                    : "Both players ready! Starting..."}
+                </p>
+              </div>
+            ) : null}
+          </div>
+        </footer>
+
+        {/* Keyboard - Now in its own grid row */}
+        {(canSetSecret || canGuess) && (
+          <div className="w-full px-2 sm:px-4 pb-2">
+            <div className="mx-auto w-full max-w-5xl">
+              <Keyboard onKeyPress={handleKeyPress} letterStates={letterStates} />
+            </div>
           </div>
         )}
-      </main>
-
-      {/* Footer */}
-      <footer className="w-full px-2 sm:px-4 py-1.5">
-        <div className="mx-auto w-full max-w-5xl">
-          {isGameEnded ? (
-            <div className="text-center">
-              <Button
-                onClick={handleRematch}
-                disabled={hasRequestedRematch}
-                className={`px-8 py-3 font-medium text-lg ${
-                  hasRequestedRematch
-                    ? "bg-green-600 text-white cursor-not-allowed"
-                    : "bg-blue-600 hover:bg-blue-700 text-white"
-                }`}
-              >
-                {hasRequestedRematch
-                  ? "✅ Rematch Requested"
-                  : "🚀 Request Rematch"}
-              </Button>
-              <p className="text-sm text-slate-600 mt-2">
-                {hasRequestedRematch
-                  ? "Waiting for opponent to request rematch..."
-                  : "Click to request a rematch (both players must request)"}
-              </p>
-            </div>
-          ) : !canSetSecret && !canGuess ? (
-            <div className="text-center py-4">
-              <p className="text-lg font-medium text-slate-600">
-                {!myReady
-                  ? "Set your secret word to continue..."
-                  : !oppReady
-                  ? "Waiting for opponent to set their secret word..."
-                  : "Both players ready! Starting..."}
-              </p>
-            </div>
-          ) : null}
-        </div>
-      </footer>
-
-      {/* Keyboard - Now in its own grid row */}
-      {(canSetSecret || canGuess) && (
-        <div className="w-full px-2 sm:px-4 py-1.5">
-          <div className="mx-auto w-full max-w-5xl">
-            <Keyboard onKeyPress={handleKeyPress} letterStates={letterStates} />
-          </div>
-        </div>
-      )}
-
-      {/* Floating FABs */}
-      {/* {isGameEnded && (
-        <div className="fixed bottom-20 right-4 flex flex-col gap-2 z-40">
-          <Button
-            onClick={handleRematch}
-            disabled={hasRequestedRematch}
-            className="w-12 h-12 rounded-full shadow-lg hover:shadow-xl bg-emerald-600 hover:bg-emerald-700"
-            title={
-              hasRequestedRematch
-                ? "Waiting for opponent..."
-                : "Request Rematch"
-            }
-          >
-            {hasRequestedRematch ? "⏳" : "🔄"}
-          </Button>
-          <Button
-            onClick={() => (window.location.href = "/")}
-            className="w-12 h-12 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 bg-red-600 hover:bg-red-700"
-            title="Quit Game"
-          >
-            ✕
-          </Button>
-        </div>
-      )} */}
-    </div>
+      </div>
+    </GradientBackground>
   );
 }
 

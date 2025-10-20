@@ -1,6 +1,10 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Copy, Check, Trophy, Crown } from "lucide-react";
 import SpectateCard from "../components/SpectateCard.jsx";
 import SecretWordInputRow from "../components/SecretWordInputRow.jsx";
+import GradientBackground from "../components/ui/GradientBackground";
+import GlowButton from "../components/ui/GlowButton";
 
 function HostSpectateScreen({
   room,
@@ -9,8 +13,9 @@ function HostSpectateScreen({
   onCopyRoomId,
 }) {
   const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [copied, setCopied] = useState(false);
 
-  // one-shot “reconnected” badge
+  // one-shot "reconnected" badge
   const [showReconnected, setShowReconnected] = useState(() => {
     const s = sessionStorage.getItem("wp.reconnected") === "1";
     const legacy = localStorage.getItem("wp.lastSocketId.wasHost") === "true";
@@ -65,244 +70,231 @@ function HostSpectateScreen({
       );
   }, [players, room?.hostId]);
 
+  const handleCopyRoom = () => {
+    onCopyRoomId();
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   // ---- UI ----
   return (
-    <div className="w-full h-full flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-3 px-2 sm:px-3 pt-2 pb-1">
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg">
-          <span className="text-blue-600">👑</span>
-          <span className="text-sm font-medium text-blue-800">
-            You are the Host
-          </span>
-          {showReconnected && (
-            <span className="ml-2 text-xs text-green-700 bg-green-50 border border-green-200 rounded px-2 py-0.5 animate-pulse">
-              Reconnected
+    <GradientBackground>
+      <div className="w-full h-full flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between gap-3 px-3 pt-3 pb-2">
+          <motion.div
+            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500/20 border border-blue-500/30 rounded-xl backdrop-blur-sm"
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            <Crown className="w-4 h-4 text-blue-300" />
+            <span className="text-sm font-medium text-blue-300">
+              You are the Host
             </span>
+            {showReconnected && (
+              <span className="ml-2 text-xs text-emerald-300 bg-emerald-500/20 border border-emerald-500/30 rounded px-2 py-1 animate-pulse">
+                Reconnected
+              </span>
+            )}
+          </motion.div>
+
+          <div className="flex items-center gap-2">
+            {/* Leaderboard button */}
+            <GlowButton
+              onClick={() => setShowLeaderboard(true)}
+              variant="secondary"
+              size="sm"
+            >
+              <Trophy className="w-4 h-4 mr-1" />
+              Leaderboard
+            </GlowButton>
+
+            {/* Room code display */}
+            <motion.div
+              className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.3 }}
+              whileHover={{ borderColor: "rgba(255, 255, 255, 0.3)" }}
+            >
+              <span className="text-xs text-white/60 font-medium">Room:</span>
+              <span className="font-mono font-bold text-white text-sm">
+                {room?.id}
+              </span>
+              <motion.button
+                onClick={handleCopyRoom}
+                className="text-white/60 hover:text-white transition-colors min-h-[48px] min-w-[48px] flex items-center justify-center"
+                whileTap={{ scale: 0.95 }}
+                aria-label="Copy room ID"
+              >
+                {copied ? (
+                  <Check className="w-4 h-4 text-emerald-400" />
+                ) : (
+                  <Copy className="w-4 h-4" />
+                )}
+              </motion.button>
+              <span className="ml-1 text-xs text-white/60">
+                {connectedCount}/{players.length} online
+              </span>
+            </motion.div>
+          </div>
+        </div>
+
+        {/* Title / status */}
+        <div className="text-center mt-2 mb-3 px-3">
+          {roundActive ? (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <h3 className="text-lg font-semibold text-white">
+                Player Progress
+              </h3>
+              <p className="text-sm text-white/60">
+                Watch players compete in real time.
+              </p>
+            </motion.div>
+          ) : (
+            <>
+              {roundFinished ? (
+                <motion.div
+                  className="mx-auto max-w-xl mb-3 bg-emerald-500/20 border border-emerald-500/30 rounded-2xl p-4 backdrop-blur-sm"
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <p className="text-sm text-emerald-300 font-medium">
+                    {winnerName
+                      ? `Round finished — ${winnerName} won!`
+                      : "Round finished — no winner."}
+                  </p>
+                  <p className="text-xs text-emerald-400 mt-1">
+                    Enter a new word below to start the next round.
+                  </p>
+                </motion.div>
+              ) : (
+                <p className="text-sm text-white/70 mb-2">
+                  Enter a word to start the game.
+                </p>
+              )}
+              {!room?.battle?.started && (
+                <SecretWordInputRow
+                  onSubmit={onWordSubmit}
+                  submitHint="Press Enter to set word"
+                  showGenerate={true}
+                  size={64}
+                />
+              )}
+            </>
           )}
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Leaderboard button appears always; modal shows on demand */}
-          <button
-            onClick={() => setShowLeaderboard(true)}
-            className="inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-sm"
-            style={{
-              backgroundColor: "var(--card-bg)",
-              borderColor: "var(--card-border)",
-              color: "var(--card-text)",
-            }}
-            onMouseEnter={(e) => {
-              e.target.style.backgroundColor = "var(--card-hover)";
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.backgroundColor = "var(--card-bg)";
-            }}
-            title="Show leaderboard"
-          >
-            🏆 Leaderboard
-          </button>
-
-          <div
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border"
-            style={{
-              backgroundColor: "var(--card-bg)",
-              borderColor: "var(--card-border)",
-            }}
-          >
-            <span
-              className="text-xs font-medium"
-              style={{ color: "var(--card-text-muted)" }}
+        {/* Spectate grid: full-height, responsive columns, no overlap */}
+        {roundActive && (
+          <section className="flex-1 min-h-0 px-3 pb-3">
+            <div
+              className="h-[calc(100vh-180px)] overflow-auto"
+              style={{
+                display: "grid",
+                gap: "16px",
+                gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+                alignContent: "start",
+              }}
             >
-              Room:
-            </span>
-            <span
-              className="font-mono font-bold text-sm"
-              style={{ color: "var(--card-text)" }}
-            >
-              {room?.id}
-            </span>
-            <button
-              onClick={onCopyRoomId}
-              className="hover:opacity-70 transition-opacity"
-              style={{ color: "var(--card-text-muted)" }}
-              aria-label="Copy room ID"
-            >
-              📋
-            </button>
-            <span
-              className="ml-2 text-xs"
-              style={{ color: "var(--card-text-muted)" }}
-            >
-              {connectedCount}/{players.length} online
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Title / status */}
-      <div className="text-center mt-1 mb-3">
-        {roundActive ? (
-          <>
-            <h3 className="text-lg font-semibold text-slate-700">
-              Player Progress
-            </h3>
-            <p className="text-sm text-slate-600">
-              Watch players compete in real time.
-            </p>
-          </>
-        ) : (
-          <>
-            {roundFinished ? (
-              <div className="mx-auto max-w-xl mb-3 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg p-3">
-                <p className="text-sm text-green-800 font-medium">
-                  {winnerName
-                    ? `Round finished — ${winnerName} won!`
-                    : "Round finished — no winner."}
-                </p>
-                <p className="text-xs text-green-600 mt-1">
-                  Enter a new word below to start the next round.
-                </p>
-              </div>
-            ) : (
-              <p className="text-sm text-slate-600 mb-2">
-                Enter a word to start the game.
-              </p>
-            )}
-            {!room?.battle?.started && (
-              <SecretWordInputRow
-                onSubmit={onWordSubmit}
-                submitHint="Press Enter to set word"
-                showGenerate={true}
-                size={64}
-              />
-            )}
-          </>
-        )}
-      </div>
-
-      {/* Spectate grid: full-height, responsive columns, no overlap */}
-      {roundActive && (
-        <section className="flex-1 min-h-0 px-2 sm:px-3 pb-3">
-          <div
-            className="h-[calc(100vh-180px)] overflow-auto"
-            style={{
-              display: "grid",
-              gap: "16px",
-              gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-              alignContent: "start",
-            }}
-          >
-            {players.map((p) => (
-              <SpectateCard key={p.id} player={p} room={room} dense />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Leaderboard modal (on demand) */}
-      {showLeaderboard && (
-        <div
-          className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
-          onClick={() => setShowLeaderboard(false)}
-        >
-          <div
-            className="w-full max-w-md rounded-xl shadow-lg border p-3"
-            style={{
-              backgroundColor: "var(--card-bg)",
-              borderColor: "var(--card-border)",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-2">
-              <h4
-                className="font-semibold"
-                style={{ color: "var(--card-text)" }}
-              >
-                Leaderboard
-              </h4>
-              <button
-                className="rounded px-2 py-1 text-sm border"
-                style={{
-                  borderColor: "var(--card-border)",
-                  color: "var(--card-text)",
-                  backgroundColor: "var(--card-hover)",
-                }}
-                onClick={() => setShowLeaderboard(false)}
-              >
-                Close
-              </button>
-            </div>
-            <div className="space-y-1 max-h-[60vh] overflow-auto">
-              {leaderboard.map((p, i) => (
-                <div
+              {players.map((p, index) => (
+                <motion.div
                   key={p.id}
-                  className="flex items-center justify-between text-sm py-1 px-2 rounded"
-                  style={{
-                    color: "var(--card-text, #f1f5f9)",
-                    backgroundColor: "transparent",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.target.style.backgroundColor = "var(--card-hover)";
-                    // Ensure text remains visible on hover
-                    const nameSpan = e.target.querySelector("span[title]");
-                    if (nameSpan) {
-                      nameSpan.style.color = "var(--card-text)";
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    e.target.style.backgroundColor = "transparent";
-                    // Ensure text remains visible after hover
-                    const nameSpan = e.target.querySelector("span[title]");
-                    if (nameSpan) {
-                      nameSpan.style.color = "var(--card-text)";
-                    }
-                  }}
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: index * 0.05, duration: 0.2 }}
                 >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span
-                      className="w-5"
-                      style={{ color: "var(--card-text-muted, #94a3b8)" }}
-                    >
-                      {i + 1}.
-                    </span>
-                    <span
-                      className={[
-                        "truncate",
-                        p.disconnected ? "opacity-60" : "",
-                      ].join(" ")}
-                      title={p.name}
-                      style={{
-                        color: "var(--card-text, #f1f5f9)",
-                        fontWeight: "500",
-                      }}
-                    >
-                      {p.name}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-xs px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
-                      W:{p.wins}
-                    </span>
-                    <span className="text-xs px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
-                      Stk:{p.streak}
-                    </span>
-                  </div>
-                </div>
+                  <SpectateCard player={p} room={room} dense />
+                </motion.div>
               ))}
-              {leaderboard.length === 0 && (
-                <div
-                  className="text-xs text-center py-6"
-                  style={{ color: "var(--card-text-muted, #94a3b8)" }}
-                >
-                  No players yet.
-                </div>
-              )}
             </div>
-          </div>
-        </div>
-      )}
-    </div>
+          </section>
+        )}
+
+        {/* Leaderboard modal (on demand) */}
+        <AnimatePresence>
+          {showLeaderboard && (
+            <motion.div
+              className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              onClick={() => setShowLeaderboard(false)}
+            >
+              <motion.div
+                className="w-full max-w-md bg-white/10 backdrop-blur-md border border-white/20 rounded-3xl shadow-2xl p-6"
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                transition={{ duration: 0.2 }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Trophy className="w-5 h-5 text-yellow-400" />
+                    <h4 className="font-semibold text-lg text-white">
+                      Leaderboard
+                    </h4>
+                  </div>
+                  <GlowButton
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowLeaderboard(false)}
+                  >
+                    Close
+                  </GlowButton>
+                </div>
+                <div className="space-y-2 max-h-[60vh] overflow-auto">
+                  {leaderboard.map((p, i) => (
+                    <motion.div
+                      key={p.id}
+                      className="flex items-center justify-between text-sm py-2 px-3 rounded-xl bg-white/5 hover:bg-white/10 transition-colors"
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: i * 0.05, duration: 0.2 }}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span className="w-6 text-white/60 font-medium">
+                          {i + 1}.
+                        </span>
+                        <span
+                          className={`truncate font-medium ${
+                            p.disconnected ? "opacity-60" : ""
+                          } text-white`}
+                          title={p.name}
+                        >
+                          {p.name}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-xs px-2 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                          W:{p.wins}
+                        </span>
+                        <span className="text-xs px-2 py-1 rounded-lg bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                          Stk:{p.streak}
+                        </span>
+                      </div>
+                    </motion.div>
+                  ))}
+                  {leaderboard.length === 0 && (
+                    <div className="text-xs text-center py-8 text-white/50">
+                      No players yet.
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </GradientBackground>
   );
 }
 
