@@ -6,11 +6,16 @@
   "engines": { "node": ">=20" },
   "scripts": {
     "start": "node index.js",
-    "dev": "node index.js"
+    "dev": "node index.js",
+    "postinstall": "prisma generate --schema=../prisma/schema.prisma || prisma generate"
   },
   "dependencies": {
+    "@prisma/client": "^6.17.1",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "express": "^4.19.2",
+    "luxon": "^3.7.2",
+    "prisma": "^6.17.1",
     "socket.io": "^4.7.5"
   }
 }

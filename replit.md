@@ -55,6 +55,28 @@ The project has TWO workflows configured:
 
 ## Recent Changes
 
+### October 20, 2025 - Render Deployment & User Persistence Fixes
+- **Backend Deployment Fix**: Updated `server/package.json` for Render compatibility
+  - Added missing dependencies: `@prisma/client`, `cookie-parser`, `luxon`, `prisma`
+  - Added `postinstall` script to auto-generate Prisma client on deployment
+  - Schema path configured with fallback: `prisma generate --schema=../prisma/schema.prisma || prisma generate`
+  - Fixed ERR_MODULE_NOT_FOUND error for cookie-parser on Render
+  
+- **User Persistence Fix**: Switched from cookie-based to localStorage-based user tracking
+  - Cookies don't work in Replit iframe due to sameSite restrictions
+  - Frontend generates UUID on first visit → stores in localStorage
+  - Backend receives UUID via `X-User-Id` header → creates User record with that UUID
+  - Backend now always ensures User exists in database before saving guesses
+  - Fixed foreign key constraint violation (DailyResult_userId_fkey)
+  - Fixed "each request creates new user" bug - guesses now accumulate correctly
+  
+- **Frontend Deployment**: Vercel configuration
+  - Frontend hosted on Vercel (client folder only)
+  - Added `vercel.json` with rewrites to forward `/api/*`, `/socket.io/*`, and `/health` to Render backend
+  - Backend remains on Render with DATABASE_URL configured
+
+- **Error Display**: Updated Daily Challenge status messages to show errors in red (matching other modes)
+
 ### October 19, 2025 (Evening) - Daily Challenge UI Updates & Bug Fixes
 - **UI Overhaul**: Updated Daily Challenge screen to match Battle player view layout
   - Removed "Submit Guess" button for cleaner interface
