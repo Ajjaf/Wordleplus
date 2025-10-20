@@ -20,6 +20,9 @@ import { useGameActions } from "./hooks/useGameActions.js";
 import { useRoomManagement } from "./hooks/useRoomManagement.js";
 import { buildLetterStates } from "./modes/utils.js";
 
+// Error Notification System
+import { ErrorNotificationProvider } from "./contexts/ErrorNotificationContext.jsx";
+
 // UI Components
 
 const LS_LAST_ROOM = "wp.lastRoomId";
@@ -561,14 +564,15 @@ export default function App() {
   }, [room?.mode, isHost]);
 
   return (
-    <div 
-      className="overflow-x-hidden" 
-      style={{
-        paddingTop: 'env(safe-area-inset-top)',
-        paddingBottom: 'env(safe-area-inset-bottom)'
-      }}
-    >
-      <Backdrop />
+    <ErrorNotificationProvider>
+      <div 
+        className="overflow-x-hidden" 
+        style={{
+          paddingTop: 'env(safe-area-inset-top)',
+          paddingBottom: 'env(safe-area-inset-bottom)'
+        }}
+      >
+        <Backdrop />
 
       {/* Game screens break out of main container - Full viewport */}
       {screen === "game" && (
@@ -852,6 +856,7 @@ export default function App() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </ErrorNotificationProvider>
   );
 }

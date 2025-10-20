@@ -3,8 +3,15 @@ import React, { useEffect, useState } from "react";
 /**
  * Transient notification that appears near the top of the game grid
  * Auto-dismisses after a short delay
+ * Supports severity levels with color coding: error (red), warning (yellow), info (blue), success (green)
  */
-export default function GameNotification({ message, duration = 1000, onDismiss }) {
+export default function GameNotification({ 
+  message, 
+  duration = 1000, 
+  onDismiss, 
+  severity = "info",
+  style = {} 
+}) {
   const [isVisible, setIsVisible] = useState(true);
 
   useEffect(() => {
@@ -23,6 +30,10 @@ export default function GameNotification({ message, duration = 1000, onDismiss }
   }, [message, duration, onDismiss]);
 
   if (!message || !isVisible) return null;
+
+  // Default background color if not provided in style
+  const backgroundColor = style.backgroundColor || "#1e293b";
+  const icon = style.icon || "";
 
   return (
     <>
@@ -67,7 +78,7 @@ export default function GameNotification({ message, duration = 1000, onDismiss }
       >
         <div
           style={{
-            backgroundColor: "#1e293b",
+            backgroundColor,
             color: "white",
             padding: "12px 24px",
             borderRadius: "8px",
@@ -76,9 +87,13 @@ export default function GameNotification({ message, duration = 1000, onDismiss }
             boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
             whiteSpace: "nowrap",
             letterSpacing: "0.5px",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
           }}
         >
-          {message}
+          {icon && <span style={{ fontSize: "16px" }}>{icon}</span>}
+          <span>{message}</span>
         </div>
       </div>
     </>
