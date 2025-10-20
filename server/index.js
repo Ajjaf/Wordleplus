@@ -218,6 +218,14 @@ app.post("/api/daily/guess", async (req, res) => {
     const patterns = existingResult?.patterns || [];
     const gameOver = existingResult?.completed || false;
     
+    console.log("[Daily Guess - Load Existing]", {
+      userId: user.id,
+      puzzleId: puzzle.id,
+      hasExistingResult: !!existingResult,
+      existingGuessCount: guesses.length,
+      existingGuesses: guesses
+    });
+    
     if (gameOver) {
       return res.json({
         error: "Challenge already completed",
@@ -252,11 +260,18 @@ app.post("/api/daily/guess", async (req, res) => {
       puzzleWord: puzzle.word
     });
     
-    await createOrUpdateDailyResult(user.id, puzzle.id, {
+    const savedResult = await createOrUpdateDailyResult(user.id, puzzle.id, {
       guesses: newGuesses,
       patterns: newPatterns,
       won,
       completed
+    });
+    
+    console.log("[Daily Result Saved]", {
+      userId: user.id,
+      puzzleId: puzzle.id,
+      savedGuessCount: savedResult.guesses.length,
+      savedGuesses: savedResult.guesses
     });
     
     const guessResponse = {
