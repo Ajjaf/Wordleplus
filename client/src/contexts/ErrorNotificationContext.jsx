@@ -1,106 +1,71 @@
 import React, { createContext, useContext, useState, useCallback } from "react";
 import GameNotification from "../components/GameNotification";
 
-/**
- * Severity levels for notifications
- * - error: Red background, for failures and critical issues
- * - warning: Yellow background, for cautions and reconnecting states
- * - info: Blue background, for informational messages
- * - success: Green background, for successful operations
- */
-const SEVERITY_STYLES = {
-  error: {
-    backgroundColor: "#dc2626",
-    icon: "❌",
-  },
-  warning: {
-    backgroundColor: "#f59e0b",
-    icon: "⚠️",
-  },
-  info: {
-    backgroundColor: "#3b82f6",
-    icon: "ℹ️",
-  },
-  success: {
-    backgroundColor: "#10b981",
-    icon: "✓",
-  },
-};
+const NOTIFICATION_DURATION = 1500; // 1.5 seconds default auto-dismiss
 
 const ErrorNotificationContext = createContext(null);
 
 export function ErrorNotificationProvider({ children }) {
-  const [notification, setNotification] = useState(null);
+  const [notifications, setNotifications] = useState([]);
 
   /**
    * Show a notification with automatic dismiss
    * @param {string} message - The message to display
    * @param {string} severity - One of: 'error', 'warning', 'info', 'success'
-   * @param {number} duration - How long to show (ms), default 2500
+   * @returns {string} The notification ID
    */
-  const showNotification = useCallback((message, severity = "error", duration = 2500) => {
-    if (!message) return;
+  const showNotification = useCallback((message, severity = "info") => {
+    if (!message) return null;
     
-    setNotification({
-      message,
-      severity,
-      duration,
-      key: Date.now(), // Force re-render for same message
-    });
+    const id = crypto.randomUUID();
+    
+    setNotifications(prev => [...prev, { id, message, severity }]);
+    
+    return id;
   }, []);
 
   /**
-   * Convenience methods for different severity levels
+   * Dismiss a specific notification by ID
+   * @param {string} id - The notification ID to dismiss
    */
-  const showError = useCallback((message, duration) => {
-    showNotification(message, "error", duration);
-  }, [showNotification]);
+  const dismissNotification = useCallback((id) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  }, []);
 
-  const showWarning = useCallback((message, duration) => {
-    showNotification(message, "warning", duration);
-  }, [showNotification]);
-
-  const showInfo = useCallback((message, duration) => {
-    showNotification(message, "info", duration);
-  }, [showNotification]);
-
-  const showSuccess = useCallback((message, duration) => {
-    showNotification(message, "success", duration);
-  }, [showNotification]);
-
-  const dismissNotification = useCallback(() => {
-    setNotification(null);
+  /**
+   * Clear all notifications
+   */
+  const clearNotifications = useCallback(() => {
+    setNotifications([]);
   }, []);
 
   const value = {
     showNotification,
-    showError,
-    showWarning,
-    showInfo,
-    showSuccess,
     dismissNotification,
+    clearNotifications,
   };
 
   return (
     <ErrorNotificationContext.Provider value={value}>
       {children}
-      {notification && (
-        <GameNotification
-          key={notification.key}
-          message={notification.message}
-          severity={notification.severity}
-          duration={notification.duration}
-          onDismiss={dismissNotification}
-          style={SEVERITY_STYLES[notification.severity]}
-        />
-      )}
+      <div className="fixed top-4 left-0 right-0 z-50 flex flex-col items-center gap-2 pointer-events-none">
+        {notifications.map((notification) => (
+          <GameNotification
+            key={notification.id}
+            message={notification.message}
+            severity={notification.severity}
+            duration={NOTIFICATION_DURATION}
+            onDismiss={() => dismissNotification(notification.id)}
+          />
+        ))}
+      </div>
     </ErrorNotificationContext.Provider>
   );
 }
 
 /**
  * Hook to access error notification system
- * @returns {object} Notification methods
+ * @returns {object} Notification methods: { showNotification, dismissNotification, clearNotifications }
  */
 export function useErrorNotification() {
   const context = useContext(ErrorNotificationContext);
