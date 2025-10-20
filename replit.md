@@ -55,6 +55,33 @@ The project has TWO workflows configured:
 
 ## Recent Changes
 
+### October 20, 2025 - Mobile UX Optimization (Production-Ready)
+- **2025 Mobile Standards Compliance**: All touch targets and spacing now meet WCAG AAA/iOS/Android guidelines
+  - **Touch targets**: 48×48px minimum for all interactive elements (buttons, inputs, keyboard keys)
+  - **Spacing**: 8px minimum between all interactive elements (keyboard keys, buttons)
+  - **Safe areas**: iPhone notches and Android cutouts fully supported with viewport-fit=cover
+  
+- **Keyboard Improvements**:
+  - Increased key height from 44px to 48px on mobile
+  - Improved spacing: 8px between keys (horizontal and vertical)
+  - Added touch-manipulation to prevent double-tap zoom
+  - Maintained responsive breakpoints for desktop (40px keys with 4px spacing)
+  
+- **Home Screen Mobile Optimization**:
+  - All buttons now 48px minimum height (previously 40px)
+  - Input fields (name, room code) now 48px tall
+  - Proper touch-friendly spacing throughout
+  
+- **Mobile Component Enhancements**:
+  - MobileBoardSwitcher: Added aria-labels and touch-manipulation
+  - MobileBattleLayout: Enhanced floating buttons with accessibility
+  - All floating buttons enforce 48px minimum with clear labels
+  
+- **Infrastructure**:
+  - Created unified `useMobile` hook for consistent mobile detection
+  - Added safe-area-inset-top and safe-area-inset-bottom to App container
+  - Updated viewport meta tag with viewport-fit=cover for modern devices
+
 ### October 20, 2025 - Daily Challenge Notification System
 - **Unified Feedback System**: Daily Challenge now uses same feedback approach as Duel and Battle modes
   - Created **GameNotification** component for transient tooltip-style notifications
