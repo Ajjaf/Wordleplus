@@ -56,11 +56,12 @@ The project has TWO workflows configured:
 ## Recent Changes
 
 ### October 20, 2025 - Duel Mode Mobile Board Fix
-- **Critical Bug Fix**: Removed blocking progress indicator from Duel mobile view
-  - "You (0/6)" and "Opponent (0/6)" indicator was positioned absolutely at the top
-  - This overlay was preventing the board from being visible on mobile
-  - Board now appears correctly in mobile view with full visibility
-  - Players can now see and interact with their board on mobile devices
+- **Critical Bug Fix**: Fixed board visibility in Duel mobile view
+  - Removed blocking progress indicator ("You (0/6)" and "Opponent (0/6)")
+  - Simplified MobileBoardSwitcher component to show only player's board
+  - Removed toggle button for opponent view (temporarily disabled)
+  - Board now displays correctly with full visibility on mobile devices
+  - Players can see and interact with their game board without obstructions
 
 ### October 20, 2025 - Mobile UX Optimization (Production-Ready)
 - **2025 Mobile Standards Compliance**: All touch targets and spacing now meet WCAG AAA/iOS/Android guidelines
