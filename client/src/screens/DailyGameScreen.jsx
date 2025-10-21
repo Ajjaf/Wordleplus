@@ -25,12 +25,18 @@ export default function DailyGameScreen({
   const title = challenge?.title || "Daily Challenge";
   const subtitle = challenge?.subtitle || challenge?.date || "";
   const maxGuesses = challenge?.maxGuesses || 6;
+  const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
 
   return (
     <GradientBackground fullHeight className="flex h-full">
       <div className="flex flex-1 flex-col w-full min-h-0 relative overflow-hidden">
         {/* Header */}
-        <div className="px-3 pt-4 pb-3">
+        <div
+          className="px-3 pt-4 pb-3"
+          style={{
+            display: isMobile ? "none" : undefined,
+          }}
+        >
           <div className="max-w-7xl mx-auto">
             <motion.h2
               className="text-2xl md:text-3xl font-bold text-white text-center mb-2"
@@ -76,14 +82,21 @@ export default function DailyGameScreen({
 
           <div className="flex-1 flex flex-col items-center min-h-0">
             {/* Center board */}
-            <div className="flex-1 w-full max-w-[min(1100px,95vw)] max-h-[calc(100dvh-260px)] flex items-center justify-center min-h-0">
+            <div
+              className="flex-1 w-full max-w-[min(1100px,95vw)] flex items-center justify-center min-h-0"
+              style={{
+                maxHeight: isMobile
+                  ? "calc(100dvh - 220px)"
+                  : "calc(100dvh - 260px)",
+              }}
+            >
               <Board
                 guesses={guesses}
                 activeGuess={gameOver ? "" : currentGuess}
-                maxTile={112}
-                minTile={56}
-                gap={10}
-                padding={12}
+                maxTile={isMobile ? 86 : 112}
+                minTile={isMobile ? 44 : 56}
+                gap={isMobile ? 6 : 10}
+                padding={isMobile ? 8 : 12}
                 secretWord={null}
                 secretWordState="empty"
                 errorShakeKey={shakeKey}
