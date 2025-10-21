@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import Board from "../components/Board.jsx";
 import Keyboard from "../components/Keyboard.jsx";
 import PlayerProgressCard from "../components/PlayerProgressCard.jsx";
-import MobileBattleLayout from "../components/MobileBattleLayout.jsx";
+// import MobileBattleLayout from "../components/MobileBattleLayout.jsx";
 import GameResults from "../components/GameResults.jsx";
 import ParticleEffect from "../components/ParticleEffect.jsx";
 import GradientBackground from "../components/ui/GradientBackground";
@@ -170,54 +170,58 @@ function BattleGameScreen({
         {/* Game Status */}
         <div className="px-3 pt-4 pb-3">
           <div className="max-w-7xl mx-auto">
-            <motion.h2
-              className="text-2xl md:text-3xl font-bold text-white text-center mb-2"
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3 }}
-            >
-              Battle Royale
-            </motion.h2>
+            {!isMobile && (
+              <>
+                <motion.h2
+                  className="text-2xl md:text-3xl font-bold text-white text-center mb-2"
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  Battle Royale
+                </motion.h2>
 
-            {!isHost && (
-              <div className="text-center space-y-2">
-                {roundActive && !roundFinished && (
-                  <motion.div
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500/20 border border-emerald-500/30 rounded-xl"
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <span className="text-sm text-emerald-300 font-medium">
-                      Game in progress… good luck!
-                    </span>
-                  </motion.div>
+                {!isHost && (
+                  <div className="text-center space-y-2">
+                    {roundActive && !roundFinished && (
+                      <motion.div
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-500/20 border border-emerald-500/30 rounded-xl"
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <span className="text-sm text-emerald-300 font-medium">
+                          Game in progress… good luck!
+                        </span>
+                      </motion.div>
+                    )}
+                    {room?.battle?.winner && (
+                      <motion.div
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500/20 border border-blue-500/30 rounded-xl"
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <span className="text-sm text-blue-300 font-medium">
+                          Winner: {getWinnerName()}
+                        </span>
+                      </motion.div>
+                    )}
+                    {!roundActive && !roundFinished && (
+                      <motion.div
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 border border-white/20 rounded-xl"
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <span className="text-sm text-white/70 font-medium">
+                          Waiting for host to start the game…
+                        </span>
+                      </motion.div>
+                    )}
+                  </div>
                 )}
-                {room?.battle?.winner && (
-                  <motion.div
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500/20 border border-blue-500/30 rounded-xl"
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <span className="text-sm text-blue-300 font-medium">
-                      Winner: {getWinnerName()}
-                    </span>
-                  </motion.div>
-                )}
-                {!roundActive && !roundFinished && (
-                  <motion.div
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 border border-white/20 rounded-xl"
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <span className="text-sm text-white/70 font-medium">
-                      Waiting for host to start the game…
-                    </span>
-                  </motion.div>
-                )}
-              </div>
+              </>
             )}
           </div>
         </div>
@@ -225,27 +229,44 @@ function BattleGameScreen({
         {/* Main */}
         <main className="flex-1 px-3 md:px-4 pt-2 pb-3 flex flex-col min-h-0">
           {isMobile ? (
-            roundActive ? (
-              <MobileBattleLayout
-                me={me}
-                otherPlayers={otherPlayers}
-                currentGuess={currentGuess}
-                shakeKey={shakeKey}
-                showActiveError={showActiveError}
-                letterStates={letterStates}
-                canGuessBattle={canGuessBattle}
-                onKeyPress={onKeyPress}
-                className="h-full"
-              />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center">
-                <GameResults
-                  room={room}
-                  players={allPlayers}
-                  correctWord={correctWord}
+            <div className="flex-1 flex items-center justify-center min-h-0">
+              {/* Mobile-specific layout removed for a cleaner experience:
+              {roundActive ? (
+                <MobileBattleLayout
+                  me={me}
+                  otherPlayers={otherPlayers}
+                  currentGuess={currentGuess}
+                  shakeKey={shakeKey}
+                  showActiveError={showActiveError}
+                  letterStates={letterStates}
+                  canGuessBattle={canGuessBattle}
+                  onKeyPress={onKeyPress}
+                  className="h-full"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <GameResults
+                    room={room}
+                    players={allPlayers}
+                    correctWord={correctWord}
+                  />
+                </div>
+              )}
+              */}
+              <div className="w-full max-w-[min(1100px,95vw)] max-h-[calc(100dvh-260px)] flex items-center justify-center min-h-0">
+                <Board
+                  guesses={me?.guesses || []}
+                  activeGuess={activeGuessForBattle}
+                  errorShakeKey={shakeKey}
+                  errorActiveRow={showActiveError}
+                  maxTile={112}
+                  minTile={56}
+                  gap={10}
+                  padding={12}
+                  guessFlipKey={guessFlipKey}
                 />
               </div>
-            )
+            </div>
           ) : (
             <div className="flex-1 flex flex-col items-center min-h-0 relative gap-3">
               {/* Center board */}
@@ -301,13 +322,13 @@ function BattleGameScreen({
           <div className="max-w-5xl mx-auto">
             {canGuessBattle ? (
               <Keyboard onKeyPress={onKeyPress} letterStates={letterStates} />
-            ) : (
+            ) : (!isMobile && (
               <div className="text-center text-sm text-white/60 py-3">
                 {roundFinished
                   ? "Game ended — waiting for host to start the next round…"
                   : "Waiting for host to start the game…"}
               </div>
-            )}
+            ) /* Mobile informational banner hidden */)}
           </div>
         </footer>
       </div>
