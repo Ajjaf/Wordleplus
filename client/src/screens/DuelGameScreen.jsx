@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { getRandomWord } from "../api";
 import { useRef } from "react";
 import { motion } from "framer-motion";
-import { Copy, Check } from "lucide-react";
 import GradientBackground from "../components/ui/GradientBackground";
 import GlowButton from "../components/ui/GlowButton";
 import { COLORS, GRADIENTS, SHADOWS } from "../design-system";
@@ -41,7 +40,6 @@ function DuelGameScreen({
   const [showSecretReveal, setShowSecretReveal] = useState(false);
   const [guessFlipKey, setGuessFlipKey] = useState(0);
   const [lastStreak, setLastStreak] = useState(0);
-  const [copied, setCopied] = useState(false);
 
   // Mobile UX
   const [mobileView, setMobileView] = useState("me");
@@ -251,11 +249,6 @@ function DuelGameScreen({
     setMySubmittedSecret("");
   };
 
-  const handleCopyRoom = () => {
-    navigator.clipboard.writeText(room?.id || "");
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
 
   // Mobile detection
   useEffect(() => {
@@ -488,29 +481,6 @@ function DuelGameScreen({
               </h2>
             </div>
 
-            {/* Room ID Display */}
-            <motion.div
-              className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl px-3 py-2 flex items-center gap-2"
-              whileHover={{ borderColor: "rgba(255, 255, 255, 0.3)" }}
-            >
-              <span className="text-xs text-white/60 font-medium">Room:</span>
-              <span className="font-mono font-bold text-white text-sm">
-                {room?.id}
-              </span>
-              <motion.button
-                onClick={handleCopyRoom}
-                className="text-white/60 hover:text-white transition-colors min-h-[48px] min-w-[48px] flex items-center justify-center"
-                whileTap={{ scale: 0.95 }}
-                aria-label="Copy room ID"
-                title="Copy room ID"
-              >
-                {copied ? (
-                  <Check className="w-4 h-4 text-green-400" />
-                ) : (
-                  <Copy className="w-4 h-4" />
-                )}
-              </motion.button>
-            </motion.div>
           </div>
 
           {/* Modern gradient progress bar when round is live */}

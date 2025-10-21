@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
-import { Moon, Sun, User } from "lucide-react";
-import { useState } from "react";
+import { Moon, Sun, User, Copy, Check } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 export default function NavHeaderV2({
   onHomeClick,
@@ -9,6 +9,35 @@ export default function NavHeaderV2({
   roomId = null,
 }) {
   const [isDark, setIsDark] = useState(true);
+  const [copied, setCopied] = useState(false);
+  const copyResetTimeout = useRef(null);
+
+  const handleCopyRoomId = async () => {
+    if (!roomId) return;
+
+    try {
+      await navigator.clipboard?.writeText?.(roomId);
+      setCopied(true);
+      if (copyResetTimeout.current) {
+        clearTimeout(copyResetTimeout.current);
+      }
+      copyResetTimeout.current = setTimeout(() => setCopied(false), 2000);
+    } catch (error) {
+      // Swallow clipboard errors silently to avoid noisy UX
+    }
+  };
+
+  useEffect(() => {
+    setCopied(false);
+  }, [roomId]);
+
+  useEffect(() => {
+    return () => {
+      if (copyResetTimeout.current) {
+        clearTimeout(copyResetTimeout.current);
+      }
+    };
+  }, []);
 
   return (
     <motion.nav
@@ -53,12 +82,19 @@ export default function NavHeaderV2({
                 <span className="font-mono tracking-wider">{roomId}</span>
                 <button
                   type="button"
-                  onClick={() => navigator.clipboard?.writeText?.(roomId)}
-                  className="px-2 h-7 rounded bg-white/10 hover:bg-white/20 border border-white/10 text-white transition"
-                  aria-label="Copy room id"
-                  title="Copy room id"
+                  onClick={handleCopyRoomId}
+                  className="h-7 w-7 rounded bg-white/10 hover:bg-white/20 border border-white/10 text-white transition flex items-center justify-center"
+                  aria-label={copied ? "Room id copied" : "Copy room id"}
+                  title={copied ? "Copied!" : "Copy room id"}
                 >
-                  Copy
+                  {copied ? (
+                    <Check className="w-4 h-4 text-green-400" />
+                  ) : (
+                    <Copy className="w-4 h-4" />
+                  )}
+                  <span className="sr-only">
+                    {copied ? "Room id copied" : "Copy room id"}
+                  </span>
                 </button>
               </div>
             )}

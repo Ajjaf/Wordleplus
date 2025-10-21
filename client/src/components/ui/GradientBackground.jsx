@@ -3,7 +3,7 @@ import { COLORS, GRADIENTS } from '../../design-system';
 
 export default function GradientBackground({ children, className = '' }) {
   return (
-    <div className={`relative min-h-screen overflow-hidden ${className}`}>
+    <div className={`relative min-h-screen overflow-x-hidden ${className}`}>
       <motion.div
         className="absolute inset-0 -z-10"
         style={{

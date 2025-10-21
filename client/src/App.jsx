@@ -724,9 +724,6 @@ export default function App() {
                 onWordSubmit={async (word) => {
                   await battleActions.setWordAndStart(room.id, word); // emits setHostWord then startBattle
                 }}
-                onCopyRoomId={() =>
-                  navigator.clipboard.writeText(room?.id || "")
-                }
               />
             ) : (
               <BattleGameScreen
@@ -798,7 +795,7 @@ export default function App() {
 
       {/* Main app container for home/lobby screens - Constrained width */}
       {screen !== "game" && screen !== "daily" && (
-        <div className="h-[100dvh] min-h-screen overflow-hidden">
+        <div className="min-h-screen overflow-y-auto">
           <NavHeaderV2
             onHomeClick={() => {
               goHome();

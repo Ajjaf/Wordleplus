@@ -1,19 +1,13 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Copy, Check, Trophy, Crown } from "lucide-react";
+import { Trophy, Crown } from "lucide-react";
 import SpectateCard from "../components/SpectateCard.jsx";
 import SecretWordInputRow from "../components/SecretWordInputRow.jsx";
 import GradientBackground from "../components/ui/GradientBackground";
 import GlowButton from "../components/ui/GlowButton";
 
-function HostSpectateScreen({
-  room,
-  players = [],
-  onWordSubmit,
-  onCopyRoomId,
-}) {
+function HostSpectateScreen({ room, players = [], onWordSubmit }) {
   const [showLeaderboard, setShowLeaderboard] = useState(false);
-  const [copied, setCopied] = useState(false);
 
   // one-shot "reconnected" badge
   const [showReconnected, setShowReconnected] = useState(() => {
@@ -70,12 +64,6 @@ function HostSpectateScreen({
       );
   }, [players, room?.hostId]);
 
-  const handleCopyRoom = () => {
-    onCopyRoomId();
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
   // ---- UI ----
   return (
     <GradientBackground>
@@ -110,34 +98,9 @@ function HostSpectateScreen({
               Leaderboard
             </GlowButton>
 
-            {/* Room code display */}
-            <motion.div
-              className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.3 }}
-              whileHover={{ borderColor: "rgba(255, 255, 255, 0.3)" }}
-            >
-              <span className="text-xs text-white/60 font-medium">Room:</span>
-              <span className="font-mono font-bold text-white text-sm">
-                {room?.id}
-              </span>
-              <motion.button
-                onClick={handleCopyRoom}
-                className="text-white/60 hover:text-white transition-colors min-h-[48px] min-w-[48px] flex items-center justify-center"
-                whileTap={{ scale: 0.95 }}
-                aria-label="Copy room ID"
-              >
-                {copied ? (
-                  <Check className="w-4 h-4 text-emerald-400" />
-                ) : (
-                  <Copy className="w-4 h-4" />
-                )}
-              </motion.button>
-              <span className="ml-1 text-xs text-white/60">
-                {connectedCount}/{players.length} online
-              </span>
-            </motion.div>
+            <span className="text-xs text-white/60">
+              {connectedCount}/{players.length} online
+            </span>
           </div>
         </div>
 

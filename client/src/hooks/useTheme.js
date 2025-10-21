@@ -3,14 +3,14 @@ import { useEffect, useState, useCallback } from "react";
 const LS_KEY = "pw.theme"; // 'light' | 'dark' | 'system'
 
 export function useTheme() {
-  // Initialize with a safe default and update after mount
-  const [theme, setTheme] = useState("system");
+  // Always start in dark mode regardless of stored preference
+  const [theme, setTheme] = useState(() => "dark");
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // Initialize theme after component mounts
+  // Mark theme logic ready after mount (avoids SSR/localStorage issues)
   useEffect(() => {
-    const savedTheme = localStorage.getItem(LS_KEY) || "system";
-    setTheme(savedTheme);
+    // const savedTheme = localStorage.getItem(LS_KEY) || "system";
+    // setTheme(savedTheme);
     setIsInitialized(true);
   }, []);
 
