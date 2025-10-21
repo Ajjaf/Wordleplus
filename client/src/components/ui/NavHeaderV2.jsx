@@ -13,9 +13,7 @@ export default function NavHeaderV2({
     const stored = localStorage.getItem("pw.theme");
     if (stored === "dark") return true;
     if (stored === "light") return false;
-    return (
-      window.matchMedia?.("(prefers-color-scheme: dark)")?.matches ?? true
-    );
+    return window.matchMedia?.("(prefers-color-scheme: dark)")?.matches ?? true;
   });
   const [copied, setCopied] = useState(false);
   const copyResetTimeout = useRef(null);
@@ -78,7 +76,7 @@ export default function NavHeaderV2({
               <span className="text-white font-bold text-lg md:text-xl">W</span>
             </div>
             <h1 className="text-xl md:text-2xl font-bold text-white tracking-tight">
-              WordlePlus
+              EVO-WORDO
             </h1>
           </motion.button>
 
@@ -118,7 +116,9 @@ export default function NavHeaderV2({
               className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center border border-white/10 transition-all"
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.9 }}
-              aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+              aria-label={
+                isDark ? "Switch to light mode" : "Switch to dark mode"
+              }
               title={isDark ? "Switch to light mode" : "Switch to dark mode"}
             >
               {isDark ? (
