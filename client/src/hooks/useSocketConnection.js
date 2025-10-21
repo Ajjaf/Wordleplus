@@ -9,11 +9,13 @@ const LS_LAST_NAME = "wp.lastName";
 export function useSocketConnection(room, setScreen) {
   const [connected, setConnected] = useState(socket.connected);
   const [rejoinOffered, setRejoinOffered] = useState(false);
-  const { showNotification } = useErrorNotification();
+  const { showNotification, dismissNotification } = useErrorNotification();
 
   // Prevent multiple resume attempts (StrictMode or rapid reconnects)
   const triedResumeRef = useRef(false);
   const hasShownDisconnectRef = useRef(false);
+  const hasConnectedOnceRef = useRef(socket.connected);
+  const disconnectNotificationIdRef = useRef(null);
 
   // Read these once; they rarely change during a session
   const savedRoomId = useMemo(() => localStorage.getItem(LS_ROOM) || "", []);
@@ -22,10 +24,18 @@ export function useSocketConnection(room, setScreen) {
   useEffect(() => {
     const onConnect = () => {
       setConnected(true);
+      hasConnectedOnceRef.current = true;
+
+      if (disconnectNotificationIdRef.current) {
+        dismissNotification(disconnectNotificationIdRef.current);
+        disconnectNotificationIdRef.current = null;
+      }
       
       // Show reconnected notification if we previously disconnected
       if (hasShownDisconnectRef.current) {
-        showNotification("Reconnected to server", "success");
+        showNotification("Reconnected to server", "success", {
+          duration: 2500,
+        });
         hasShownDisconnectRef.current = false;
       }
 
@@ -64,11 +74,20 @@ export function useSocketConnection(room, setScreen) {
     };
 
     const onDisconnect = () => {
+      if (!hasConnectedOnceRef.current) {
+        return;
+      }
       const last = localStorage.getItem(LS_SOCKET);
       if (last) localStorage.setItem(LS_SOCKET + ".old", last);
       setConnected(false);
       hasShownDisconnectRef.current = true;
-      showNotification("Connection lost - Reconnecting...", "warning");
+      if (!disconnectNotificationIdRef.current) {
+        disconnectNotificationIdRef.current = showNotification(
+          "Connection lost - Reconnecting...",
+          "warning",
+          { duration: 6000 }
+        );
+      }
       // Allow a new resume attempt on next connect
       triedResumeRef.current = false;
     };
@@ -82,11 +101,22 @@ export function useSocketConnection(room, setScreen) {
     socket.on("disconnect", onDisconnect);
     socket.on("connect_error", onConnectError);
     return () => {
+      if (disconnectNotificationIdRef.current) {
+        dismissNotification(disconnectNotificationIdRef.current);
+        disconnectNotificationIdRef.current = null;
+      }
       socket.off("connect", onConnect);
       socket.off("disconnect", onDisconnect);
       socket.off("connect_error", onConnectError);
     };
-  }, [room?.id, savedRoomId, savedName, setScreen, showNotification]);
+  }, [
+    room?.id,
+    savedRoomId,
+    savedName,
+    setScreen,
+    showNotification,
+    dismissNotification,
+  ]);
 
   const canRejoin = connected && !room?.id && rejoinOffered;
 

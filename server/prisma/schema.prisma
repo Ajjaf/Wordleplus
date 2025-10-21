@@ -65,8 +65,8 @@ model DailyResult {
   updatedAt   DateTime @updatedAt
 
   /// gameplay data
-  guesses      String[] // list of guessed words
-  patterns     Json[]   // list of patterns (arrays of color strings)
+  guesses      Json     // list of guessed words (stored as JSON array)
+  patterns     Json     // list of patterns (arrays of color strings, stored as JSON)
   attempts     Int      // 1..6 ; NULL => DNF
   won          Boolean  // true if solved
   completed    Boolean  @default(false) // true if game is over

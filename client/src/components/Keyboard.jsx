@@ -157,7 +157,7 @@ export default function Keyboard({
               : "inset 0 -2px 0 rgba(0,0,0,0.08)",
         }}
       >
-        {label === "BACKSPACE" ? "Back" : label}
+        {label === "BACKSPACE" ? "DEL" : label}
       </button>
     );
   };
