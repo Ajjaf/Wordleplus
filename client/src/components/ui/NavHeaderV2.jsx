@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Moon, Sun, User, Copy, Check } from "lucide-react";
+import { User, Copy, Check } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 export default function NavHeaderV2({
@@ -8,22 +8,16 @@ export default function NavHeaderV2({
   modeLabel = null,
   roomId = null,
 }) {
-  const [isDark, setIsDark] = useState(() => {
-    if (typeof window === "undefined") return true;
-    const stored = localStorage.getItem("pw.theme");
-    if (stored === "dark") return true;
-    if (stored === "light") return false;
-    return window.matchMedia?.("(prefers-color-scheme: dark)")?.matches ?? true;
-  });
   const [copied, setCopied] = useState(false);
   const copyResetTimeout = useRef(null);
 
   useEffect(() => {
+    // Force dark mode on mount
     if (typeof document === "undefined") return;
     const root = document.documentElement;
-    root.classList.toggle("dark", isDark);
-    localStorage.setItem("pw.theme", isDark ? "dark" : "light");
-  }, [isDark]);
+    root.classList.add("dark");
+    localStorage.setItem("pw.theme", "dark");
+  }, []);
 
   const handleCopyRoomId = async () => {
     if (!roomId) return;
@@ -111,22 +105,6 @@ export default function NavHeaderV2({
                 </button>
               </div>
             )}
-            <motion.button
-              onClick={() => setIsDark((prev) => !prev)}
-              className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center border border-white/10 transition-all"
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-              aria-label={
-                isDark ? "Switch to light mode" : "Switch to dark mode"
-              }
-              title={isDark ? "Switch to light mode" : "Switch to dark mode"}
-            >
-              {isDark ? (
-                <Sun className="w-5 h-5 text-yellow-400" />
-              ) : (
-                <Moon className="w-5 h-5 text-blue-400" />
-              )}
-            </motion.button>
 
             <motion.button
               className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-gradient-to-br from-violet-500 to-cyan-500 flex items-center justify-center border border-white/20"

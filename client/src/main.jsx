@@ -1,3 +1,4 @@
+
 import React, { Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import "./index.css";
@@ -7,6 +8,12 @@ import App from "./App.jsx";
 
 // Ensure React is available globally
 window.React = React;
+
+// Force dark mode
+if (typeof document !== "undefined") {
+  document.documentElement.classList.add("dark");
+  localStorage.setItem("pw.theme", "dark");
+}
 
 // Add error boundary to catch React errors
 class ErrorBoundary extends React.Component {
