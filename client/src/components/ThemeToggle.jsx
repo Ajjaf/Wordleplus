@@ -1,53 +1,45 @@
-import React, { useState, useEffect } from "react";
-import { useTheme } from "../hooks/useTheme";
+import React, { useEffect, useState } from "react";
 
-export default function ThemeToggle({ className = "" }) {
-  const [isReady, setIsReady] = useState(false);
+const STORAGE_KEY = "pw.theme";
 
-  // Ensure component is ready before using hooks
-  useEffect(() => {
-    setIsReady(true);
-  }, []);
-
-  if (!isReady) {
+function useThemePreference() {
+  const [isDark, setIsDark] = useState(() => {
+    if (typeof window === "undefined") return true;
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored === "dark") return true;
+    if (stored === "light") return false;
     return (
-      <div className={`inline-flex items-center gap-1 ${className}`}>
-        <div className="h-8 w-8 rounded-md border border-slate-300 bg-white/70 animate-pulse"></div>
-        <div className="h-8 w-16 rounded-md border border-slate-300 bg-white/70 animate-pulse"></div>
-      </div>
+      window.matchMedia?.("(prefers-color-scheme: dark)")?.matches ?? true
     );
-  }
+  });
 
-  return <ThemeToggleContent className={className} />;
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.documentElement.classList.toggle("dark", isDark);
+    localStorage.setItem(STORAGE_KEY, isDark ? "dark" : "light");
+  }, [isDark]);
+
+  return [isDark, setIsDark];
 }
 
-function ThemeToggleContent({ className = "" }) {
-  const { theme, setTheme, toggle } = useTheme();
-  const next =
-    theme === "dark" ? "light" : theme === "light" ? "system" : "dark";
+export default function ThemeToggle({ className = "" }) {
+  const [isDark, setIsDark] = useThemePreference();
 
   return (
-    <div className={`inline-flex items-center gap-1 ${className}`}>
+    <div className={`inline-flex items-center gap-2 ${className}`}>
       <button
-        onClick={toggle}
+        onClick={() => setIsDark((prev) => !prev)}
         className="h-8 w-8 rounded-md border border-slate-300 dark:border-slate-700 bg-white/70 dark:bg-slate-900/60 hover:bg-white dark:hover:bg-slate-900 shadow-sm grid place-items-center transition"
-        title="Toggle theme"
-        aria-label="Toggle theme"
+        title={isDark ? "Switch to light theme" : "Switch to dark theme"}
+        aria-label={isDark ? "Switch to light theme" : "Switch to dark theme"}
       >
         <span className="text-slate-700 dark:text-slate-200">
-          {theme === "dark" ? "🌙" : "☀️"}
+          {isDark ? "🌙" : "☀️"}
         </span>
       </button>
-      <select
-        value={theme}
-        onChange={(e) => setTheme(e.target.value)}
-        className="h-8 rounded-md border border-slate-300 dark:border-slate-700 bg-white/70 dark:bg-slate-900/60 text-xs px-2 text-slate-700 dark:text-slate-200"
-        aria-label="Theme mode"
-      >
-        <option value="light">Light</option>
-        <option value="dark">Dark</option>
-        <option value="system">System</option>
-      </select>
+      <span className="text-xs text-slate-600 dark:text-slate-300 uppercase tracking-[0.3em]">
+        {isDark ? "Dark" : "Light"}
+      </span>
     </div>
   );
 }

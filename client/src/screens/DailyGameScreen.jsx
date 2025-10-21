@@ -20,6 +20,7 @@ export default function DailyGameScreen({
   showActiveError = false,
   notificationMessage = "",
   onNotificationDismiss = () => {},
+  guessFlipKey = 0,
 }) {
   const title = challenge?.title || "Daily Challenge";
   const subtitle = challenge?.subtitle || challenge?.date || "";
@@ -87,6 +88,7 @@ export default function DailyGameScreen({
                 secretWordState="empty"
                 errorShakeKey={shakeKey}
                 errorActiveRow={showActiveError}
+                guessFlipKey={guessFlipKey}
               />
             </div>
           </div>

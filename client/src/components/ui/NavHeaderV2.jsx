@@ -1,7 +1,6 @@
 import { motion } from "framer-motion";
 import { Moon, Sun, User, Copy, Check } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useTheme } from "../../hooks/useTheme.js";
 
 export default function NavHeaderV2({
   onHomeClick,
@@ -9,13 +8,24 @@ export default function NavHeaderV2({
   modeLabel = null,
   roomId = null,
 }) {
-  const { theme, toggle } = useTheme();
+  const [isDark, setIsDark] = useState(() => {
+    if (typeof window === "undefined") return true;
+    const stored = localStorage.getItem("pw.theme");
+    if (stored === "dark") return true;
+    if (stored === "light") return false;
+    return (
+      window.matchMedia?.("(prefers-color-scheme: dark)")?.matches ?? true
+    );
+  });
   const [copied, setCopied] = useState(false);
   const copyResetTimeout = useRef(null);
-  const prefersDark = () =>
-    typeof window !== "undefined" &&
-    window.matchMedia?.("(prefers-color-scheme: dark)")?.matches;
-  const isDark = theme === "dark" || (theme === "system" && prefersDark());
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const root = document.documentElement;
+    root.classList.toggle("dark", isDark);
+    localStorage.setItem("pw.theme", isDark ? "dark" : "light");
+  }, [isDark]);
 
   const handleCopyRoomId = async () => {
     if (!roomId) return;
@@ -104,7 +114,7 @@ export default function NavHeaderV2({
               </div>
             )}
             <motion.button
-              onClick={toggle}
+              onClick={() => setIsDark((prev) => !prev)}
               className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center border border-white/10 transition-all"
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.9 }}

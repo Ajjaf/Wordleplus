@@ -56,6 +56,7 @@ export default function App() {
   const [dailyLoading, setDailyLoading] = useState(false);
   const [dailyCorrectWord, setDailyCorrectWord] = useState(null);
   const [dailyShakeKey, setDailyShakeKey] = useState(0);
+  const [dailyGuessFlipKey, setDailyGuessFlipKey] = useState(0);
   const [dailyShowActiveError, setDailyShowActiveError] = useState(false);
   const [dailyNotificationMessage, setDailyNotificationMessage] = useState("");
   const maxDailyGuessesDefault = 6;
@@ -176,6 +177,7 @@ export default function App() {
     setDailyLoading(false);
     setDailyCorrectWord(null);
     setDailyShakeKey(0);
+    setDailyGuessFlipKey(0);
     setDailyShowActiveError(false);
     setDailyNotificationMessage("");
   }, []);
@@ -219,6 +221,7 @@ export default function App() {
           )
         );
       }
+      setDailyGuessFlipKey(0);
       if (typeof response?.currentGuess === "string") {
         setDailyCurrentGuess(response.currentGuess.toUpperCase());
       }
@@ -296,6 +299,7 @@ export default function App() {
 
       setDailyGuesses((prev) => [...prev, dailyCurrentGuess]);
       setDailyPatternResponses((prev) => [...prev, normalized]);
+      setDailyGuessFlipKey((prev) => prev + 1);
       setDailyCurrentGuess("");
       setDailyGameOver(
         solved || exhausted || Boolean(result?.complete || result?.gameOver)
@@ -795,6 +799,7 @@ export default function App() {
               showActiveError={dailyShowActiveError}
               notificationMessage={dailyNotificationMessage}
               onNotificationDismiss={() => setDailyNotificationMessage("")}
+              guessFlipKey={dailyGuessFlipKey}
             />
           </div>
           {/* Victory Modal for Daily Challenge */}
