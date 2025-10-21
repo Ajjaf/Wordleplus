@@ -263,7 +263,9 @@ export default function HomeScreenV2({
           </section>
 
           <footer className="text-center py-8 text-white/50 text-sm">
-            <p>© 2025 WordlePlus. Built with ❤️ for word game enthusiasts.</p>
+            <p>
+              © 2025 WordlePlus. Come for the Daily Word, Stay for multiplayer
+            </p>
           </footer>
         </div>
       </div>
