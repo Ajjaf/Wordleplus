@@ -1,7 +1,27 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { useTheme } from "../hooks/useTheme";
 
 export default function ThemeToggle({ className = "" }) {
+  const [isReady, setIsReady] = useState(false);
+
+  // Ensure component is ready before using hooks
+  useEffect(() => {
+    setIsReady(true);
+  }, []);
+
+  if (!isReady) {
+    return (
+      <div className={`inline-flex items-center gap-1 ${className}`}>
+        <div className="h-8 w-8 rounded-md border border-slate-300 bg-white/70 animate-pulse"></div>
+        <div className="h-8 w-16 rounded-md border border-slate-300 bg-white/70 animate-pulse"></div>
+      </div>
+    );
+  }
+
+  return <ThemeToggleContent className={className} />;
+}
+
+function ThemeToggleContent({ className = "" }) {
   const { theme, setTheme, toggle } = useTheme();
   const next =
     theme === "dark" ? "light" : theme === "light" ? "system" : "dark";

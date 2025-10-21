@@ -1,11 +1,10 @@
-import { useState } from 'react';
-import { motion } from 'framer-motion';
-import { Swords, Users, Shield, Trophy, Star, Calendar } from 'lucide-react';
-import GradientBackground from '../components/ui/GradientBackground';
-import NavHeaderV2 from '../components/ui/NavHeaderV2';
-import DailyChallengeHero from '../components/ui/DailyChallengeHero';
-import AnimatedGameCard from '../components/ui/AnimatedGameCard';
-import GlowButton from '../components/ui/GlowButton';
+import { useState } from "react";
+import { motion } from "framer-motion";
+import { Swords, Users, Shield, Trophy, Star, Calendar } from "lucide-react";
+import GradientBackground from "../components/ui/GradientBackground";
+import DailyChallengeHero from "../components/ui/DailyChallengeHero";
+import AnimatedGameCard from "../components/ui/AnimatedGameCard";
+import GlowButton from "../components/ui/GlowButton";
 
 export default function HomeScreenV2({
   name,
@@ -33,7 +32,7 @@ export default function HomeScreenV2({
     setMode(selectedMode);
     setCreating(true);
     try {
-      if (selectedMode === 'daily' && onPlayDaily) {
+      if (selectedMode === "daily" && onPlayDaily) {
         await onPlayDaily();
       } else {
         await onCreate();
@@ -58,28 +57,27 @@ export default function HomeScreenV2({
       title: "Duel",
       subtitle: "vs. Friend",
       description: "1v1 competitive",
-      mode: "duel"
+      mode: "duel",
     },
     {
       icon: <Users className="w-8 h-8 text-cyan-400" />,
       title: "Battle Royale",
       subtitle: "Multiplayer",
       description: "Last one standing",
-      mode: "battle"
+      mode: "battle",
     },
     {
       icon: <Shield className="w-8 h-8 text-purple-400" />,
       title: "Shared Duel",
       subtitle: "Co-op",
       description: "Share the challenge",
-      mode: "shared"
-    }
+      mode: "shared",
+    },
   ];
 
   if (!isNameSet) {
     return (
       <GradientBackground>
-        <NavHeaderV2 />
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 min-h-[calc(100vh-80px)] flex items-center justify-center">
           <motion.div
             className="w-full max-w-md"
@@ -94,17 +92,17 @@ export default function HomeScreenV2({
               <p className="text-white/70 text-center mb-6">
                 Enter your name to get started
               </p>
-              
+
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleNameSubmit()}
+                onKeyPress={(e) => e.key === "Enter" && handleNameSubmit()}
                 placeholder="Your display name"
                 className="w-full rounded-2xl border border-white/20 bg-white/5 px-4 py-4 min-h-[56px] text-white placeholder:text-white/40 outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500/50 transition-all mb-4"
                 autoFocus
               />
-              
-              <GlowButton 
+
+              <GlowButton
                 onClick={handleNameSubmit}
                 size="lg"
                 className="w-full"
@@ -121,13 +119,11 @@ export default function HomeScreenV2({
 
   return (
     <GradientBackground>
-      <NavHeaderV2 />
-      
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-12 pb-24 md:pb-12">
         <div className="max-w-7xl mx-auto space-y-8">
           <div className="hidden md:block">
-            <DailyChallengeHero 
-              onPlay={() => handlePlayMode('daily')}
+            <DailyChallengeHero
+              onPlay={() => handlePlayMode("daily")}
               stats={{
                 currentStreak: 0,
                 maxStreak: 0,
@@ -156,22 +152,27 @@ export default function HomeScreenV2({
                   onClick={() => handlePlayMode(gameMode.mode)}
                 >
                   <div className="mt-auto">
-                    <div className="text-xs text-white/50">{gameMode.description}</div>
+                    <div className="text-xs text-white/50">
+                      {gameMode.description}
+                    </div>
                   </div>
                 </AnimatedGameCard>
               ))}
             </div>
 
             <div className="md:hidden overflow-x-auto -mx-4 px-4 pb-4">
-              <div className="flex gap-4" style={{ 
-                scrollSnapType: 'x mandatory',
-                WebkitOverflowScrolling: 'touch'
-              }}>
+              <div
+                className="flex gap-4"
+                style={{
+                  scrollSnapType: "x mandatory",
+                  WebkitOverflowScrolling: "touch",
+                }}
+              >
                 {gameModes.map((gameMode, index) => (
                   <div
                     key={gameMode.mode}
                     className="flex-shrink-0 w-[280px]"
-                    style={{ scrollSnapAlign: 'start' }}
+                    style={{ scrollSnapAlign: "start" }}
                   >
                     <AnimatedGameCard
                       icon={gameMode.icon}
@@ -180,7 +181,9 @@ export default function HomeScreenV2({
                       onClick={() => handlePlayMode(gameMode.mode)}
                     >
                       <div className="mt-auto">
-                        <div className="text-xs text-white/50">{gameMode.description}</div>
+                        <div className="text-xs text-white/50">
+                          {gameMode.description}
+                        </div>
                       </div>
                     </AnimatedGameCard>
                   </div>
@@ -213,7 +216,7 @@ export default function HomeScreenV2({
                   disabled={!roomId || roomId.length !== 6 || joining}
                   className="sm:w-auto"
                 >
-                  {joining ? 'Joining...' : 'Join Room'}
+                  {joining ? "Joining..." : "Join Room"}
                 </GlowButton>
               </div>
               {message && (
@@ -266,16 +269,17 @@ export default function HomeScreenV2({
       </div>
 
       <motion.button
-        onClick={() => handlePlayMode('daily')}
+        onClick={() => handlePlayMode("daily")}
         className="md:hidden fixed bottom-6 right-6 w-16 h-16 rounded-full bg-gradient-to-br from-violet-500 to-cyan-500 shadow-2xl flex items-center justify-center z-50"
         style={{
-          boxShadow: '0 0 32px rgba(124, 58, 237, 0.5), 0 0 48px rgba(34, 211, 238, 0.5)',
+          boxShadow:
+            "0 0 32px rgba(124, 58, 237, 0.5), 0 0 48px rgba(34, 211, 238, 0.5)",
         }}
         whileHover={{ scale: 1.1 }}
         whileTap={{ scale: 0.9 }}
         initial={{ scale: 0 }}
         animate={{ scale: 1 }}
-        transition={{ delay: 0.6, type: 'spring' }}
+        transition={{ delay: 0.6, type: "spring" }}
         aria-label="Play Daily Challenge"
       >
         <Calendar className="w-7 h-7 text-white" />
@@ -291,7 +295,7 @@ function LeaderboardCard({ title, icon, children }) {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.6 }}
-      whileHover={{ borderColor: 'rgba(255, 255, 255, 0.3)' }}
+      whileHover={{ borderColor: "rgba(255, 255, 255, 0.3)" }}
     >
       <div className="flex items-center gap-3 mb-4">
         {icon}

@@ -8,7 +8,7 @@ async function main() {
   console.log("Starting seed...");
   
   // Read words from server/words.txt
-  const wordsPath = path.join(process.cwd(), "server", "words.txt");
+  const wordsPath = path.join(process.cwd(), "words.txt");
   
   if (!fs.existsSync(wordsPath)) {
     throw new Error(`Words file not found at ${wordsPath}`);
@@ -33,8 +33,7 @@ async function main() {
   for (let i = 0; i < words.length; i += chunk) {
     const part = words.slice(i, i + chunk);
     await prisma.wordLexicon.createMany({
-      data: part.map(w => ({ word: w, length: 5, active: true })),
-      skipDuplicates: true
+      data: part.map(w => ({ word: w, length: 5, active: true }))
     });
     console.log(`Seeded ${Math.min(i + chunk, words.length)}/${words.length} words`);
   }
