@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import Board from "../components/Board.jsx";
 import Keyboard from "../components/Keyboard.jsx";
@@ -15,13 +15,15 @@ export default function SharedDuelGameScreen({ room, me, currentGuess, onKeyPres
   const isHost = room?.hostId === me?.id;
   const [starting, setStarting] = useState(false);
   const [guessFlipKey, setGuessFlipKey] = useState(0);
+  const prevGuessCountRef = useRef(0);
 
   // bump flip key when a new shared guess is added so Board can animate
   useEffect(() => {
-    const len = (room.shared?.guesses || []).length;
-    // small debounce to let state settle
-    const t = setTimeout(() => setGuessFlipKey((k) => k + 1), 80);
-    return () => clearTimeout(t);
+    const count = room.shared?.guesses?.length ?? 0;
+    if (count > prevGuessCountRef.current) {
+      setGuessFlipKey((k) => k + 1);
+    }
+    prevGuessCountRef.current = count;
   }, [room.shared?.guesses?.length]);
   
   // Check if we have enough players to start
@@ -62,11 +64,8 @@ export default function SharedDuelGameScreen({ room, me, currentGuess, onKeyPres
   };
 
   return (
-    <GradientBackground>
-      <div
-        className="w-full flex flex-col relative overflow-hidden"
-        style={{ minHeight: "calc(100dvh - 64px)" }}
-      >
+    <GradientBackground fullHeight className="flex h-full">
+      <div className="flex flex-1 flex-col w-full min-h-0 relative overflow-hidden">
         <main className="flex-1 px-3 md:px-4 pt-4 pb-3 min-h-0">
           <div className="max-w-4xl mx-auto h-full flex flex-col gap-4">
             {/* Player cards */}

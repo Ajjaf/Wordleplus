@@ -35,7 +35,7 @@ export default function HomeScreenV2({
       if (selectedMode === "daily" && onPlayDaily) {
         await onPlayDaily();
       } else {
-        await onCreate();
+        await onCreate(selectedMode);
       }
     } finally {
       setCreating(false);
@@ -264,7 +264,8 @@ export default function HomeScreenV2({
 
           <footer className="text-center py-8 text-white/50 text-sm">
             <p>
-              © 2025 WordlePlus. Come for the Daily Word, Stay for multiplayer
+              © 2025 WordlePlus. Login for the Daily Word, Stay for the
+              Multiplayer.
             </p>
           </footer>
         </div>

@@ -1,9 +1,17 @@
 import { motion } from 'framer-motion';
 import { COLORS, GRADIENTS } from '../../design-system';
 
-export default function GradientBackground({ children, className = '' }) {
+export default function GradientBackground({
+  children,
+  className = '',
+  fullHeight = false,
+}) {
+  const heightClass = fullHeight
+    ? 'h-full min-h-full'
+    : 'min-h-screen';
+
   return (
-    <div className={`relative min-h-screen overflow-x-hidden ${className}`}>
+    <div className={`relative overflow-x-hidden ${heightClass} ${className}`}>
       <motion.div
         className="absolute inset-0 -z-10"
         style={{

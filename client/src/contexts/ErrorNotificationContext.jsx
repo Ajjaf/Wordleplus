@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useCallback } from "react";
 import GameNotification from "../components/GameNotification";
 
-const NOTIFICATION_DURATION = 1500; // 1.5 seconds default auto-dismiss
+const NOTIFICATION_DURATION = 1500; // default auto-dismiss in ms
 
 const ErrorNotificationContext = createContext(null);
 
@@ -14,13 +14,22 @@ export function ErrorNotificationProvider({ children }) {
    * @param {string} severity - One of: 'error', 'warning', 'info', 'success'
    * @returns {string} The notification ID
    */
-  const showNotification = useCallback((message, severity = "info") => {
+  const showNotification = useCallback((message, severity = "info", options = {}) => {
     if (!message) return null;
-    
+    const { duration } = options;
     const id = crypto.randomUUID();
-    
-    setNotifications(prev => [...prev, { id, message, severity }]);
-    
+    setNotifications((prev) => [
+      ...prev,
+      {
+        id,
+        message,
+        severity,
+        duration:
+          typeof duration === "number" && duration > 0
+            ? duration
+            : NOTIFICATION_DURATION,
+      },
+    ]);
     return id;
   }, []);
 
@@ -54,7 +63,7 @@ export function ErrorNotificationProvider({ children }) {
             key={notification.id}
             message={notification.message}
             severity={notification.severity}
-            duration={NOTIFICATION_DURATION}
+            duration={notification.duration ?? NOTIFICATION_DURATION}
             onDismiss={() => dismissNotification(notification.id)}
           />
         ))}

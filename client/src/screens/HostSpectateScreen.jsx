@@ -66,8 +66,8 @@ function HostSpectateScreen({ room, players = [], onWordSubmit }) {
 
   // ---- UI ----
   return (
-    <GradientBackground>
-      <div className="w-full h-full flex flex-col">
+    <GradientBackground fullHeight className="flex h-full">
+      <div className="flex flex-1 flex-col w-full min-h-0 overflow-hidden relative">
         {/* Header */}
         <div className="flex items-center justify-between gap-3 px-3 pt-3 pb-2">
           <motion.div

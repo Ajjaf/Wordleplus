@@ -426,10 +426,9 @@ function DuelGameScreen({
     ? "set"
     : "empty";
   return (
-    <GradientBackground>
+    <GradientBackground fullHeight className="flex h-full">
       <div
-        className="w-full flex flex-col relative overflow-hidden"
-        style={{ minHeight: "calc(100dvh - 64px)" }}
+        className="flex flex-1 flex-col w-full min-h-0 relative overflow-hidden"
         {...swipeGestures}
       >
         <ParticleEffect
@@ -712,7 +711,7 @@ function DuelGameScreen({
         </main>
 
         {/* Footer */}
-        <footer className="w-full px-2 sm:px-4 py-2">
+        <footer className="w-full px-2 sm:px-4 py-2 flex-shrink-0">
           <div className="mx-auto w-full max-w-5xl">
             {isGameEnded ? (
               <div className="text-center">
@@ -747,8 +746,8 @@ function DuelGameScreen({
         </footer>
 
         {/* Keyboard - Now in its own grid row */}
-        {(canSetSecret || canGuess) && (
-          <div className="w-full px-2 sm:px-4 pb-2">
+          {(canSetSecret || canGuess) && (
+          <div className="w-full px-2 sm:px-4 pb-2 flex-shrink-0">
             <div className="mx-auto w-full max-w-5xl">
               <Keyboard onKeyPress={handleKeyPress} letterStates={letterStates} />
             </div>

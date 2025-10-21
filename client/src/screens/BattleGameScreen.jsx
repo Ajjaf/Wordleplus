@@ -145,11 +145,8 @@ function BattleGameScreen({
   };
 
   return (
-    <GradientBackground>
-      <div
-        className="w-full flex flex-col relative overflow-hidden"
-        style={{ minHeight: "calc(100dvh - 64px)" }}
-      >
+    <GradientBackground fullHeight className="flex h-full">
+      <div className="flex flex-1 flex-col w-full min-h-0 relative overflow-hidden">
         {/* Particle Effects */}
         <ParticleEffect
           trigger={showCorrectParticles}

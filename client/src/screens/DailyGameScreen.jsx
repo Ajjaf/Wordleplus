@@ -26,11 +26,8 @@ export default function DailyGameScreen({
   const maxGuesses = challenge?.maxGuesses || 6;
 
   return (
-    <GradientBackground>
-      <div
-        className="w-full flex flex-col relative overflow-hidden"
-        style={{ minHeight: "calc(100dvh - 64px)" }}
-      >
+    <GradientBackground fullHeight className="flex h-full">
+      <div className="flex flex-1 flex-col w-full min-h-0 relative overflow-hidden">
         {/* Header */}
         <div className="px-3 pt-4 pb-3">
           <div className="max-w-7xl mx-auto">
