@@ -18,11 +18,16 @@ model User {
   displayName   String?
   avatarUrl     String?
   // Optional external identities (fill later)
-  authProvider  String?   // 'supabase' | 'clerk' | 'authjs' | 'dev'
+  authProvider  String?   // 'replit' | 'supabase' | 'clerk' | 'authjs' | 'dev'
   authExternalId String?  @unique
 
   // Anonymous support (mobile first-run)
   deviceId      String? @unique
+  isAnonymous   Boolean  @default(true)
+  
+  // Account linking/migration support
+  mergedIntoUserId String? // If this account was merged into another, store the target user ID
+  mergedAt         DateTime? // When the merge happened
 
   // Game stats (denorm hints; keep truth in result tables)
   totalWins     Int      @default(0)
@@ -32,6 +37,7 @@ model User {
 
   results       DailyResult[]
   events        Event[]
+  sessions      Session[]
 }
 
 model WordLexicon {
@@ -100,4 +106,26 @@ model Event {
 
   @@index([type, ts])
   @@index([roomId, ts])
+}
+
+/// Session tracking for both anonymous and authenticated users
+model Session {
+  id          String   @id @default(cuid())
+  userId      String
+  deviceId    String?  // Browser/device identifier
+  token       String   @unique // Session token for client
+  isAnonymous Boolean  @default(true)
+  expiresAt   DateTime
+  lastSeenAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+  
+  // Connection metadata
+  userAgent   String?
+  ipAddress   String?
+  
+  user        User     @relation(fields: [userId], references: [id])
+  
+  @@index([userId, expiresAt])
+  @@index([token, expiresAt])
+  @@index([deviceId])
 }
