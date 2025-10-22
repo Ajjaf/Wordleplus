@@ -89,13 +89,18 @@ export async function mergeAnonymousUserIntoExisting(anonymousUserId, existingAu
               } else if (!result.won && existingResult.won) {
                 transferredWins--;
               }
+              // Note: if both won or both lost, no change to wins
             } else if (result.completed && !existingResult.completed) {
-              // New result is completed, old wasn't
+              // New result is completed, old wasn't - add to stats
               transferredGames++;
               if (result.won) transferredWins++;
+            } else if (!result.completed && existingResult.completed) {
+              // Old was completed but new isn't - subtract from stats
+              // This happens when anonymous user has more attempts but didn't finish
+              transferredGames--;
+              if (existingResult.won) transferredWins--;
             }
-            // Note: if old was completed but new isn't, we don't subtract
-            // because that would mean going backwards
+            // Note: if neither is completed, no change to stats
           }
           // Delete the anonymous user's result
           await tx.dailyResult.delete({
