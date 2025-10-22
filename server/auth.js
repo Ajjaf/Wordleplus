@@ -1,11 +1,11 @@
 import * as client from "openid-client";
-import { Strategy, VerifyFunction } from "openid-client/passport";
+import { Strategy } from "openid-client/passport";
 import passport from "passport";
 import session from "express-session";
 import connectPg from "connect-pg-simple";
 import memoize from "memoizee";
 import { PrismaClient } from "@prisma/client";
-import { mergeAnonymousUser } from "./mergeService.js";
+import { mergeAnonymousUser, mergeAnonymousUserIntoExisting } from "./mergeService.js";
 
 const prisma = new PrismaClient();
 
@@ -62,7 +62,20 @@ async function upsertAuthenticatedUser(claims, anonymousUserId) {
   });
 
   if (user) {
-    // User exists - just update their info
+    // User exists - check if they have new anonymous progress to merge
+    if (anonymousUserId && anonymousUserId !== user.id) {
+      const anonUser = await prisma.user.findUnique({
+        where: { id: anonymousUserId }
+      });
+      
+      if (anonUser && anonUser.isAnonymous) {
+        // Merge anonymous progress into existing authenticated account
+        console.log(`[AUTH] Merging anonymous user ${anonymousUserId} into existing account ${user.id}`);
+        await mergeAnonymousUserIntoExisting(anonymousUserId, user.id);
+      }
+    }
+    
+    // Update account info
     return await prisma.user.update({
       where: { id: user.id },
       data: {
@@ -128,6 +141,11 @@ export async function setupAuth(app) {
     // Store the database user ID in the session
     user.dbUserId = dbUser.id;
     user.dbUser = dbUser;
+    
+    // Clear anonymous session after successful merge
+    if (verified.req?.session) {
+      delete verified.req.session.anonymousUserId;
+    }
     
     verified(null, user);
   };

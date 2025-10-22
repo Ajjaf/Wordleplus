@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { User, Copy, Check } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import ProfileModal from "../ProfileModal";
 
 export default function NavHeaderV2({
   onHomeClick,
@@ -9,6 +10,7 @@ export default function NavHeaderV2({
   roomId = null,
 }) {
   const [copied, setCopied] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
   const copyResetTimeout = useRef(null);
 
   useEffect(() => {
@@ -107,6 +109,7 @@ export default function NavHeaderV2({
             )}
 
             <motion.button
+              onClick={() => setShowProfile(true)}
               className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-gradient-to-br from-violet-500 to-cyan-500 flex items-center justify-center border border-white/20"
               whileHover={{ scale: 1.1 }}
               whileTap={{ scale: 0.9 }}
@@ -117,6 +120,9 @@ export default function NavHeaderV2({
           </div>
         </div>
       </div>
+
+      {/* Profile Modal */}
+      <ProfileModal open={showProfile} onOpenChange={setShowProfile} />
     </motion.nav>
   );
 }
