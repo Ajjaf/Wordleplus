@@ -5,7 +5,10 @@ import session from "express-session";
 import connectPg from "connect-pg-simple";
 import memoize from "memoizee";
 import { PrismaClient } from "@prisma/client";
-import { mergeAnonymousUser, mergeAnonymousUserIntoExisting } from "./mergeService.js";
+import {
+  mergeAnonymousUser,
+  mergeAnonymousUserIntoExisting,
+} from "./mergeService.js";
 
 const prisma = new PrismaClient();
 
@@ -17,7 +20,8 @@ const getOidcConfig = memoize(
   async () => {
     return await client.discovery(
       new URL(process.env.ISSUER_URL ?? "https://replit.com/oidc"),
-      process.env.REPL_ID
+      process.env.REPL_ID,
+      { client_secret: process.env.GOOGLE_CLIENT_SECRET }
     );
   },
   { maxAge: 3600 * 1000 }
@@ -32,7 +36,7 @@ export function getSession() {
     ttl: sessionTtl,
     tableName: "user_sessions", // Different from our Session model to avoid conflicts
   });
-  
+
   return session({
     secret: process.env.SESSION_SECRET || "dev-secret-change-in-production",
     store: sessionStore,
@@ -55,51 +59,57 @@ function updateUserSession(user, tokens) {
 
 async function upsertAuthenticatedUser(claims, anonymousUserId) {
   const authExternalId = claims["sub"];
-  
+
   // Check if this Replit user already exists
   let user = await prisma.user.findUnique({
-    where: { authExternalId }
+    where: { authExternalId },
   });
 
   if (user) {
     // User exists - check if they have new anonymous progress to merge
     if (anonymousUserId && anonymousUserId !== user.id) {
       const anonUser = await prisma.user.findUnique({
-        where: { id: anonymousUserId }
+        where: { id: anonymousUserId },
       });
-      
+
       if (anonUser && anonUser.isAnonymous) {
         // Merge anonymous progress into existing authenticated account
-        console.log(`[AUTH] Merging anonymous user ${anonymousUserId} into existing account ${user.id}`);
+        console.log(
+          `[AUTH] Merging anonymous user ${anonymousUserId} into existing account ${user.id}`
+        );
         await mergeAnonymousUserIntoExisting(anonymousUserId, user.id);
       }
     }
-    
+
     // Update account info
     return await prisma.user.update({
       where: { id: user.id },
       data: {
         email: claims["email"],
-        displayName: `${claims["first_name"] || ""} ${claims["last_name"] || ""}`.trim() || null,
+        displayName:
+          `${claims["first_name"] || ""} ${claims["last_name"] || ""}`.trim() ||
+          null,
         avatarUrl: claims["profile_image_url"],
         isAnonymous: false,
-      }
+      },
     });
   }
 
   // New authenticated user - check if we need to merge anonymous account
   if (anonymousUserId) {
     const anonUser = await prisma.user.findUnique({
-      where: { id: anonymousUserId }
+      where: { id: anonymousUserId },
     });
-    
+
     if (anonUser && anonUser.isAnonymous) {
       // Merge the anonymous user into the new authenticated user
       user = await mergeAnonymousUser(anonymousUserId, {
         authProvider: "replit",
         authExternalId,
         email: claims["email"],
-        displayName: `${claims["first_name"] || ""} ${claims["last_name"] || ""}`.trim() || null,
+        displayName:
+          `${claims["first_name"] || ""} ${claims["last_name"] || ""}`.trim() ||
+          null,
         avatarUrl: claims["profile_image_url"],
         isAnonymous: false,
       });
@@ -113,10 +123,12 @@ async function upsertAuthenticatedUser(claims, anonymousUserId) {
       authProvider: "replit",
       authExternalId,
       email: claims["email"],
-      displayName: `${claims["first_name"] || ""} ${claims["last_name"] || ""}`.trim() || null,
+      displayName:
+        `${claims["first_name"] || ""} ${claims["last_name"] || ""}`.trim() ||
+        null,
       avatarUrl: claims["profile_image_url"],
       isAnonymous: false,
-    }
+    },
   });
 
   return user;
@@ -130,38 +142,46 @@ export async function setupAuth(app) {
 
   const config = await getOidcConfig();
 
-  const verify = async (tokens, verified) => {
-    const user = {};
-    updateUserSession(user, tokens);
-    
-    // Get anonymous userId from session if exists
-    const anonymousUserId = verified.req?.session?.anonymousUserId;
-    const dbUser = await upsertAuthenticatedUser(tokens.claims(), anonymousUserId);
-    
-    // Store the database user ID in the session
-    user.dbUserId = dbUser.id;
-    user.dbUser = dbUser;
-    
-    // Clear anonymous session after successful merge
-    if (verified.req?.session) {
-      delete verified.req.session.anonymousUserId;
+  const verify = async (req, tokenSet, verified) => {
+    try {
+      const user = {};
+      updateUserSession(user, tokenSet);
+
+      const anonymousUserId = req.session?.anonymousUserId;
+      const dbUser = await upsertAuthenticatedUser(
+        tokenSet.claims(),
+        anonymousUserId
+      );
+
+      user.dbUserId = dbUser.id;
+      user.dbUser = dbUser;
+
+      if (req.session) {
+        delete req.session.anonymousUserId;
+      }
+
+      verified(null, user);
+    } catch (error) {
+      verified(error);
     }
-    
-    verified(null, user);
   };
 
   // Setup passport strategies for each domain
   const domains = process.env.REPLIT_DOMAINS?.split(",") || ["localhost"];
   for (const domain of domains) {
+    const hostOnly = domain.split(":")[0]; // <- ensures name matches req.hostname
+
     const strategy = new Strategy(
       {
-        name: `replitauth:${domain}`,
+        name: `replitauth:${hostOnly}`,
         config,
-        scope: "openid email profile offline_access",
-        callbackURL: `https://${domain}/api/callback`,
+        scope: "openid email profile",
+        callbackURL: `${
+          hostOnly === "localhost" ? "http" : "https"
+        }://${domain}/api/callback`,
         passReqToCallback: true,
       },
-      verify,
+      verify
     );
     passport.use(strategy);
   }
@@ -170,16 +190,19 @@ export async function setupAuth(app) {
   passport.deserializeUser((user, cb) => cb(null, user));
 
   // Login route
+  // Login route
   app.get("/api/login", (req, res, next) => {
-    passport.authenticate(`replitauth:${req.hostname}`, {
+    const hostOnly = (req.headers.host || "").split(":")[0]; // drop port
+    passport.authenticate(`replitauth:${hostOnly}`, {
       prompt: "login consent",
-      scope: ["openid", "email", "profile", "offline_access"],
+      scope: ["openid", "email", "profile"],
     })(req, res, next);
   });
 
   // OAuth callback
   app.get("/api/callback", (req, res, next) => {
-    passport.authenticate(`replitauth:${req.hostname}`, {
+    const hostOnly = (req.headers.host || "").split(":")[0]; // drop port
+    passport.authenticate(`replitauth:${hostOnly}`, {
       successReturnToOrRedirect: "/",
       failureRedirect: "/",
     })(req, res, next);
@@ -188,12 +211,20 @@ export async function setupAuth(app) {
   // Logout route
   app.get("/api/logout", (req, res) => {
     req.logout(() => {
-      res.redirect(
-        client.buildEndSessionUrl(config, {
+      const redirectUri = `${req.protocol}://${
+        req.get("host") || req.hostname
+      }`;
+      const endSession = config.metadata?.end_session_endpoint;
+
+      if (endSession) {
+        const url = client.buildEndSessionUrl(config, {
           client_id: process.env.REPL_ID,
-          post_logout_redirect_uri: `${req.protocol}://${req.hostname}`,
-        }).href
-      );
+          post_logout_redirect_uri: redirectUri,
+        });
+        return res.redirect(url.href);
+      }
+
+      return res.redirect(redirectUri);
     });
   });
 }
@@ -233,18 +264,18 @@ export function getUserIdFromRequest(req) {
   if (req.user?.dbUserId) {
     return req.user.dbUserId;
   }
-  
+
   // Check for anonymous session
   if (req.session?.anonymousUserId) {
     return req.session.anonymousUserId;
   }
-  
+
   // Fallback to header (for iframe environments)
-  const headerUserId = req.headers['x-user-id'];
+  const headerUserId = req.headers["x-user-id"];
   if (headerUserId) {
     return headerUserId;
   }
-  
+
   // Fallback to cookie
   return req.cookies?.dailyUserId || null;
 }
