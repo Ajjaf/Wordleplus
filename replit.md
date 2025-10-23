@@ -1,180 +1,122 @@
 # WordlePlus - Multiplayer Wordle Game
 
 ## Overview
-WordlePlus is a multiplayer Wordle clone featuring competitive game modes including Duel (1v1), Battle Royale, and Shared Duel. Players can create rooms, share codes, and compete against friends in real-time word-guessing challenges.
+WordlePlus is a multiplayer Wordle clone offering competitive game modes like Duel (1v1), Battle Royale, and Shared Duel, alongside a single-player Daily Challenge. It enables players to create rooms, share codes, and engage in real-time word-guessing competitions with friends. The project aims to provide a modern, engaging, and highly responsive gaming experience with a focus on real-time interaction and persistent user progress.
 
-## Project Architecture
+## User Preferences
+I prefer simple language and clear explanations. I want an iterative development process, where I can review changes frequently. Please ask me before making any major architectural changes or significant modifications to existing features. I prefer that you focus on delivering production-ready code, paying close attention to mobile responsiveness and accessibility standards.
 
-### Tech Stack
-- **Frontend**: React 18 + Vite 5
-- **Backend**: Express + Socket.IO (WebSockets)
-- **Styling**: TailwindCSS with Radix UI components
-- **Language**: JavaScript (ES Modules)
+## System Architecture
+WordlePlus is built with a modern web stack, featuring a React 18 + Vite 5 frontend, an Express + Socket.IO backend, and TailwindCSS with Radix UI components for styling. The application is structured into `client/` (React frontend) and `server/` (Express + Socket.IO backend) directories.
 
-### Structure
-```
-├── client/          # React frontend
-│   ├── src/
-│   │   ├── screens/      # Game screens (Home, Lobby, Battle, Duel)
-│   │   ├── components/   # UI components
-│   │   ├── hooks/        # Custom React hooks
-│   │   ├── modes/        # Game mode logic (battle, duel, shared, daily)
-│   │   └── config.js     # Client configuration
-│   └── vite.config.js
-│
-└── server/          # Express + Socket.IO backend
-    ├── modes/       # Server-side game mode handlers
-    ├── game.js      # Core game logic (scoring, validation)
-    ├── index.js     # Main server file
-    ├── words.txt    # Word list (12,972 5-letter words)
-    └── wordlist.json
-```
+**UI/UX Decisions:**
+The application features a modern design system with deep navy gradients and violet-cyan accent gradients. It uses the Manrope font for clean typography. UI components are highly animated using Framer Motion, including animated gradient backgrounds, magnetic glow buttons, bento-style game cards with glassmorphism, and a responsive navigation header. The design prioritizes mobile-first principles, ensuring all touch targets are ≥48px, with proper spacing and responsive grid layouts, including specific optimizations for carousels and floating buttons on mobile.
 
-## Development Setup
+**Technical Implementations & Feature Specifications:**
+- **Real-time Communication:** Utilizes Socket.IO for real-time multiplayer functionality, handling game state, player interactions, and room management.
+- **Game Modes:** Implements Duel (1v1), Battle Royale (multiplayer), Shared Duel, and a Daily Challenge.
+- **Daily Challenge:** Features deterministic word generation, session-based (now localStorage-based) progress tracking, and persistence of guesses and results in a PostgreSQL database.
+- **Error Handling:** A centralized `ErrorNotificationProvider` context manages application-wide error, warning, info, and success notifications with severity-based styling and smooth animations. Socket.IO connection status is integrated with this system.
+- **User Persistence:** Anonymous users are tracked via a UUID stored in localStorage on the frontend, sent to the backend via an `X-User-Id` header, and linked to a `User` record in the database.
+- **Deployment Strategy:** Frontend deployed on Vercel, backend on Render, with Vercel rewrites forwarding API and WebSocket traffic to the Render backend.
 
-### Ports
-- **Frontend (Development)**: Port 5000 (Vite dev server)
-- **Backend (Development)**: Port 8080 (Express + Socket.IO)
+**System Design Choices:**
+- **Modular Structure:** Code is organized into logical modules for game screens, components, hooks, and game mode logic on the client, and server-side mode handlers, core game logic, and database interactions on the server.
+- **Database:** PostgreSQL with Prisma ORM for managing users, word lexicons, daily puzzles, daily results, and game events.
+- **Word Validation:** Uses a curated list of 12,972 5-letter words.
+- **Reconnection Logic:** Server-side rooms store state and support player reconnection within a 30-minute window.
 
-### Running in Replit
-The project has TWO workflows configured:
-1. **Frontend**: Runs Vite dev server on port 5000 with proxy to backend
-2. **Backend**: Runs Express server on port 8080 (required for Daily Challenge database integration)
-
-### Key Configurations
-- Vite is configured to bind to `0.0.0.0:5000` to work with Replit's proxy
-- Backend proxy is configured in `vite.config.js` to forward `/api`, `/socket.io`, and `/health` to `localhost:8080`
-- All game modes (Duel, Battle Royale, Shared, Daily Challenge) use the local backend for development
-
-## Game Modes
-
-1. **Duel (1v1)**: Each player sets a secret word for the other; 6 guesses; winner by solve/steps
-2. **Battle Royale**: Host sets one word; 2+ players guess; first correct wins
-3. **Shared Duel**: Players share a common word challenge
-4. **Daily Challenge**: Single-player daily puzzle with deterministic word generation; same word for all players each day; progress tracked via session cookies; 6 guesses max; victory modal on completion
+## External Dependencies
+- **React 18 + Vite 5:** Frontend framework and build tool.
+- **Express:** Backend web framework.
+- **Socket.IO:** WebSocket library for real-time communication (frontend and backend).
+- **TailwindCSS:** Utility-first CSS framework.
+- **Radix UI:** Unstyled UI components for accessibility and customization.
+- **Framer Motion:** Animation library for React.
+- **PostgreSQL (Neon):** Primary database for persistent storage.
+- **Prisma ORM:** Database toolkit for Node.js and TypeScript.
+- **Cookie-parser:** Middleware for parsing cookies (used before switching to localStorage for user tracking due to Replit iframe limitations).
+- **Luxon:** Date and time library.
+- **Vercel:** Frontend hosting platform.
+- **Render:** Backend hosting platform.
 
 ## Recent Changes
 
-### October 20, 2025 - Daily Challenge Notification System
-- **Unified Feedback System**: Daily Challenge now uses same feedback approach as Duel and Battle modes
-  - Created **GameNotification** component for transient tooltip-style notifications
-  - Notifications appear near top of game grid and auto-dismiss after 1.5 seconds
-  - Absolutely positioned to prevent layout shifts
-  - Shake animation triggers on invalid submissions (matching Duel/Battle behavior)
+### October 22, 2025 - Authentication System Validation & Critical Bug Fix
+- **Validated Complete Authentication Flow**:
+  - Anonymous user tracking via localStorage with UUID generation
+  - Session-based authentication using Passport.js with OpenID Connect (OIDC)
+  - PostgreSQL session storage with `express-session` and `connect-pg-simple`
+  - Seamless merge of anonymous progress into authenticated accounts
+  - User stats properly displayed in ProfileModal after authentication
   
-- **Removed Layout-Affecting Status Text**: 
-  - Eliminated static status messages from header that caused layout jumps
-  - All feedback now delivered via transient notifications
-  - Invalid word errors: "Not in word list", "Need 5 letters", "Already tried that word"
-  - Loss notification: "The word was: [WORD]" (auto-dismisses)
+- **Critical Bug Fix in mergeAnonymousUserIntoExisting**:
+  - **Issue**: When merging accounts with duplicate daily results, incomplete anonymous results could replace completed authenticated results without adjusting stats, causing inflated totalGames/totalWins counts
+  - **Fix**: Added proper stat adjustment logic (lines 100-105 in `server/mergeService.js`) to decrement transferredGames and transferredWins when a completed result is replaced with an incomplete one
+  - **Impact**: Stats now remain accurate in all merge scenarios including win→incomplete and loss→incomplete transitions
   
-- **Improved UX Consistency**:
-  - Daily Challenge feedback matches multiplayer modes
-  - No permanent text affecting board position
-  - Clean, predictable layout throughout game
-
-### October 20, 2025 - Render Deployment & User Persistence Fixes
-- **Backend Deployment Fix**: Updated `server/package.json` for Render compatibility
-  - Added missing dependencies: `@prisma/client`, `cookie-parser`, `luxon`, `prisma`
-  - Added `postinstall` script to auto-generate Prisma client on deployment
-  - Schema path configured with fallback: `prisma generate --schema=../prisma/schema.prisma || prisma generate`
-  - Fixed ERR_MODULE_NOT_FOUND error for cookie-parser on Render
+- **Edge Case Coverage Validated**:
+  - Empty anonymous account merges
+  - Multiple conflicting daily results (same puzzles on both accounts)
+  - All win status transitions (win→win, win→loss, loss→win, win→incomplete, etc.)
+  - Transaction atomicity for rollback protection
+  - Proper streak consolidation using Math.max
+  - Event migration via updateMany
+  - mergedAt and mergedIntoUserId fields prevent re-merging
   
-- **User Persistence Fix**: Switched from cookie-based to localStorage-based user tracking
-  - Cookies don't work in Replit iframe due to sameSite restrictions
-  - Frontend generates UUID on first visit → stores in localStorage
-  - Backend receives UUID via `X-User-Id` header → creates User record with that UUID
-  - Backend now always ensures User exists in database before saving guesses
-  - Fixed foreign key constraint violation (DailyResult_userId_fkey)
-  - Fixed "each request creates new user" bug - guesses now accumulate correctly
+- **Session Management Verified**:
+  - getUserIdFromRequest properly prioritizes: authenticated user → session → headers → cookies
+  - AuthContext exposes isAnonymous and isAuthenticated flags correctly
+  - Session model with token, deviceId, lastSeenAt, and expiration tracking
+
+### October 20, 2025 - Complete Game Screens UI Redesign
+- **All 5 Game Screens Modernized**: Applied comprehensive design system to DuelGameScreen, BattleGameScreen, HostSpectateScreen, SharedDuelGameScreen, and DailyGameScreen
+- **Design System Implementation**:
+  - GradientBackground applied to all game screens for consistent deep navy aesthetic
+  - White text with proper opacity levels (white, white/60, white/70, white/80)
+  - Glassmorphism badges and cards (bg-white/10 backdrop-blur-sm border-white/20)
+  - GlowButton components for all primary actions (Start, Rematch, Play Again)
+  - Framer Motion animations with 200-300ms transitions
   
-- **Frontend Deployment**: Vercel configuration
-  - Frontend hosted on Vercel (client folder only)
-  - Added `vercel.json` with rewrites to forward `/api/*`, `/socket.io/*`, and `/health` to Render backend
-  - Backend remains on Render with DATABASE_URL configured
-
-- **Error Display**: Updated Daily Challenge status messages to show errors in red (matching other modes)
-
-### October 19, 2025 (Evening) - Daily Challenge UI Updates & Bug Fixes
-- **UI Overhaul**: Updated Daily Challenge screen to match Battle player view layout
-  - Removed "Submit Guess" button for cleaner interface
-  - Larger, centered board matching Battle mode design (maxTile=112, minTile=56)
-  - Improved header styling with bold title and status messages
-  - Persistent keyboard footer for better UX
-  - **Correct word display**: When player loses, the correct word is displayed above the board
-- **Gameplay Consistency**: Core gameplay matches other modes
-  - Press ENTER key to submit guess (no auto-submit)
-  - Board provides feedback for invalid guesses (wrong length, invalid word)
-  - Backend returns correct word when game ends
-- **Critical Bug Fix**: Fixed "Invalid response from server" error
-  - Updated Vite proxy configuration to point to local backend (localhost:8080)
-  - All API endpoints now correctly routed through local Express server
-  - Database integration now fully functional in development
-
-### October 19, 2025 (Evening) - Daily Challenge Database Integration Completed
-- **Database Setup**: Set up Neon PostgreSQL database with Prisma ORM
-  - Created complete database schema with models:
-    - **User**: Anonymous users tracked by cookie-based IDs with optional upgrade to registered accounts
-    - **WordLexicon**: 12,972 5-letter words seeded from words.txt
-    - **DailyPuzzle**: Daily challenge puzzles with deterministic word generation
-    - **DailyResult**: Stores guesses, patterns, completion status, and win data per user per puzzle
-    - **Event**: Game events and leaderboard tracking for all modes
-  - Successfully ran database migration and seed (12,972 words loaded)
-  - Added database management scripts to package.json (db:push, db:seed, db:studio)
-  - Configured DATABASE_URL via Replit Secrets
-
-- **Daily Challenge Database Integration**:
-  - Created database helper module (server/daily-db.js) for user/puzzle/result operations
-  - Updated Daily Challenge API endpoints to use persistent storage:
-    - GET /api/daily: Loads puzzle from DailyPuzzle table, retrieves user progress from DailyResult
-    - POST /api/daily/guess: Validates and stores guesses with patterns in database
-    - GET /api/daily/stats: Returns user statistics including win rate, current streak, and max streak
-  - Anonymous user system: Auto-creates users on first visit, tracks via cookie (1-year expiration)
-  - Deterministic puzzle generation: Same word for all players each day, stored in database
-  - Progress persistence: All guesses, patterns, and completion status stored in DailyResult table
-  - Statistics tracking: Win streaks, completion rates, recent game history
-  - Re-enabled local Backend workflow on port 8080 for testing daily mode with database
-
-- **Learning Documentation Created**:
-  - Created comprehensive documentation in `docs/` folder:
-    - `DATABASE_INTEGRATION_GUIDE.md` - Complete overview of database integration
-    - `PRISMA_BASICS.md` - Prisma ORM tutorial with real examples
-    - `DATABASE_SCHEMA_EXPLAINED.md` - Detailed explanation of all tables
-    - `API_ENDPOINTS_GUIDE.md` - Step-by-step API endpoint walkthrough
-    - `TESTING_AND_DEBUGGING.md` - Practical testing and debugging guide
-    - `README.md` - Documentation index with learning paths
-
-### October 19, 2025 (Afternoon) - Daily Challenge Mode Completed
-- Implemented complete Daily Challenge mode functionality:
-  - Backend API endpoints: GET /api/daily and POST /api/daily/guess
-  - Deterministic daily word generation (same word for all players per day)
-  - Session-based progress tracking using cookie-parser
-  - Letter states computation for keyboard hints
-  - Victory modal with custom daily mode celebration
-  - Full integration with existing UI components
-- Added cookie-parser dependency for session management
-- Re-enabled local Backend workflow for testing daily mode (ports 5000 frontend, 8080 backend)
-- Updated Vite proxy to use localhost:8080 for development
-
-### October 19, 2025 (Morning)
-- Removed local Backend workflow (backend hosted externally)
-- Updated Vite proxy configuration to connect to hosted backend at https://wordleplus-1-8f2s.onrender.com
-- Configured frontend-only setup in Replit
-
-### October 18, 2025
-- Initial import from GitHub
-- Removed deprecated npm packages (`badge`, `button`, `card`) that contained security vulnerabilities
-- Configured Vite for Replit environment (0.0.0.0:5000, proxy setup)
-- Set up workflows for both frontend and backend
-
-## Deployment
-- **Target**: VM (required for WebSocket support and stateful game rooms)
-- **Build**: Installs dependencies and builds frontend
-- **Run**: Starts Express server in production mode on port 5000
-- The server handles both API/WebSocket requests and serves the frontend SPA
-
-## Notes
-- The application uses Socket.IO for real-time multiplayer functionality
-- Rooms are stored in-memory and support reconnection
-- Players can rejoin games if disconnected within 30 minutes
-- Word validation uses a curated list of 12,972 5-letter words
+- **DuelGameScreen Enhancements**:
+  - Modern room code display with glassmorphism, Copy icon, and check animation
+  - Gradient timer bar (emerald→cyan normal, amber warning, red critical)
+  - Modern status badges with glassmorphism
+  - GlowButton for rematch action
+  - Modern generate button with glassmorphism and hover effects
+  - All particle effects and confetti preserved
+  
+- **BattleGameScreen Enhancements**:
+  - Animated header with modern title
+  - Glassmorphism status badges (emerald active, blue winner, white waiting)
+  - Animated player progress cards in sidebar with staggered entrance
+  - All particle effects and victory animations preserved
+  - Mobile MobileBattleLayout component maintained
+  
+- **HostSpectateScreen Enhancements**:
+  - Modern host badge with Crown icon and glassmorphism
+  - GlowButton for leaderboard access
+  - Modern room code display with Copy icon and online player count
+  - Beautiful leaderboard modal with glassmorphism, Trophy icon, AnimatePresence transitions
+  - Animated spectate cards grid with staggered entrance
+  - Winner announcement badge with glassmorphism
+  
+- **SharedDuelGameScreen Enhancements**:
+  - Animated player cards with turn highlight indicators
+  - GlowButton for "Start Shared Round" and "Play Again"
+  - Modern turn status display with color coding (emerald active, white/70 waiting)
+  - Smooth transitions between game states
+  
+- **DailyGameScreen Enhancements**:
+  - Modernized header with animated title, subtitle, and instructions
+  - Sequential fade-in animations for header elements
+  - White text with proper opacity for excellent readability
+  - GameNotification component preserved for feedback
+  
+- **Technical Improvements**:
+  - Robust getWinnerName function handles both array and object player data
+  - Removed unused imports for cleaner code
+  - All game logic and functionality preserved
+  - Mobile responsiveness maintained across all screens
+  - Touch targets ≥48px for all interactive elements
+  - Framer Motion AnimatePresence for smooth modal transitions

@@ -81,16 +81,17 @@ export default function MobileBattleLayout({
         </div>
       )}
 
-      {/* Floating Toggle for Other Players */}
+      {/* Floating Toggle for Other Players - 48px minimum touch target */}
       <button
         onClick={() => setShowOtherPlayers(!showOtherPlayers)}
         className={cn(
-          "fixed bottom-20 left-4 w-12 h-12 rounded-full",
+          "fixed bottom-20 left-4 min-w-[48px] min-h-[48px] w-12 h-12 rounded-full",
           "bg-slate-600 hover:bg-slate-700 text-white",
           "shadow-lg hover:shadow-xl transition-all duration-200",
           "flex items-center justify-center text-lg font-bold",
-          "z-20"
+          "z-20 touch-manipulation"
         )}
+        aria-label={showOtherPlayers ? "Hide other players" : "Show other players"}
       >
         {showOtherPlayers ? "👥" : "👤"}
       </button>

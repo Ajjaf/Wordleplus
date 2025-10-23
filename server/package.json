@@ -3,19 +3,31 @@
   "version": "1.0.0",
   "type": "module",
   "main": "index.js",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node index.js",
     "dev": "node index.js",
-    "postinstall": "prisma generate --schema=../prisma/schema.prisma || prisma generate"
+    "prisma:generate": "prisma generate",
+    "prisma:migrate:dev": "prisma migrate dev",
+    "prisma:migrate:deploy": "prisma migrate deploy",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@prisma/client": "^6.17.1",
+    "connect-pg-simple": "^10.0.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "express": "^4.19.2",
+    "express-session": "^1.18.2",
     "luxon": "^3.7.2",
+    "memoizee": "^0.4.17",
+    "openid-client": "^6.8.1",
+    "passport": "^0.7.0",
+    "passport-strategy": "^1.0.0",
     "prisma": "^6.17.1",
-    "socket.io": "^4.7.5"
+    "socket.io": "^4.7.5",
+    "uuid": "^13.0.0"
   }
 }

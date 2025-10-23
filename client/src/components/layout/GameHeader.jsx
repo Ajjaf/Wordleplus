@@ -1,7 +1,6 @@
 import React from "react";
-import RoomInfo from "./RoomInfo.jsx";
 
-function GameHeader({ mode, room, isHost, players, onCopyRoomId }) {
+function GameHeader({ mode, room, isHost, players }) {
   const getHeaderTitle = () => {
     switch (mode) {
       case "duel":
@@ -42,11 +41,6 @@ function GameHeader({ mode, room, isHost, players, onCopyRoomId }) {
       ) : (
         <div className="max-w-7xl mx-auto">
           <h2 className={getTitleClass()}>{getHeaderTitle()}</h2>
-
-          {/* Room ID Display */}
-          <div className="text-center mb-3">
-            <RoomInfo room={room} onCopy={onCopyRoomId} />
-          </div>
 
           {/* Game Status - Only show to host, not to players */}
           {isHost && room?.battle?.secret && (

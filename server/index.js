@@ -16,6 +16,8 @@ import {
   createOrUpdateDailyResult,
   getUserDailyStats
 } from "./daily-db.js";
+import { setupAuth, getUserIdFromRequest } from "./auth.js";
+import { getFullUserProfile } from "./mergeService.js";
 
 // ---------- Word list loader (.txt) ----------
 const __filename = fileURLToPath(import.meta.url);
@@ -67,12 +69,15 @@ const corsOptions = {
     cb(null, true);
   },
   methods: ["GET", "POST", "OPTIONS"],
-  allowedHeaders: ["Content-Type"],
+  allowedHeaders: ["Content-Type", "X-User-Id"],
   credentials: true,
 };
 app.use(cors(corsOptions));
 app.use(express.json());
 app.use(cookieParser());
+
+// Setup authentication (includes session middleware)
+await setupAuth(app);
 
 // Serve static files from client build in production
 if (process.env.NODE_ENV === "production") {
@@ -121,6 +126,58 @@ app.get("/api/validate", (req, res) => {
   res.json({ valid: isValidWordLocal(word) });
 });
 
+// ---------- Auth API endpoints ----------
+
+// Get current user (works for both anonymous and authenticated)
+app.get("/api/auth/user", async (req, res) => {
+  try {
+    let userId = getUserIdFromRequest(req);
+    
+    // If no user session exists, create an anonymous one
+    if (!userId) {
+      const user = await getOrCreateAnonymousUser(null);
+      userId = user.id;
+      // Store in session for future requests
+      req.session.anonymousUserId = userId;
+      await req.session.save();
+    }
+    
+    // Get full user profile
+    const profile = await getFullUserProfile(userId);
+    
+    if (!profile) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    
+    res.json(profile);
+  } catch (error) {
+    console.error("Error fetching user:", error);
+    res.status(500).json({ message: "Failed to fetch user" });
+  }
+});
+
+// Get user stats
+app.get("/api/auth/stats", async (req, res) => {
+  try {
+    const userId = getUserIdFromRequest(req);
+    
+    if (!userId) {
+      return res.status(401).json({ message: "No user session" });
+    }
+    
+    const profile = await getFullUserProfile(userId);
+    
+    if (!profile) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    
+    res.json(profile.stats);
+  } catch (error) {
+    console.error("Error fetching stats:", error);
+    res.status(500).json({ message: "Failed to fetch stats" });
+  }
+});
+
 // GET /api/random?letters=5 -> { word: "FLARE" }
 app.get("/api/random", (_req, res) => {
   // we only have 5-letter words in WORDS, but keep the param for future use
@@ -149,15 +206,6 @@ app.post("/api/reload-words", (_req, res) => {
 // ---------- Daily Challenge ----------
 const MAX_DAILY_GUESSES = 6;
 const DAILY_WORD_LENGTH = 5;
-
-function getUserIdFromRequest(req) {
-  // Try header first (for iframe environments where cookies don't work)
-  const headerUserId = req.headers['x-user-id'];
-  if (headerUserId) return headerUserId;
-  
-  // Fallback to cookie
-  return req.cookies?.dailyUserId || null;
-}
 
 // GET /api/daily - Load daily challenge
 app.get("/api/daily", async (req, res) => {
