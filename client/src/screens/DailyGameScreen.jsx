@@ -4,6 +4,7 @@ import Board from "../components/Board.jsx";
 import Keyboard from "../components/Keyboard.jsx";
 import GameNotification from "../components/GameNotification.jsx";
 import GradientBackground from "../components/ui/GradientBackground";
+import { useIsMobile } from "../hooks/useIsMobile";
 
 export default function DailyGameScreen({
   challenge,
@@ -25,7 +26,51 @@ export default function DailyGameScreen({
   const title = challenge?.title || "Daily Challenge";
   const subtitle = challenge?.subtitle || challenge?.date || "";
   const maxGuesses = challenge?.maxGuesses || 6;
-  const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
+  const isMobile = useIsMobile();
+
+  if (isMobile) {
+    return (
+      <GradientBackground fullHeight className="flex h-full">
+        <div className="flex flex-1 flex-col w-full min-h-0 px-3 pt-5 pb-3 gap-4 relative">
+          {notificationMessage && (
+            <div className="absolute top-3 inset-x-3 z-10">
+              <GameNotification
+                message={notificationMessage}
+                duration={1500}
+                onDismiss={onNotificationDismiss}
+              />
+            </div>
+          )}
+
+          <div className="flex-1 flex items-start justify-center min-h-0">
+            <div className="w-full max-w-[min(420px,92vw)]">
+              <Board
+                guesses={guesses}
+                activeGuess={gameOver ? "" : currentGuess}
+                maxTile={80}
+                minTile={44}
+                gap={6}
+                padding={10}
+                secretWord={null}
+                secretWordState="empty"
+                errorShakeKey={shakeKey}
+                errorActiveRow={showActiveError}
+                guessFlipKey={guessFlipKey}
+              />
+            </div>
+          </div>
+
+          <div className="px-1 pb-[env(safe-area-inset-bottom,0px)]">
+            <Keyboard
+              onKeyPress={onKeyPress}
+              letterStates={letterStates}
+              disabled={gameOver || loading}
+            />
+          </div>
+        </div>
+      </GradientBackground>
+    );
+  }
 
   return (
     <GradientBackground fullHeight className="flex h-full">

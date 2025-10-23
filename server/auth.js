@@ -16,6 +16,10 @@ if (!process.env.REPLIT_DOMAINS) {
   console.warn("REPLIT_DOMAINS not set - auth may not work in deployment");
 }
 
+const DEFAULT_FRONTEND_URL =
+  (process.env.BASE_URL && process.env.BASE_URL.replace(/\/$/, "")) ||
+  "http://localhost:5000";
+
 const getOidcConfig = memoize(
   async () => {
     return await client.discovery(
@@ -55,6 +59,27 @@ function updateUserSession(user, tokens) {
   user.access_token = tokens.access_token;
   user.refresh_token = tokens.refresh_token;
   user.expires_at = user.claims?.exp;
+}
+
+function resolveFrontendRedirect(req) {
+  const defaultTarget = DEFAULT_FRONTEND_URL;
+  const candidate = req.query.redirect || req.get("referer");
+
+  if (!candidate) {
+    return defaultTarget;
+  }
+
+  try {
+    const resolved = new URL(candidate, defaultTarget);
+    const defaultOrigin = new URL(defaultTarget).origin;
+    if (resolved.origin === defaultOrigin) {
+      return resolved.toString();
+    }
+  } catch (error) {
+    console.warn("[AUTH] Ignoring invalid redirect target", candidate, error);
+  }
+
+  return defaultTarget;
 }
 
 async function upsertAuthenticatedUser(claims, anonymousUserId) {
@@ -193,9 +218,22 @@ export async function setupAuth(app) {
   // Login route
   app.get("/api/login", (req, res, next) => {
     const hostOnly = (req.headers.host || "").split(":")[0]; // drop port
-    passport.authenticate(`replitauth:${hostOnly}`, {
-      prompt: "login consent",
+    if (req.session) {
+      req.session.returnTo = resolveFrontendRedirect(req);
+      req.session.authMode = req.query.mode === "signup" ? "signup" : "login";
+    }
+    const authMode = req.query.mode === "signup" ? "signup" : "login";
+    const authOptions = {
       scope: ["openid", "email", "profile"],
+      prompt: authMode === "signup" ? "consent select_account" : "login consent",
+    };
+
+    if (authMode === "signup") {
+      authOptions.screen_hint = "signup";
+    }
+
+    passport.authenticate(`replitauth:${hostOnly}`, {
+      ...authOptions,
     })(req, res, next);
   });
 
@@ -203,8 +241,8 @@ export async function setupAuth(app) {
   app.get("/api/callback", (req, res, next) => {
     const hostOnly = (req.headers.host || "").split(":")[0]; // drop port
     passport.authenticate(`replitauth:${hostOnly}`, {
-      successReturnToOrRedirect: "/",
-      failureRedirect: "/",
+      successReturnToOrRedirect: DEFAULT_FRONTEND_URL,
+      failureRedirect: DEFAULT_FRONTEND_URL,
     })(req, res, next);
   });
 

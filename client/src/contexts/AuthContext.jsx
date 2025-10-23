@@ -31,9 +31,25 @@ export function AuthProvider({ children }) {
     }
   }
 
+  function startAuth(mode = "login") {
+    if (typeof window === "undefined") return;
+
+    const params = new URLSearchParams();
+    if (mode && mode !== "login") {
+      params.set("mode", mode);
+    }
+    params.set("redirect", window.location.href);
+
+    const queryString = params.toString();
+    window.location.href = `/api/login${queryString ? `?${queryString}` : ""}`;
+  }
+
   function login() {
-    // Redirect to backend login endpoint
-    window.location.href = "/api/login";
+    startAuth("login");
+  }
+
+  function signup() {
+    startAuth("signup");
   }
 
   function logout() {
@@ -47,6 +63,7 @@ export function AuthProvider({ children }) {
     isAuthenticated: user && !user.isAnonymous,
     isAnonymous: user?.isAnonymous ?? true,
     login,
+    signup,
     logout,
     refreshUser: loadUser,
   };

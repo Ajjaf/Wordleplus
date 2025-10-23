@@ -1,16 +1,31 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, User, Trophy, Target, Flame, TrendingUp, LogIn, LogOut } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
+import { createPortal } from "react-dom";
 
 export default function ProfileModal({ open, onOpenChange }) {
   const { user, isAuthenticated, isAnonymous, login, logout } = useAuth();
+  const [mounted, setMounted] = useState(false);
 
-  if (!open || !user) return null;
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
+
+  if (!mounted || !user) return null;
 
   const stats = user.stats || {};
+  const storedName =
+    typeof window !== "undefined"
+      ? window.localStorage?.getItem("wp.lastName")?.trim()
+      : "";
+  const playerName =
+    (user.displayName && user.displayName.trim()) ||
+    storedName ||
+    (isAnonymous ? "Guest Player" : "Player");
 
-  return (
+  return createPortal(
     <AnimatePresence>
       {open && (
         <>
@@ -24,14 +39,16 @@ export default function ProfileModal({ open, onOpenChange }) {
           />
 
           {/* Modal */}
-          <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              transition={{ duration: 0.2 }}
-              className="relative w-full max-w-md bg-gradient-to-br from-slate-900 to-violet-900/50 border border-white/20 rounded-2xl shadow-2xl overflow-hidden"
-            >
+          <div className="fixed inset-0 z-50 overflow-y-auto" onClick={() => onOpenChange(false)}>
+            <div className="flex min-h-full items-center justify-center p-4 sm:p-6">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                transition={{ duration: 0.2 }}
+                className="relative w-full max-w-md bg-gradient-to-br from-slate-900 to-violet-900/50 border border-white/20 rounded-2xl shadow-2xl overflow-hidden max-h-[85vh] pointer-events-auto overflow-y-auto"
+                onClick={(event) => event.stopPropagation()}
+              >
               {/* Header */}
               <div className="relative px-6 pt-6 pb-4 border-b border-white/10">
                 <button
@@ -58,11 +75,8 @@ export default function ProfileModal({ open, onOpenChange }) {
 
                   <div className="flex-1">
                     <h2 className="text-xl font-bold text-white">
-                      {user.displayName || user.email || "Guest Player"}
+                      {playerName}
                     </h2>
-                    {user.email && (
-                      <p className="text-sm text-white/60 mt-0.5">{user.email}</p>
-                    )}
                     {isAnonymous && (
                       <p className="text-xs text-amber-400 mt-1">Anonymous Player</p>
                     )}
@@ -151,9 +165,11 @@ export default function ProfileModal({ open, onOpenChange }) {
                 )}
               </div>
             </motion.div>
+            </div>
           </div>
         </>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }

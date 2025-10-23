@@ -131,6 +131,15 @@ export default function App() {
     setScreen
   );
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (name && name.trim()) {
+      window.localStorage.setItem(LS_LAST_NAME, name.trim());
+    } else {
+      window.localStorage.removeItem(LS_LAST_NAME);
+    }
+  }, [name]);
+
   const rejoinNavControl = canRejoin ? (
     <button
       type="button"

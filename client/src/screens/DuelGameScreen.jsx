@@ -11,7 +11,9 @@ import { useRef } from "react";
 import { motion } from "framer-motion";
 import GradientBackground from "../components/ui/GradientBackground";
 import GlowButton from "../components/ui/GlowButton";
+import MobilePlayerProgressCard from "../components/mobile/MobilePlayerProgressCard.jsx";
 import { COLORS, GRADIENTS, SHADOWS } from "../design-system";
+import { useIsMobile } from "../hooks/useIsMobile";
 
 function DuelGameScreen({
   room,
@@ -42,7 +44,7 @@ function DuelGameScreen({
 
   // Mobile UX
   const [mobileView, setMobileView] = useState("me");
-  const [isMobile, setIsMobile] = useState(false);
+  const isMobile = useIsMobile();
 
   // Generate random word
   const [genBusy, setGenBusy] = useState(false);
@@ -249,13 +251,6 @@ function DuelGameScreen({
   };
 
   // Mobile detection
-  useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 768);
-    check();
-    window.addEventListener("resize", check);
-    return () => window.removeEventListener("resize", check);
-  }, []);
-
   // Dynamic tile cap calculation
   useLayoutEffect(() => {
     function calc() {
@@ -508,9 +503,9 @@ function DuelGameScreen({
         {/* Main */}
         <main className="flex-1 px-3 md:px-4 pt-2 pb-3 min-h-0">
           {isMobile ? (
-            <div className="h-full flex flex-col">
-              <div className="flex-1 w-full flex items-start justify-center min-h-0 pt-2">
-                <div className="relative inline-block">
+            <div className="flex flex-1 flex-col min-h-0 px-1">
+              <div className="flex-1 flex items-start justify-center min-h-0">
+                <div className="w-full max-w-[min(420px,92vw)]">
                   <MobileBoardSwitcher
                     currentView={mobileView}
                     onViewChange={setMobileView}
@@ -521,17 +516,15 @@ function DuelGameScreen({
                       errorActiveRow: showActiveError,
                       secretWord: mySecretWord,
                       secretWordState: mySecretState,
-                      onSecretWordSubmit: canSetSecret
-                        ? handleSecretSubmit
-                        : null, // harmless (Board ignores click)
+                      onSecretWordSubmit: canSetSecret ? handleSecretSubmit : null,
                       isOwnBoard: true,
                       maxTile: tileCap,
-                      minTile: 50,
+                      minTile: 48,
                       player: me,
-                      secretErrorActive: secretErrorActive,
-                      secretErrorKey: secretErrorKey,
+                      secretErrorActive,
+                      secretErrorKey,
                       secretWordReveal: showSecretReveal,
-                      guessFlipKey: guessFlipKey,
+                      guessFlipKey,
                       onMeasure: setBoardMetrics,
                     }}
                     opponentBoard={{
@@ -541,39 +534,37 @@ function DuelGameScreen({
                       secretWordState: oppSecretState,
                       isOwnBoard: false,
                       maxTile: tileCap,
-                      minTile: 50,
+                      minTile: 48,
                       player: opponent,
                       secretWordReveal: showSecretReveal,
-                      guessFlipKey: guessFlipKey,
+                      guessFlipKey,
                     }}
-                    className="flex-1"
+                    className="w-full h-full"
                   />
-
-                  {canSetSecret && mobileView === "me" && boardMetrics && (
-                    <motion.button
-                      type="button"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={handleGenerateSecret}
-                      disabled={genBusy}
-                      title="Generate a random word"
-                      aria-label="Generate a random word"
-                      className="absolute left-full ml-3 w-12 h-12 rounded-full border border-white/20 bg-white/10 backdrop-blur-sm shadow-lg grid place-items-center text-xl"
-                      style={{
-                        top:
-                          (boardMetrics.padding ?? 0) +
-                          (boardMetrics.tile ?? 0) / 2 -
-                          24,
-                      }}
-                      whileHover={{
-                        scale: 1.1,
-                        backgroundColor: "rgba(255, 255, 255, 0.15)",
-                      }}
-                      whileTap={{ scale: 0.95 }}
-                    >
-                  {genBusy ? "..." : "🎲"}
-                    </motion.button>
-                  )}
                 </div>
+              </div>
+
+              <div className="mt-4 flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
+                <MobilePlayerProgressCard
+                  name={me?.name || "You"}
+                  wins={me?.wins || 0}
+                  streak={me?.streak || 0}
+                  guesses={me?.guesses || []}
+                  maxGuesses={6}
+                  isActive={mobileView === "me"}
+                  onSelect={() => setMobileView("me")}
+                />
+                {opponent && (
+                  <MobilePlayerProgressCard
+                    name={opponent?.name || "Opponent"}
+                    wins={opponent?.wins || 0}
+                    streak={opponent?.streak || 0}
+                    guesses={opponent?.guesses || []}
+                    maxGuesses={6}
+                    isActive={mobileView === "opponent"}
+                    onSelect={() => setMobileView("opponent")}
+                  />
+                )}
               </div>
             </div>
           ) : (
