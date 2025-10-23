@@ -29,6 +29,8 @@ export default function MicroProgressGrid({
   radius = 3,
   patterns = null,
   fallbackFilled = 0,
+  showWrapper = true,
+  showCellBorder = true,
 }) {
   const cells = useMemo(() => {
     const total = rows * cols;
@@ -62,31 +64,39 @@ export default function MicroProgressGrid({
     );
   }, [cols, rows, patterns, fallbackFilled]);
 
+  const grid = (
+    <div
+      className="grid"
+      style={{
+        gridTemplateColumns: `repeat(${cols}, ${size}px)`,
+        gap,
+      }}
+    >
+      {cells.map((state, index) => (
+        <div
+          key={index}
+          style={{
+            width: size,
+            height: size,
+            borderRadius: radius,
+            backgroundColor: STATE_COLORS[state] || STATE_COLORS.idle,
+            border: showCellBorder ? `0.5px solid ${BORDER_COLOR}` : "none",
+          }}
+        />
+      ))}
+    </div>
+  );
+
+  if (!showWrapper) {
+    return grid;
+  }
+
   return (
     <div
       className="rounded-xl border border-white/10 bg-white/5 p-2"
       style={{ borderColor: BORDER_COLOR }}
     >
-      <div
-        className="grid"
-        style={{
-          gridTemplateColumns: `repeat(${cols}, ${size}px)`,
-          gap,
-        }}
-      >
-        {cells.map((state, index) => (
-          <div
-            key={index}
-            style={{
-              width: size,
-              height: size,
-              borderRadius: radius,
-              backgroundColor: STATE_COLORS[state] || STATE_COLORS.idle,
-              border: `0.5px solid ${BORDER_COLOR}`,
-            }}
-          />
-        ))}
-      </div>
+      {grid}
     </div>
   );
 }
