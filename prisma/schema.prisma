@@ -8,80 +8,68 @@ datasource db {
 }
 
 model User {
-  id            String   @id @default(cuid())
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  // Basic identity
-  email         String?  @unique
-  username      String?  @unique
-  displayName   String?
-  avatarUrl     String?
-  // Optional external identities (fill later)
-  authProvider  String?   // 'supabase' | 'clerk' | 'authjs' | 'dev'
-  authExternalId String?  @unique
-
-  // Anonymous support (mobile first-run)
-  deviceId      String? @unique
-
-  // Game stats (denorm hints; keep truth in result tables)
-  totalWins     Int      @default(0)
-  totalGames    Int      @default(0)
-  streak        Int      @default(0)
-  longestStreak Int      @default(0)
-
-  results       DailyResult[]
-  events        Event[]
+  id             String        @id @default(cuid())
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  email          String?       @unique
+  username       String?       @unique
+  displayName    String?
+  avatarUrl      String?
+  authProvider   String?
+  authExternalId String?       @unique
+  deviceId       String?       @unique
+  totalWins      Int           @default(0)
+  totalGames     Int           @default(0)
+  streak         Int           @default(0)
+  longestStreak  Int           @default(0)
+  results        DailyResult[]
+  events         Event[]
 }
 
 model WordLexicon {
-  id      Int     @id @default(autoincrement())
-  word    String  @unique
-  length  Int
-  active  Boolean @default(true)
+  id     Int     @id @default(autoincrement())
+  word   String  @unique
+  length Int
+  active Boolean @default(true)
 
   @@index([length, active])
 }
 
 /// One "daily" row per date. `seed` is the method to derive the word deterministically.
 model DailyPuzzle {
-  id          String   @id @default(cuid())
-  date        String   @unique // yyyy-mm-dd format
-  word        String
-  difficulty  String   @default("medium")
-  createdAt   DateTime @default(now())
-  locked      Boolean  @default(false) // optional: prevent edits after roll
-  checksum    String?  // optional: for integrity
-
-  results     DailyResult[]
+  id         String        @id @default(cuid())
+  date       String        @unique
+  word       String
+  createdAt  DateTime      @default(now())
+  locked     Boolean       @default(false)
+  checksum   String?
+  difficulty String        @default("medium")
+  results    DailyResult[]
 }
 
 /// One row per user per daily.
 model DailyResult {
-  id          String   @id @default(cuid())
+  id          String      @id @default(cuid())
   userId      String
   puzzleId    String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  /// gameplay data
-  guesses      String[] // list of guessed words
-  patterns     Json[]   // list of patterns (arrays of color strings)
-  attempts     Int      // 1..6 ; NULL => DNF
-  won          Boolean  // true if solved
-  completed    Boolean  @default(false) // true if game is over
-  completedAt  DateTime? // when completed
-  solved       Boolean  // true if solved (same as won)
-  durationMs   Int?     // optional
-  hardMode     Boolean  @default(false)
-
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  attempts    Int
+  solved      Boolean
+  durationMs  Int?
+  hardMode    Boolean     @default(false)
   /// anti-cheat hints (optional)
-  submittedIp  String? 
-  userAgent    String?
-  clientBuild  String?  // app version
-
-  user        User        @relation(fields: [userId], references: [id])
+  submittedIp String?
+  userAgent   String?
+  clientBuild String?
+  completed   Boolean     @default(false)
+  completedAt DateTime?
+  /// gameplay data
+  guesses     String[]
+  patterns    Json[]
+  won         Boolean
   puzzle      DailyPuzzle @relation(fields: [puzzleId], references: [id])
+  user        User        @relation(fields: [userId], references: [id])
 
   @@unique([userId, puzzleId])
   @@index([puzzleId, attempts, won])
@@ -89,14 +77,13 @@ model DailyResult {
 
 /// Simple append-only analytics stream.
 model Event {
-  id        String   @id @default(cuid())
-  userId    String?
-  type      String   // "battle.join", "duel.win", "daily.submit", etc.
-  ts        DateTime @default(now())
-  roomId    String?
-  meta      Json?
-
-  user      User?    @relation(fields: [userId], references: [id])
+  id     String   @id @default(cuid())
+  userId String?
+  type   String
+  ts     DateTime @default(now())
+  roomId String?
+  meta   Json?
+  user   User?    @relation(fields: [userId], references: [id])
 
   @@index([type, ts])
   @@index([roomId, ts])
