@@ -9,6 +9,7 @@ import ParticleEffect from "../components/ParticleEffect.jsx";
 import GradientBackground from "../components/ui/GradientBackground";
 import { useIsMobile } from "../hooks/useIsMobile";
 import MobilePlayerProgressCard from "../components/mobile/MobilePlayerProgressCard.jsx";
+import MobileBoard from "../components/mobile/MobileBoard.jsx";
 
 function BattleGameScreen({
   room,
@@ -76,17 +77,14 @@ function BattleGameScreen({
     return (
       <GradientBackground fullHeight className="flex h-full">
         <div className="flex flex-1 flex-col w-full min-h-0 px-3 pt-5 pb-3 gap-4">
-          <div className="flex-1 flex items-start justify-center min-h-0">
-            <div className="w-full max-w-[min(420px,92vw)]">
-              <Board
-                guesses={me?.guesses || []}
-                activeGuess={activeGuessForBattle}
-                errorShakeKey={shakeKey}
-                errorActiveRow={showActiveError}
-                guessFlipKey={guessFlipKey}
-              />
-            </div>
-          </div>
+          <MobileBoard
+            guesses={me?.guesses || []}
+            activeGuess={activeGuessForBattle}
+            errorShakeKey={shakeKey}
+            errorActiveRow={showActiveError}
+            guessFlipKey={guessFlipKey}
+            reservedBottom={360}
+          />
 
           {mobileRoster.length > 0 && (
             <div className="-mx-1 px-1 flex gap-3 overflow-x-auto">
@@ -274,39 +272,16 @@ function BattleGameScreen({
         {/* Main */}
         <main className="flex-1 px-3 md:px-4 pt-2 pb-3 flex flex-col min-h-0">
           {isMobile ? (
-            <div className="flex-1 flex items-center justify-center min-h-0">
-              {/* Mobile-specific layout removed for a cleaner experience:
-              {roundActive ? (
-                <MobileBattleLayout
-                  me={me}
-                  otherPlayers={otherPlayers}
-                  currentGuess={currentGuess}
-                  shakeKey={shakeKey}
-                  showActiveError={showActiveError}
-                  letterStates={letterStates}
-                  canGuessBattle={canGuessBattle}
-                  onKeyPress={onKeyPress}
-                  className="h-full"
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center">
-                  <GameResults
-                    room={room}
-                    players={allPlayers}
-                    correctWord={correctWord}
-                  />
-                </div>
-              )}
-              */}
-              <div className="w-full max-w-[min(1100px,95vw)] flex items-center justify-center min-h-0">
-                <Board
-                  guesses={me?.guesses || []}
-                  activeGuess={activeGuessForBattle}
-                  errorShakeKey={shakeKey}
-                  errorActiveRow={showActiveError}
-                  guessFlipKey={guessFlipKey}
-                />
-              </div>
+            <div className="flex-1 flex flex-col items-center min-h-0">
+              <MobileBoard
+                guesses={me?.guesses || []}
+                activeGuess={activeGuessForBattle}
+                errorShakeKey={shakeKey}
+                errorActiveRow={showActiveError}
+                guessFlipKey={guessFlipKey}
+                reservedBottom={360}
+                maxWidth="min(440px, 96vw)"
+              />
             </div>
           ) : (
             <div className="flex-1 flex flex-col items-center min-h-0 relative gap-3">

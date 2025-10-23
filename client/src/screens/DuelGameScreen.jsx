@@ -1,9 +1,4 @@
-import React, {
-  useState,
-  useEffect,
-  useMemo,
-  useCallback,
-} from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import Board from "../components/Board.jsx";
 import Keyboard from "../components/Keyboard.jsx";
 import { DuelPlayerCard } from "../components/DuelPlayerCard.jsx";
@@ -562,7 +557,8 @@ function DuelGameScreen({
               <div
                 className="relative flex justify-center"
                 style={{
-                  width: secretRowWidth + (canSetSecret ? diceSize + secretGap : 0),
+                  width:
+                    secretRowWidth + (canSetSecret ? diceSize + secretGap : 0),
                   minHeight: secretTileSize,
                   paddingRight: canSetSecret ? diceSize + secretGap : 0,
                 }}

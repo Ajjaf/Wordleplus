@@ -5,6 +5,7 @@ import Keyboard from "../components/Keyboard.jsx";
 import GameNotification from "../components/GameNotification.jsx";
 import GradientBackground from "../components/ui/GradientBackground";
 import { useIsMobile } from "../hooks/useIsMobile";
+import MobileBoard from "../components/mobile/MobileBoard.jsx";
 
 export default function DailyGameScreen({
   challenge,
@@ -42,23 +43,20 @@ export default function DailyGameScreen({
             </div>
           )}
 
-          <div className="flex-1 flex items-start justify-center min-h-0">
-            <div className="w-full max-w-[min(420px,92vw)]">
-              <Board
-                guesses={guesses}
-                activeGuess={gameOver ? "" : currentGuess}
-                maxTile={80}
-                minTile={44}
-                gap={6}
-                padding={10}
-                secretWord={null}
-                secretWordState="empty"
-                errorShakeKey={shakeKey}
-                errorActiveRow={showActiveError}
-                guessFlipKey={guessFlipKey}
-              />
-            </div>
-          </div>
+          <MobileBoard
+            guesses={guesses}
+            activeGuess={gameOver ? "" : currentGuess}
+            maxTile={80}
+            minTile={44}
+            gap={6}
+            padding={10}
+            secretWord={null}
+            secretWordState="empty"
+            errorShakeKey={shakeKey}
+            errorActiveRow={showActiveError}
+            guessFlipKey={guessFlipKey}
+            reservedBottom={340}
+          />
 
           <div className="px-1 pb-[env(safe-area-inset-bottom,0px)]">
             <Keyboard
@@ -73,7 +71,7 @@ export default function DailyGameScreen({
   }
 
   return (
-    <GradientBackground fullHeight className="flex h-full">
+    <GradientBackground fullHeight className="flex h-full ">
       <div className="flex flex-1 flex-col w-full min-h-0 relative overflow-hidden">
         {/* Header */}
         <div

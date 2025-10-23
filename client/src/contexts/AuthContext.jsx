@@ -53,8 +53,12 @@ export function AuthProvider({ children }) {
   }
 
   function logout() {
-    // Redirect to backend logout endpoint
-    window.location.href = "/api/logout";
+    if (typeof window === "undefined") return;
+
+    const redirectTarget = window.location.origin;
+    window.location.href = `/api/logout?redirect=${encodeURIComponent(
+      redirectTarget
+    )}`;
   }
 
   const value = {

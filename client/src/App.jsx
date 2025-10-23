@@ -628,6 +628,7 @@ export default function App() {
             }
             right={rejoinNavControl}
             roomId={room?.id}
+            profileMenuVariant="game"
           />
 
           <div className="relative flex-1 overflow-hidden">
@@ -790,6 +791,7 @@ export default function App() {
             }}
             modeLabel="Daily Challenge"
             roomId={room?.id}
+            profileMenuVariant="game"
           />
           <div className="flex-1">
             <DailyGameScreen

@@ -1,6 +1,14 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { User, Copy, Check, ChevronDown, Settings } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import {
+  User,
+  Copy,
+  Check,
+  ChevronDown,
+  Settings,
+  Trophy,
+  LogOut,
+} from "lucide-react";
+import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import ProfileModal from "../ProfileModal";
 import { useAuth } from "../../contexts/AuthContext";
 
@@ -9,13 +17,16 @@ export default function NavHeaderV2({
   right = null,
   modeLabel = null,
   roomId = null,
+  profileMenuVariant = "default",
 }) {
   const [copied, setCopied] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
+  const [profileView, setProfileView] = useState("profile");
   const [menuOpen, setMenuOpen] = useState(false);
   const copyResetTimeout = useRef(null);
   const menuRef = useRef(null);
-  const { user, isAuthenticated, isAnonymous, login, signup } = useAuth();
+  const { user, isAuthenticated, isAnonymous, login, signup, logout } =
+    useAuth();
 
   useEffect(() => {
     // Force dark mode on mount
@@ -71,6 +82,57 @@ export default function NavHeaderV2({
     (user?.displayName && user.displayName.trim()) ||
     storedName ||
     (!isAnonymous ? "Player" : "Guest");
+
+  const handleOpenProfileModal = useCallback((view = "profile") => {
+    setProfileView(view);
+    setShowProfile(true);
+    setMenuOpen(false);
+  }, []);
+
+  const menuItems = useMemo(() => {
+    if (!isAuthenticated) return [];
+
+    if (profileMenuVariant === "game") {
+      return [
+        {
+          key: "settings",
+          label: "Settings",
+          icon: Settings,
+          action: () => handleOpenProfileModal("settings"),
+        },
+      ];
+    }
+
+    return [
+      {
+        key: "profile",
+        label: "Profile",
+        icon: User,
+        action: () => handleOpenProfileModal("profile"),
+      },
+      {
+        key: "achievements",
+        label: "Achievements",
+        icon: Trophy,
+        action: () => handleOpenProfileModal("achievements"),
+      },
+      {
+        key: "settings",
+        label: "Settings",
+        icon: Settings,
+        action: () => handleOpenProfileModal("settings"),
+      },
+      {
+        key: "logout",
+        label: "Log out",
+        icon: LogOut,
+        action: () => {
+          setMenuOpen(false);
+          logout();
+        },
+      },
+    ];
+  }, [handleOpenProfileModal, isAuthenticated, logout, profileMenuVariant]);
 
   return (
     <motion.nav
@@ -164,18 +226,18 @@ export default function NavHeaderV2({
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -6 }}
                       transition={{ duration: 0.15 }}
-                      className="absolute right-0 mt-2 w-48 rounded-xl border border-white/10 bg-slate-900/95 backdrop-blur-md shadow-lg overflow-hidden z-50"
+                      className="absolute right-0 mt-2 w-52 rounded-xl border border-white/10 bg-slate-900/95 backdrop-blur-md shadow-lg overflow-hidden z-50"
                     >
-                      <button
-                        onClick={() => {
-                          setMenuOpen(false);
-                          setShowProfile(true);
-                        }}
-                        className="w-full flex items-center gap-2 px-4 py-3 text-sm text-white/80 hover:text-white hover:bg-white/10 transition"
-                      >
-                        <Settings className="w-4 h-4" />
-                        Settings
-                      </button>
+                      {menuItems.map(({ key, label, icon: Icon, action }) => (
+                        <button
+                          key={key}
+                          onClick={action}
+                          className="w-full flex items-center gap-3 px-4 py-3 text-sm text-white/80 hover:text-white hover:bg-white/10 transition text-left"
+                        >
+                          <Icon className="w-4 h-4" />
+                          {label}
+                        </button>
+                      ))}
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -201,7 +263,11 @@ export default function NavHeaderV2({
       </div>
 
       {/* Profile Modal */}
-      <ProfileModal open={showProfile} onOpenChange={setShowProfile} />
+      <ProfileModal
+        open={showProfile}
+        onOpenChange={setShowProfile}
+        view={profileView}
+      />
     </motion.nav>
   );
 }

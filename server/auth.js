@@ -248,21 +248,20 @@ export async function setupAuth(app) {
 
   // Logout route
   app.get("/api/logout", (req, res) => {
+    const redirectTarget = resolveFrontendRedirect(req);
+
     req.logout(() => {
-      const redirectUri = `${req.protocol}://${
-        req.get("host") || req.hostname
-      }`;
       const endSession = config.metadata?.end_session_endpoint;
 
       if (endSession) {
         const url = client.buildEndSessionUrl(config, {
           client_id: process.env.REPL_ID,
-          post_logout_redirect_uri: redirectUri,
+          post_logout_redirect_uri: redirectTarget,
         });
         return res.redirect(url.href);
       }
 
-      return res.redirect(redirectUri);
+      return res.redirect(redirectTarget);
     });
   });
 }
