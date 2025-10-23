@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import ProfileModal from "../ProfileModal";
+import BrandLogo from "../BrandLogo";
 import { useAuth } from "../../contexts/AuthContext";
 
 export default function NavHeaderV2({
@@ -154,10 +155,8 @@ export default function NavHeaderV2({
             whileHover={{ scale: 1.02 }}
             aria-label="Go to Home"
           >
-            <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-violet-500 to-cyan-500 flex items-center justify-center">
-              <span className="text-white font-bold text-lg md:text-xl">W</span>
-            </div>
-            <span className="sr-only">WordlePlus Home</span>
+            <BrandLogo size="md" textClassName="hidden md:inline" />
+            <span className="sr-only">EvoWordo Home</span>
           </motion.button>
 
           {modeLabel && (
