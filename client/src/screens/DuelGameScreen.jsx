@@ -557,7 +557,7 @@ function DuelGameScreen({
                   size="sm"
                   active={true}
                 />
-                
+
                 <DuelPlayerCard
                   name={opponent?.name || "?"}
                   wins={opponent?.wins}
@@ -582,10 +582,11 @@ function DuelGameScreen({
               <div className="text-[10px] uppercase tracking-[0.35em] text-white/50 text-center">
                 Choose your secret word
               </div>
-              
+
               {canSetSecret && secretWordInput.length === 5 && (
                 <div className="text-center text-xs text-white/70">
-                  Press <span className="font-semibold text-white">Enter</span> to lock your word
+                  Press <span className="font-semibold text-white">Enter</span>{" "}
+                  to lock your word
                 </div>
               )}
 
@@ -705,14 +706,13 @@ function DuelGameScreen({
                   </motion.button>
                 )}
               </div>
-
             </div>
             {/* Guesses Board Section */}
             <div className="flex flex-col items-center gap-2">
               <div className="text-[10px] uppercase tracking-[0.35em] text-white/50 text-center">
                 Guesses
               </div>
-              
+
               <div className="w-full flex justify-center">
                 <Board
                   guesses={me?.guesses || []}
