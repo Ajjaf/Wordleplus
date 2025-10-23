@@ -1,7 +1,8 @@
 # Dependencies
 node_modules/
 */node_modules/
-
+client/node_modules
+server/node_modules
 # Build outputs
 dist/
 */dist/
@@ -42,3 +43,5 @@ temp_*.txt
 .env
 .env.*.local
 prisma/migrations/**/migration.sql
+client/.env
+server/.env
