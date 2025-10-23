@@ -562,8 +562,9 @@ function DuelGameScreen({
               <div
                 className="relative flex justify-center"
                 style={{
-                  width: secretRowWidth,
+                  width: secretRowWidth + (canSetSecret ? diceSize + secretGap : 0),
                   minHeight: secretTileSize,
+                  paddingRight: canSetSecret ? diceSize + secretGap : 0,
                 }}
               >
                 {/* Secret Word Tiles */}
@@ -663,7 +664,7 @@ function DuelGameScreen({
                     whileTap={{ scale: 0.95 }}
                     style={{
                       position: "absolute",
-                      right: -(diceSize + secretGap),
+                      right: 0,
                       top: "50%",
                       transform: "translateY(-50%)",
                       width: diceSize,
