@@ -5,6 +5,8 @@ import Keyboard from "../components/Keyboard.jsx";
 import PlayerCard from "../components/PlayerCard.jsx";
 import GradientBackground from "../components/ui/GradientBackground";
 import GlowButton from "../components/ui/GlowButton";
+import { useIsMobile } from "../hooks/useIsMobile";
+import MobileBoard from "../components/mobile/MobileBoard.jsx";
 
 export default function SharedDuelGameScreen({ room, me, currentGuess, onKeyPress, letterStates, onStartShared, onRematch }) {
   const opponentEntry = Object.entries(room.players || {}).find(([id]) => id !== me?.id);
@@ -35,6 +37,7 @@ export default function SharedDuelGameScreen({ room, me, currentGuess, onKeyPres
     if (!myTurn) return;
     onKeyPress(k);
   };
+  const isMobile = useIsMobile();
 
   // Get game status text
   const sharedGuesses = room.shared?.guesses || [];
@@ -62,6 +65,42 @@ export default function SharedDuelGameScreen({ room, me, currentGuess, onKeyPres
     if (myTurn) return "Your turn - make a guess!";
     return `${opponent?.name}'s turn`;
   };
+
+  if (isMobile) {
+    return (
+      <GradientBackground fullHeight className="flex h-full">
+        <div className="flex flex-1 flex-col w-full min-h-0 px-3 pt-5 pb-3 gap-4">
+          <MobileBoard
+            guesses={room.shared?.guesses || []}
+            activeGuess={activeGuessForBoard}
+            isOwnBoard={true}
+            secretWord={
+              !room.shared?.started && room.shared?.lastRevealedWord
+                ? room.shared.lastRevealedWord
+                : null
+            }
+            secretWordState={
+              !room.shared?.started && room.shared?.lastRevealedWord ? "set" : "empty"
+            }
+            maxTile={88}
+            minTile={48}
+            players={room?.players || {}}
+            currentPlayerId={me?.id}
+            guessFlipKey={guessFlipKey}
+            reservedBottom={360}
+          />
+
+          <div className="px-1 pb-[env(safe-area-inset-bottom,0px)]">
+            <Keyboard
+              onKeyPress={handleKey}
+              letterStates={letterStates}
+              disabled={!myTurn || !canGuess}
+            />
+          </div>
+        </div>
+      </GradientBackground>
+    );
+  }
 
   return (
     <GradientBackground fullHeight className="flex h-full">

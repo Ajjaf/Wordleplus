@@ -42,6 +42,33 @@ The application features a modern design system with deep navy gradients and vio
 
 ## Recent Changes
 
+### October 22, 2025 - Authentication System Validation & Critical Bug Fix
+- **Validated Complete Authentication Flow**:
+  - Anonymous user tracking via localStorage with UUID generation
+  - Session-based authentication using Passport.js with OpenID Connect (OIDC)
+  - PostgreSQL session storage with `express-session` and `connect-pg-simple`
+  - Seamless merge of anonymous progress into authenticated accounts
+  - User stats properly displayed in ProfileModal after authentication
+  
+- **Critical Bug Fix in mergeAnonymousUserIntoExisting**:
+  - **Issue**: When merging accounts with duplicate daily results, incomplete anonymous results could replace completed authenticated results without adjusting stats, causing inflated totalGames/totalWins counts
+  - **Fix**: Added proper stat adjustment logic (lines 100-105 in `server/mergeService.js`) to decrement transferredGames and transferredWins when a completed result is replaced with an incomplete one
+  - **Impact**: Stats now remain accurate in all merge scenarios including win→incomplete and loss→incomplete transitions
+  
+- **Edge Case Coverage Validated**:
+  - Empty anonymous account merges
+  - Multiple conflicting daily results (same puzzles on both accounts)
+  - All win status transitions (win→win, win→loss, loss→win, win→incomplete, etc.)
+  - Transaction atomicity for rollback protection
+  - Proper streak consolidation using Math.max
+  - Event migration via updateMany
+  - mergedAt and mergedIntoUserId fields prevent re-merging
+  
+- **Session Management Verified**:
+  - getUserIdFromRequest properly prioritizes: authenticated user → session → headers → cookies
+  - AuthContext exposes isAnonymous and isAuthenticated flags correctly
+  - Session model with token, deviceId, lastSeenAt, and expiration tracking
+
 ### October 20, 2025 - Complete Game Screens UI Redesign
 - **All 5 Game Screens Modernized**: Applied comprehensive design system to DuelGameScreen, BattleGameScreen, HostSpectateScreen, SharedDuelGameScreen, and DailyGameScreen
 - **Design System Implementation**:

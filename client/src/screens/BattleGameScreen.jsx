@@ -7,6 +7,9 @@ import PlayerProgressCard from "../components/PlayerProgressCard.jsx";
 import GameResults from "../components/GameResults.jsx";
 import ParticleEffect from "../components/ParticleEffect.jsx";
 import GradientBackground from "../components/ui/GradientBackground";
+import { useIsMobile } from "../hooks/useIsMobile";
+import MobilePlayerProgressCard from "../components/mobile/MobilePlayerProgressCard.jsx";
+import MobileBoard from "../components/mobile/MobileBoard.jsx";
 
 function BattleGameScreen({
   room,
@@ -22,7 +25,6 @@ function BattleGameScreen({
   canGuessBattle,
   onKeyPress,
 }) {
-  const [isMobile, setIsMobile] = useState(false);
   const [guessFlipKey, setGuessFlipKey] = useState(0);
 
   // Particle effects
@@ -32,12 +34,7 @@ function BattleGameScreen({
   const [particlePosition, setParticlePosition] = useState({ x: 0, y: 0 });
   const [lastStreak, setLastStreak] = useState(0);
 
-  useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth < 768);
-    checkMobile();
-    window.addEventListener("resize", checkMobile);
-    return () => window.removeEventListener("resize", checkMobile);
-  }, []);
+  const isMobile = useIsMobile();
 
   // Debug logging to verify server payload
   useEffect(() => {
@@ -71,7 +68,53 @@ function BattleGameScreen({
       const timer = setTimeout(() => {
         setGuessFlipKey((prev) => prev + 1);
       }, 100);
-      return () => clearTimeout(timer);
+      if (isMobile) {
+    const mobileRoster = [
+      ...(me ? [{ ...me, id: me.id || "self", isSelf: true }] : []),
+      ...((Array.isArray(otherPlayers) ? otherPlayers : []) || []),
+    ];
+
+    return (
+      <GradientBackground fullHeight className="flex h-full">
+        <div className="flex flex-1 flex-col w-full min-h-0 px-3 pt-5 pb-3 gap-4">
+          <MobileBoard
+            guesses={me?.guesses || []}
+            activeGuess={activeGuessForBattle}
+            errorShakeKey={shakeKey}
+            errorActiveRow={showActiveError}
+            guessFlipKey={guessFlipKey}
+            reservedBottom={360}
+          />
+
+          {mobileRoster.length > 0 && (
+            <div className="-mx-1 px-1 flex gap-3 overflow-x-auto">
+              {mobileRoster.map((player) => (
+                <MobilePlayerProgressCard
+                  key={player.id || player.name}
+                  name={player.name || "Player"}
+                  wins={player.wins || 0}
+                  streak={player.streak || 0}
+                  guesses={player.guesses || []}
+                  maxGuesses={6}
+                  isActive={player.id === me?.id}
+                />
+              ))}
+            </div>
+          )}
+
+          <div className="px-1 pb-[env(safe-area-inset-bottom,0px)]">
+            <Keyboard
+              onKeyPress={onKeyPress}
+              letterStates={letterStates}
+              disabled={!canGuessBattle}
+            />
+          </div>
+        </div>
+      </GradientBackground>
+    );
+  }
+
+  return () => clearTimeout(timer);
     }
   }, [me?.guesses?.length]);
 
@@ -229,43 +272,16 @@ function BattleGameScreen({
         {/* Main */}
         <main className="flex-1 px-3 md:px-4 pt-2 pb-3 flex flex-col min-h-0">
           {isMobile ? (
-            <div className="flex-1 flex items-center justify-center min-h-0">
-              {/* Mobile-specific layout removed for a cleaner experience:
-              {roundActive ? (
-                <MobileBattleLayout
-                  me={me}
-                  otherPlayers={otherPlayers}
-                  currentGuess={currentGuess}
-                  shakeKey={shakeKey}
-                  showActiveError={showActiveError}
-                  letterStates={letterStates}
-                  canGuessBattle={canGuessBattle}
-                  onKeyPress={onKeyPress}
-                  className="h-full"
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center">
-                  <GameResults
-                    room={room}
-                    players={allPlayers}
-                    correctWord={correctWord}
-                  />
-                </div>
-              )}
-              */}
-              <div className="w-full max-w-[min(1100px,95vw)] max-h-[calc(100dvh-260px)] flex items-center justify-center min-h-0">
-                <Board
-                  guesses={me?.guesses || []}
-                  activeGuess={activeGuessForBattle}
-                  errorShakeKey={shakeKey}
-                  errorActiveRow={showActiveError}
-                  maxTile={112}
-                  minTile={56}
-                  gap={10}
-                  padding={12}
-                  guessFlipKey={guessFlipKey}
-                />
-              </div>
+            <div className="flex-1 flex flex-col items-center min-h-0">
+              <MobileBoard
+                guesses={me?.guesses || []}
+                activeGuess={activeGuessForBattle}
+                errorShakeKey={shakeKey}
+                errorActiveRow={showActiveError}
+                guessFlipKey={guessFlipKey}
+                reservedBottom={360}
+                maxWidth="min(440px, 96vw)"
+              />
             </div>
           ) : (
             <div className="flex-1 flex flex-col items-center min-h-0 relative gap-3">
@@ -277,10 +293,6 @@ function BattleGameScreen({
                     activeGuess={activeGuessForBattle}
                     errorShakeKey={shakeKey}
                     errorActiveRow={showActiveError}
-                    maxTile={112}
-                    minTile={56}
-                    gap={10}
-                    padding={12}
                     guessFlipKey={guessFlipKey}
                   />
                 </div>

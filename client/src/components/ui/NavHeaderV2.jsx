@@ -1,29 +1,41 @@
-import { motion } from "framer-motion";
-import { Moon, Sun, User, Copy, Check } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  User,
+  Copy,
+  Check,
+  ChevronDown,
+  Settings,
+  Trophy,
+  LogOut,
+} from "lucide-react";
+import { useEffect, useRef, useState, useMemo, useCallback } from "react";
+import ProfileModal from "../ProfileModal";
+import BrandLogo from "../BrandLogo";
+import { useAuth } from "../../contexts/AuthContext";
 
 export default function NavHeaderV2({
   onHomeClick,
   right = null,
   modeLabel = null,
   roomId = null,
+  profileMenuVariant = "default",
 }) {
-  const [isDark, setIsDark] = useState(() => {
-    if (typeof window === "undefined") return true;
-    const stored = localStorage.getItem("pw.theme");
-    if (stored === "dark") return true;
-    if (stored === "light") return false;
-    return window.matchMedia?.("(prefers-color-scheme: dark)")?.matches ?? true;
-  });
   const [copied, setCopied] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
+  const [profileView, setProfileView] = useState("profile");
+  const [menuOpen, setMenuOpen] = useState(false);
   const copyResetTimeout = useRef(null);
+  const menuRef = useRef(null);
+  const { user, isAuthenticated, isAnonymous, login, signup, logout } =
+    useAuth();
 
   useEffect(() => {
+    // Force dark mode on mount
     if (typeof document === "undefined") return;
     const root = document.documentElement;
-    root.classList.toggle("dark", isDark);
-    localStorage.setItem("pw.theme", isDark ? "dark" : "light");
-  }, [isDark]);
+    root.classList.add("dark");
+    localStorage.setItem("pw.theme", "dark");
+  }, []);
 
   const handleCopyRoomId = async () => {
     if (!roomId) return;
@@ -52,6 +64,77 @@ export default function NavHeaderV2({
     };
   }, []);
 
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handleClickAway = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickAway);
+    return () => document.removeEventListener("mousedown", handleClickAway);
+  }, [menuOpen]);
+
+  const storedName =
+    typeof window !== "undefined"
+      ? window.localStorage?.getItem("wp.lastName")?.trim()
+      : "";
+  const displayName =
+    (user?.displayName && user.displayName.trim()) ||
+    storedName ||
+    (!isAnonymous ? "Player" : "Guest");
+
+  const handleOpenProfileModal = useCallback((view = "profile") => {
+    setProfileView(view);
+    setShowProfile(true);
+    setMenuOpen(false);
+  }, []);
+
+  const menuItems = useMemo(() => {
+    if (!isAuthenticated) return [];
+
+    if (profileMenuVariant === "game") {
+      return [
+        {
+          key: "settings",
+          label: "Settings",
+          icon: Settings,
+          action: () => handleOpenProfileModal("settings"),
+        },
+      ];
+    }
+
+    return [
+      {
+        key: "profile",
+        label: "Profile",
+        icon: User,
+        action: () => handleOpenProfileModal("profile"),
+      },
+      {
+        key: "achievements",
+        label: "Achievements",
+        icon: Trophy,
+        action: () => handleOpenProfileModal("achievements"),
+      },
+      {
+        key: "settings",
+        label: "Settings",
+        icon: Settings,
+        action: () => handleOpenProfileModal("settings"),
+      },
+      {
+        key: "logout",
+        label: "Log out",
+        icon: LogOut,
+        action: () => {
+          setMenuOpen(false);
+          logout();
+        },
+      },
+    ];
+  }, [handleOpenProfileModal, isAuthenticated, logout, profileMenuVariant]);
+
   return (
     <motion.nav
       className="sticky top-0 z-50 backdrop-blur-lg border-b border-white/10"
@@ -63,7 +146,7 @@ export default function NavHeaderV2({
       animate={{ y: 0 }}
       transition={{ duration: 0.3 }}
     >
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto w-full max-w-[1400px] px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 md:h-20 relative">
           <motion.button
             type="button"
@@ -72,12 +155,8 @@ export default function NavHeaderV2({
             whileHover={{ scale: 1.02 }}
             aria-label="Go to Home"
           >
-            <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-gradient-to-br from-violet-500 to-cyan-500 flex items-center justify-center">
-              <span className="text-white font-bold text-lg md:text-xl">W</span>
-            </div>
-            <h1 className="text-xl md:text-2xl font-bold text-white tracking-tight">
-              EVO-WORDO
-            </h1>
+            <BrandLogo size="md" textClassName="hidden md:inline" />
+            <span className="sr-only">EvoWordo Home</span>
           </motion.button>
 
           {modeLabel && (
@@ -89,14 +168,13 @@ export default function NavHeaderV2({
           )}
 
           <div className="flex items-center gap-2 md:gap-4">
-            {right}
             {roomId && (
-              <div className="hidden sm:flex items-center gap-2 text-xs font-medium text-white/80 border border-white/20 rounded-md pl-2 pr-1 h-8">
-                <span className="font-mono tracking-wider">{roomId}</span>
+              <div className="flex items-center gap-2 text-xs font-medium text-white/80 border border-white/15 rounded-full pl-3 pr-1 h-9 bg-white/5 backdrop-blur">
+                <span className="font-mono tracking-wider uppercase">{roomId}</span>
                 <button
                   type="button"
                   onClick={handleCopyRoomId}
-                  className="h-7 w-7 rounded bg-white/10 hover:bg-white/20 border border-white/10 text-white transition flex items-center justify-center"
+                  className="h-7 w-7 rounded-full bg-white/10 hover:bg-white/20 border border-white/10 text-white transition flex items-center justify-center"
                   aria-label={copied ? "Room id copied" : "Copy room id"}
                   title={copied ? "Copied!" : "Copy room id"}
                 >
@@ -111,34 +189,84 @@ export default function NavHeaderV2({
                 </button>
               </div>
             )}
-            <motion.button
-              onClick={() => setIsDark((prev) => !prev)}
-              className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center border border-white/10 transition-all"
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-              aria-label={
-                isDark ? "Switch to light mode" : "Switch to dark mode"
-              }
-              title={isDark ? "Switch to light mode" : "Switch to dark mode"}
-            >
-              {isDark ? (
-                <Sun className="w-5 h-5 text-yellow-400" />
-              ) : (
-                <Moon className="w-5 h-5 text-blue-400" />
-              )}
-            </motion.button>
+            {right}
 
-            <motion.button
-              className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-gradient-to-br from-violet-500 to-cyan-500 flex items-center justify-center border border-white/20"
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
-              aria-label="User profile"
-            >
-              <User className="w-5 h-5 text-white" />
-            </motion.button>
+            {isAuthenticated ? (
+              <div className="relative" ref={menuRef}>
+                <motion.button
+                  onClick={() => setMenuOpen((open) => !open)}
+                  className="flex items-center gap-3 rounded-full bg-white/5 border border-white/10 px-3 py-1.5 md:px-4 md:py-2 transition hover:bg-white/10"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  aria-haspopup="menu"
+                  aria-expanded={menuOpen}
+                >
+                  {user?.avatarUrl ? (
+                    <img
+                      src={user.avatarUrl}
+                      alt={displayName}
+                      className="w-9 h-9 md:w-10 md:h-10 rounded-full border border-white/20 object-cover"
+                    />
+                  ) : (
+                    <div className="w-9 h-9 md:w-10 md:h-10 rounded-full bg-gradient-to-br from-violet-500 to-cyan-500 flex items-center justify-center border border-white/20">
+                      <User className="w-4 h-4 text-white" />
+                    </div>
+                  )}
+                  <span className="hidden sm:block text-sm md:text-base font-medium text-white">
+                    {displayName}
+                  </span>
+                  <ChevronDown className="w-4 h-4 text-white/70" />
+                </motion.button>
+
+                <AnimatePresence>
+                  {menuOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -6 }}
+                      transition={{ duration: 0.15 }}
+                      className="absolute right-0 mt-2 w-52 rounded-xl border border-white/10 bg-slate-900/95 backdrop-blur-md shadow-lg overflow-hidden z-50"
+                    >
+                      {menuItems.map(({ key, label, icon: Icon, action }) => (
+                        <button
+                          key={key}
+                          onClick={action}
+                          className="w-full flex items-center gap-3 px-4 py-3 text-sm text-white/80 hover:text-white hover:bg-white/10 transition text-left"
+                        >
+                          <Icon className="w-4 h-4" />
+                          {label}
+                        </button>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            ) : (
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={login}
+                  className="px-4 py-2 text-sm font-medium text-white/80 hover:text-white transition"
+                >
+                  Log In
+                </button>
+                <button
+                  onClick={signup}
+                  className="px-4 py-2 rounded-full bg-gradient-to-r from-violet-500 to-cyan-500 text-sm font-semibold text-white shadow-lg hover:from-violet-400 hover:to-cyan-400 transition"
+                >
+                  Sign Up
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
+
+      {/* Profile Modal */}
+      <ProfileModal
+        open={showProfile}
+        onOpenChange={setShowProfile}
+        view={profileView}
+      />
     </motion.nav>
   );
 }

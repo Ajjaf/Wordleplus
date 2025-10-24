@@ -18,11 +18,16 @@ model User {
   displayName   String?
   avatarUrl     String?
   // Optional external identities (fill later)
-  authProvider  String?   // 'supabase' | 'clerk' | 'authjs' | 'dev'
+  authProvider  String?   // 'replit' | 'supabase' | 'clerk' | 'authjs' | 'dev'
   authExternalId String?  @unique
 
   // Anonymous support (mobile first-run)
   deviceId      String? @unique
+  isAnonymous   Boolean  @default(true)
+  
+  // Account linking/migration support
+  mergedIntoUserId String? // If this account was merged into another, store the target user ID
+  mergedAt         DateTime? // When the merge happened
 
   // Game stats (denorm hints; keep truth in result tables)
   totalWins     Int      @default(0)
@@ -32,33 +37,33 @@ model User {
 
   results       DailyResult[]
   events        Event[]
+  sessions      Session[]
 }
 
 model WordLexicon {
-  id      Int     @id @default(autoincrement())
-  word    String  @unique
-  length  Int
-  active  Boolean @default(true)
+  id     Int     @id @default(autoincrement())
+  word   String  @unique
+  length Int
+  active Boolean @default(true)
 
   @@index([length, active])
 }
 
 /// One "daily" row per date. `seed` is the method to derive the word deterministically.
 model DailyPuzzle {
-  id          String   @id @default(cuid())
-  date        String   @unique // yyyy-mm-dd format
-  word        String
-  difficulty  String   @default("medium")
-  createdAt   DateTime @default(now())
-  locked      Boolean  @default(false) // optional: prevent edits after roll
-  checksum    String?  // optional: for integrity
-
-  results     DailyResult[]
+  id         String        @id @default(cuid())
+  date       String        @unique
+  word       String
+  createdAt  DateTime      @default(now())
+  locked     Boolean       @default(false)
+  checksum   String?
+  difficulty String        @default("medium")
+  results    DailyResult[]
 }
 
 /// One row per user per daily.
 model DailyResult {
-  id          String   @id @default(cuid())
+  id          String      @id @default(cuid())
   userId      String
   puzzleId    String
   createdAt   DateTime @default(now())
@@ -76,12 +81,12 @@ model DailyResult {
   hardMode     Boolean  @default(false)
 
   /// anti-cheat hints (optional)
-  submittedIp  String? 
-  userAgent    String?
-  clientBuild  String?  // app version
-
-  user        User        @relation(fields: [userId], references: [id])
+  submittedIp String?
+  userAgent   String?
+  clientBuild String?
+  
   puzzle      DailyPuzzle @relation(fields: [puzzleId], references: [id])
+  user        User        @relation(fields: [userId], references: [id])
 
   @@unique([userId, puzzleId])
   @@index([puzzleId, attempts, won])
@@ -89,15 +94,36 @@ model DailyResult {
 
 /// Simple append-only analytics stream.
 model Event {
-  id        String   @id @default(cuid())
-  userId    String?
-  type      String   // "battle.join", "duel.win", "daily.submit", etc.
-  ts        DateTime @default(now())
-  roomId    String?
-  meta      Json?
-
-  user      User?    @relation(fields: [userId], references: [id])
+  id     String   @id @default(cuid())
+  userId String?
+  type   String
+  ts     DateTime @default(now())
+  roomId String?
+  meta   Json?
+  user   User?    @relation(fields: [userId], references: [id])
 
   @@index([type, ts])
   @@index([roomId, ts])
+}
+
+/// Session tracking for both anonymous and authenticated users
+model Session {
+  id          String   @id @default(cuid())
+  userId      String
+  deviceId    String?  // Browser/device identifier
+  token       String   @unique // Session token for client
+  isAnonymous Boolean  @default(true)
+  expiresAt   DateTime
+  lastSeenAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+  
+  // Connection metadata
+  userAgent   String?
+  ipAddress   String?
+  
+  user        User     @relation(fields: [userId], references: [id])
+  
+  @@index([userId, expiresAt])
+  @@index([token, expiresAt])
+  @@index([deviceId])
 }

@@ -3,6 +3,125 @@ import { DateTime } from "luxon";
 
 const prisma = new PrismaClient();
 
+function normalizeDate(input) {
+  return DateTime.fromISO(input).startOf("day");
+}
+
+function deriveDailyStats(results) {
+  const completedResults = results.filter((r) => r.completed);
+  const totalPlayed = completedResults.length;
+  const totalWins = completedResults.filter((r) => r.won).length;
+  const winRate =
+    totalPlayed > 0 ? Math.round((totalWins / totalPlayed) * 100) : 0;
+
+  // Calculate streaks using chronological order
+  const sortedAsc = [...completedResults].sort(
+    (a, b) =>
+      normalizeDate(a.puzzle.date).toMillis() -
+      normalizeDate(b.puzzle.date).toMillis()
+  );
+
+  let rollingStreak = 0;
+  let maxStreak = 0;
+  let previousDate = null;
+
+  for (const result of sortedAsc) {
+    const resultDate = normalizeDate(result.puzzle.date);
+
+    if (result.won) {
+      if (previousDate && resultDate.diff(previousDate, "days").days === 1) {
+        rollingStreak += 1;
+      } else {
+        rollingStreak = 1;
+      }
+      if (rollingStreak > maxStreak) {
+        maxStreak = rollingStreak;
+      }
+    } else {
+      rollingStreak = 0;
+    }
+
+    previousDate = resultDate;
+  }
+
+  // Current streak: walk backward from most recent completed puzzle
+  const sortedDesc = [...completedResults].sort(
+    (a, b) =>
+      normalizeDate(b.puzzle.date).toMillis() -
+      normalizeDate(a.puzzle.date).toMillis()
+  );
+
+  let currentStreak = 0;
+  let expectedDate = null;
+
+  for (const result of sortedDesc) {
+    const resultDate = normalizeDate(result.puzzle.date);
+
+    if (!result.won) {
+      break; // streak broken by a loss
+    }
+
+    if (expectedDate === null) {
+      // First win (most recent)
+      currentStreak = 1;
+      expectedDate = resultDate.minus({ days: 1 });
+      continue;
+    }
+
+    const diff = expectedDate.diff(resultDate, "days").days;
+    if (Math.abs(diff) < 0.5) {
+      currentStreak += 1;
+      expectedDate = resultDate.minus({ days: 1 });
+    } else {
+      break;
+    }
+  }
+
+  return {
+    totalPlayed,
+    totalWins,
+    winRate,
+    currentStreak,
+    maxStreak,
+  };
+}
+
+async function updateUserAggregateStats(userId) {
+  const allResults = await prisma.dailyResult.findMany({
+    where: { userId },
+    include: {
+      puzzle: true,
+    },
+    orderBy: {
+      puzzle: {
+        date: "asc",
+      },
+    },
+  });
+
+  const stats = deriveDailyStats(allResults);
+
+  try {
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        totalGames: stats.totalPlayed,
+        totalWins: stats.totalWins,
+        streak: stats.currentStreak,
+        longestStreak: stats.maxStreak,
+      },
+    });
+  } catch (error) {
+    console.error(
+      "[Daily Stats] Failed to update user aggregates",
+      userId,
+      error
+    );
+  }
+
+  return stats;
+}
+
 export async function getOrCreateAnonymousUser(cookieUserId) {
   if (cookieUserId) {
     const existing = await prisma.user.findUnique({
@@ -106,6 +225,11 @@ export async function createOrUpdateDailyResult(userId, puzzleId, data) {
       completedAt: completed ? new Date() : null,
       attempts: guesses.length
     }
+  }).then(async (result) => {
+    if (completed) {
+      await updateUserAggregateStats(userId);
+    }
+    return result;
   });
 }
 
@@ -113,83 +237,24 @@ export async function getUserDailyStats(userId, limit = 30) {
   const results = await prisma.dailyResult.findMany({
     where: { userId },
     include: {
-      puzzle: true
+      puzzle: true,
     },
     orderBy: {
       puzzle: {
-        date: 'desc'
-      }
+        date: "desc",
+      },
     },
-    take: limit
   });
 
-  const totalPlayed = results.filter(r => r.completed).length;
-  const totalWins = results.filter(r => r.won).length;
-  const winRate = totalPlayed > 0 ? (totalWins / totalPlayed) * 100 : 0;
-
-  let currentStreak = 0;
-  let maxStreak = 0;
-
-  const completedResults = results.filter(r => r.completed);
-  
-  const sortedAsc = [...completedResults].sort((a, b) => 
-    new Date(a.puzzle.date) - new Date(b.puzzle.date)
-  );
-
-  let tempStreak = 0;
-  let prevDate = null;
-
-  for (const result of sortedAsc) {
-    const resultDate = DateTime.fromISO(result.puzzle.date);
-    
-    if (result.won) {
-      if (prevDate === null) {
-        tempStreak = 1;
-      } else {
-        const daysDiff = resultDate.diff(prevDate, 'days').days;
-        if (Math.abs(daysDiff) <= 1) {
-          tempStreak++;
-        } else {
-          tempStreak = 1;
-        }
-      }
-      
-      if (tempStreak > maxStreak) {
-        maxStreak = tempStreak;
-      }
-    } else {
-      tempStreak = 0;
-    }
-    
-    prevDate = resultDate;
-  }
-
-  const mostRecentCompleted = completedResults[0];
-  if (mostRecentCompleted && mostRecentCompleted.won) {
-    const today = DateTime.now().startOf('day');
-    const mostRecentDate = DateTime.fromISO(mostRecentCompleted.puzzle.date);
-    const daysSinceLastWin = today.diff(mostRecentDate, 'days').days;
-    
-    if (daysSinceLastWin <= 1) {
-      currentStreak = tempStreak;
-    } else {
-      currentStreak = 0;
-    }
-  } else {
-    currentStreak = 0;
-  }
+  const stats = deriveDailyStats(results);
 
   return {
-    totalPlayed,
-    totalWins,
-    winRate: Math.round(winRate),
-    currentStreak,
-    maxStreak,
-    recentResults: results.slice(0, 10).map(r => ({
+    ...stats,
+    recentResults: results.slice(0, limit).map((r) => ({
       date: r.puzzle.date,
       won: r.won,
-      attempts: r.attempts
-    }))
+      attempts: r.attempts,
+    })),
   };
 }
 

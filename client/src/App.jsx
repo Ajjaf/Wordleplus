@@ -14,7 +14,7 @@ import Backdrop from "./components/Backdrop.jsx";
 import { RefreshCw } from "lucide-react";
 
 // Extracted Hooks
-import { useGameState } from "./hooks/useGameState.js";
+import { useGameState } from "@/hooks/useGameState";
 import { useSocketConnection } from "./hooks/useSocketConnection.js";
 import { useGameActions } from "./hooks/useGameActions.js";
 import { useRoomManagement } from "./hooks/useRoomManagement.js";
@@ -131,26 +131,33 @@ export default function App() {
     setScreen
   );
 
-  const rejoinNavControl = canRejoin
-    ? (
-        <button
-          type="button"
-          onClick={doRejoin}
-          className="inline-flex items-center gap-2 h-9 px-3 rounded-full border border-white/20 bg-white/10 text-xs font-semibold uppercase tracking-wide text-white/90 hover:bg-white/20 transition"
-          aria-label={
-            savedRoomId
-              ? `Rejoin room ${savedRoomId.toUpperCase()}`
-              : "Rejoin your last room"
-          }
-        >
-          <RefreshCw className="w-4 h-4 text-white/80" />
-          <span className="hidden sm:inline">
-            Rejoin {savedRoomId?.toUpperCase() || "room"}
-          </span>
-          <span className="sm:hidden">Rejoin</span>
-        </button>
-      )
-    : null;
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (name && name.trim()) {
+      window.localStorage.setItem(LS_LAST_NAME, name.trim());
+    } else {
+      window.localStorage.removeItem(LS_LAST_NAME);
+    }
+  }, [name]);
+
+  const rejoinNavControl = canRejoin ? (
+    <button
+      type="button"
+      onClick={doRejoin}
+      className="inline-flex items-center gap-2 h-9 px-3 rounded-full border border-white/20 bg-white/10 text-xs font-semibold uppercase tracking-wide text-white/90 hover:bg-white/20 transition"
+      aria-label={
+        savedRoomId
+          ? `Rejoin room ${savedRoomId.toUpperCase()}`
+          : "Rejoin your last room"
+      }
+    >
+      <RefreshCw className="w-4 h-4 text-white/80" />
+      <span className="hidden sm:inline">
+        Rejoin {savedRoomId?.toUpperCase() || "room"}
+      </span>
+      <span className="sm:hidden">Rejoin</span>
+    </button>
+  ) : null;
 
   const actionsByMode = useGameActions();
   const duelActions = actionsByMode.duel;
@@ -621,6 +628,7 @@ export default function App() {
             }
             right={rejoinNavControl}
             roomId={room?.id}
+            profileMenuVariant="game"
           />
 
           <div className="relative flex-1 overflow-hidden">
@@ -693,7 +701,10 @@ export default function App() {
                   letterStates={letterStates}
                   onKeyPress={handleDuelKey}
                   onSubmitSecret={async (secret) => {
-                    const result = await duelActions.submitSecret(roomId, secret); // { ok: true } or { error: "..." }
+                    const result = await duelActions.submitSecret(
+                      roomId,
+                      secret
+                    ); // { ok: true } or { error: "..." }
                     if (result?.error) setMsg(result.error);
                     return result;
                   }}
@@ -780,6 +791,7 @@ export default function App() {
             }}
             modeLabel="Daily Challenge"
             roomId={room?.id}
+            profileMenuVariant="game"
           />
           <div className="flex-1">
             <DailyGameScreen

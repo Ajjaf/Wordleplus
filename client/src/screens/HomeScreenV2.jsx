@@ -1,10 +1,19 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Swords, Users, Shield, Trophy, Star, Calendar } from "lucide-react";
+import { Swords, Users, Shield, Trophy, Star } from "lucide-react";
 import GradientBackground from "../components/ui/GradientBackground";
 import DailyChallengeHero from "../components/ui/DailyChallengeHero";
 import AnimatedGameCard from "../components/ui/AnimatedGameCard";
 import GlowButton from "../components/ui/GlowButton";
+import { useAuth } from "../contexts/AuthContext";
+
+const DEFAULT_DAILY_STATS = {
+  currentStreak: 0,
+  maxStreak: 0,
+  winRate: 0,
+  totalWins: 0,
+  totalPlayed: 0,
+};
 
 export default function HomeScreenV2({
   name,
@@ -21,6 +30,96 @@ export default function HomeScreenV2({
   const [creating, setCreating] = useState(false);
   const [joining, setJoining] = useState(false);
   const [isNameSet, setIsNameSet] = useState(!!name);
+  const { user, isAuthenticated, refreshUser } = useAuth();
+  const isAnonymous = !isAuthenticated || user?.isAnonymous;
+  const [dailyStats, setDailyStats] = useState(DEFAULT_DAILY_STATS);
+
+  useEffect(() => {
+    if (!isAuthenticated || isAnonymous) return;
+
+    const normalizedDisplay =
+      typeof user?.displayName === "string" ? user.displayName.trim() : "";
+    const savedName =
+      typeof window !== "undefined"
+        ? window.localStorage?.getItem("wp.lastName")?.trim()
+        : "";
+    const emailName =
+      !normalizedDisplay &&
+      !savedName &&
+      typeof user?.email === "string" &&
+      user.email.includes("@")
+        ? user.email.split("@")[0] || ""
+        : "";
+
+    const derivedName = normalizedDisplay || savedName || emailName;
+
+    if (!derivedName) return;
+
+    if (derivedName !== name) {
+      setName(derivedName);
+    }
+    if (!isNameSet) {
+      setIsNameSet(true);
+    }
+  }, [isAuthenticated, isAnonymous, user, name, setName, isNameSet]);
+
+  useEffect(() => {
+    if (!isNameSet) {
+      setDailyStats(DEFAULT_DAILY_STATS);
+      return;
+    }
+
+    let isActive = true;
+
+    async function loadDailyStats() {
+      try {
+        const response = await fetch("/api/daily/stats", {
+          credentials: "include",
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to load stats (${response.status})`);
+        }
+
+        const data = await response.json();
+        if (!isActive) return;
+
+        const normalized = {
+          currentStreak: Number(data.currentStreak) || 0,
+          maxStreak: Number(data.maxStreak) || 0,
+          winRate: Number(data.winRate) || 0,
+          totalWins: Number(data.totalWins) || 0,
+          totalPlayed: Number(data.totalPlayed) || 0,
+        };
+
+        setDailyStats(normalized);
+
+        const userStats = user?.stats;
+        const needsRefresh =
+          userStats &&
+          (Number(userStats.totalWins ?? 0) !== normalized.totalWins ||
+            Number(userStats.totalGames ?? 0) !== normalized.totalPlayed ||
+            Number(userStats.currentStreak ?? userStats.streak ?? 0) !==
+              normalized.currentStreak ||
+            Number.parseFloat(userStats.winRate ?? 0) !== normalized.winRate);
+
+        if (needsRefresh && typeof refreshUser === "function") {
+          refreshUser();
+        }
+      } catch (error) {
+        if (isActive) {
+          setDailyStats(DEFAULT_DAILY_STATS);
+          console.error("Failed to load daily stats:", error);
+        }
+      }
+    }
+
+    loadDailyStats();
+
+    return () => {
+      isActive = false;
+    };
+  }, [isNameSet, isAuthenticated, isAnonymous, refreshUser, user?.stats]);
 
   const handleNameSubmit = () => {
     if (name.trim()) {
@@ -119,18 +218,12 @@ export default function HomeScreenV2({
 
   return (
     <GradientBackground>
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-12 pb-24 md:pb-12">
-        <div className="max-w-7xl mx-auto space-y-8">
-          <div className="hidden md:block">
-            <DailyChallengeHero
-              onPlay={() => handlePlayMode("daily")}
-              stats={{
-                currentStreak: 0,
-                maxStreak: 0,
-                winRate: 0,
-              }}
-            />
-          </div>
+      <div className="mx-auto w-full max-w-[1400px] px-4 sm:px-6 lg:px-10 py-6 md:py-12 pb-24 md:pb-12">
+        <div className="w-full space-y-8">
+          <DailyChallengeHero
+            onPlay={() => handlePlayMode("daily")}
+            stats={dailyStats}
+          />
 
           <section>
             <motion.h2
@@ -271,22 +364,6 @@ export default function HomeScreenV2({
         </div>
       </div>
 
-      <motion.button
-        onClick={() => handlePlayMode("daily")}
-        className="md:hidden fixed bottom-6 right-6 w-16 h-16 rounded-full bg-gradient-to-br from-violet-500 to-cyan-500 shadow-2xl flex items-center justify-center z-50"
-        style={{
-          boxShadow:
-            "0 0 32px rgba(124, 58, 237, 0.5), 0 0 48px rgba(34, 211, 238, 0.5)",
-        }}
-        whileHover={{ scale: 1.1 }}
-        whileTap={{ scale: 0.9 }}
-        initial={{ scale: 0 }}
-        animate={{ scale: 1 }}
-        transition={{ delay: 0.6, type: "spring" }}
-        aria-label="Play Daily Challenge"
-      >
-        <Calendar className="w-7 h-7 text-white" />
-      </motion.button>
     </GradientBackground>
   );
 }
