@@ -516,8 +516,8 @@ function DuelGameScreen({
         </div>
 
         {/* Main */}
-        <main className="flex-1 px-3 md:px-4 pt-2 pb-3 min-h-0 overflow-y-auto">
-          <div className="w-full max-w-4xl mx-auto flex flex-col gap-4">
+        <main className="flex-1 px-3 md:px-4 pt-2 pb-3 min-h-0 flex flex-col">
+          <div className="w-full max-w-4xl mx-auto flex flex-col gap-4 flex-1 min-h-0">
             {/* Player Cards Row */}
             {isMobile ? (
               <div className="-mx-1 flex gap-3 overflow-x-auto px-1">
@@ -708,29 +708,31 @@ function DuelGameScreen({
               </div>
             </div>
             {/* Guesses Board Section */}
-            <div className="flex flex-col items-center gap-2">
-              <div className="text-[10px] uppercase tracking-[0.35em] text-white/50 text-center">
+            <div className="flex flex-col items-center gap-2 flex-1 min-h-0">
+              <div className="text-[10px] uppercase tracking-[0.35em] text-white/50 text-center flex-shrink-0">
                 Guesses
               </div>
 
-              <div className="w-full flex justify-center">
-                <Board
-                  guesses={me?.guesses || []}
-                  activeGuess={activeGuessForMe}
-                  errorShakeKey={shakeKey}
-                  errorActiveRow={showActiveError}
-                  secretWord={null}
-                  isOwnBoard={true}
-                  maxTile={56}
-                  minTile={48}
-                  gap={8}
-                  padding={12}
-                  autoFit={false}
-                  showGuessesLabel={false}
-                  secretWordReveal={showSecretReveal}
-                  guessFlipKey={guessFlipKey}
-                  onMeasure={handleBoardMeasure}
-                />
+              <div className="w-full flex-1 flex justify-center min-h-0">
+                <div className="w-full max-w-md h-full">
+                  <Board
+                    guesses={me?.guesses || []}
+                    activeGuess={activeGuessForMe}
+                    errorShakeKey={shakeKey}
+                    errorActiveRow={showActiveError}
+                    secretWord={null}
+                    isOwnBoard={true}
+                    maxTile={isMobile ? 68 : 56}
+                    minTile={isMobile ? 40 : 48}
+                    gap={isMobile ? 6 : 8}
+                    padding={isMobile ? 8 : 12}
+                    autoFit={true}
+                    showGuessesLabel={false}
+                    secretWordReveal={showSecretReveal}
+                    guessFlipKey={guessFlipKey}
+                    onMeasure={handleBoardMeasure}
+                  />
+                </div>
               </div>
             </div>
           </div>

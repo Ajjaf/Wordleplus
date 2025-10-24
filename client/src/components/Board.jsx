@@ -70,21 +70,26 @@ export default function Board({
     const hasSecretRow = secretWord !== null;
     const baseRows = hasSecretRow ? 7 : 6; // 1 secret + 6 guesses, or just 6 guesses
     const includeLabel = showGuessesLabel && hasSecretRow;
-    const labelHeight = 18; // px – small, readable label    // subtract internal padding from the measured box
+    const labelHeight = 18; // px – small, readable label
+    
+    // subtract internal padding from the measured box
     const innerW = Math.max(0, wrapSize.w - padding * 2);
     const innerH = Math.max(0, wrapSize.h - padding * 2);
 
-    // usable space after accounting for gaps (+ label height if present)
-    const totalRowsForGaps = baseRows + (includeLabel ? 1 : 0);
+    // Calculate usable space accounting for gaps and label
+    const totalRowsForGaps = baseRows;
     const usableW = innerW - gap * (cols - 1);
-    const usableH =
-      innerH - gap * (totalRowsForGaps - 1) - (includeLabel ? labelHeight : 0);
+    const usableH = innerH - gap * (totalRowsForGaps - 1) - (includeLabel ? labelHeight + gap : 0);
 
+    // Calculate max tile size that fits both dimensions
     const perCol = Math.floor(usableW / cols);
     const perRow = Math.floor(usableH / baseRows);
     let t = Math.min(perCol, perRow);
 
+    // Fallback if calculation fails
     if (!Number.isFinite(t) || t <= 0) t = tile;
+    
+    // Clamp to min/max bounds
     t = Math.max(minTile, Math.min(maxTile, t));
     return t;
   }, [
