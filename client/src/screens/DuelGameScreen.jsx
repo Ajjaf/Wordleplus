@@ -2,7 +2,6 @@ import React, {
   useState,
   useEffect,
   useMemo,
-  useLayoutEffect,
   useCallback,
 } from "react";
 import Board from "../components/Board.jsx";
@@ -53,12 +52,6 @@ function DuelGameScreen({
   // Generate random word
   const [genBusy, setGenBusy] = useState(false);
   const [boardMetrics, setBoardMetrics] = useState(null);
-
-  // Dynamic tile cap calculation
-  const ROWS = 7; // 1 secret row + 6 guess rows
-  const PAD = 12; // matches Board padding you pass
-  const GAP = 10; // matches Board gap you pass
-  const [tileCap, setTileCap] = useState(140); // start generous
 
   // Derived flags
   const isGameStarted = !!room?.started;
@@ -274,30 +267,6 @@ function DuelGameScreen({
     onRematch();
     setMySubmittedSecret("");
   };
-
-  // Mobile detection
-  // Dynamic tile cap calculation
-  useLayoutEffect(() => {
-    function calc() {
-      // heights we must leave for non-board UI (rough but safe)
-      const statusH = 68; // "Fewest guesses wins" + timer
-      const footerH = 60; // rematch button or waiting message
-      const keyboardH = canSetSecret || canGuess ? 180 : 0; // compact keyboard height
-      const vpad = 16; // reduced page paddings/margins
-      const available =
-        window.innerHeight - (statusH + footerH + keyboardH + vpad);
-
-      // tile that fits vertically inside 'available'
-      const best = Math.floor((available - PAD * 2 - GAP * (ROWS - 1)) / ROWS);
-
-      // clamp to a sensible range; your Board respects maxTile/minTile
-      setTileCap(Math.max(50, Math.min(150, best)));
-    }
-
-    calc();
-    window.addEventListener("resize", calc);
-    return () => window.removeEventListener("resize", calc);
-  }, [canSetSecret, canGuess]);
 
   // Physical keyboard routing
   useEffect(() => {
@@ -722,10 +691,6 @@ function DuelGameScreen({
                     errorActiveRow={showActiveError}
                     secretWord={null}
                     isOwnBoard={true}
-                    maxTile={isMobile ? 68 : 56}
-                    minTile={isMobile ? 40 : 48}
-                    gap={isMobile ? 6 : 8}
-                    padding={isMobile ? 8 : 12}
                     autoFit={true}
                     showGuessesLabel={false}
                     secretWordReveal={showSecretReveal}

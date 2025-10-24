@@ -8,24 +8,6 @@ datasource db {
 }
 
 model User {
-<<<<<<< HEAD:prisma/schema.prisma
-  id             String        @id @default(cuid())
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-  email          String?       @unique
-  username       String?       @unique
-  displayName    String?
-  avatarUrl      String?
-  authProvider   String?
-  authExternalId String?       @unique
-  deviceId       String?       @unique
-  totalWins      Int           @default(0)
-  totalGames     Int           @default(0)
-  streak         Int           @default(0)
-  longestStreak  Int           @default(0)
-  results        DailyResult[]
-  events         Event[]
-=======
   id            String   @id @default(cuid())
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -56,7 +38,6 @@ model User {
   results       DailyResult[]
   events        Event[]
   sessions      Session[]
->>>>>>> f2024d4c2b5c539a22def6acaa8fcda1be6f2a1a:server/prisma/schema.prisma
 }
 
 model WordLexicon {
@@ -85,14 +66,6 @@ model DailyResult {
   id          String      @id @default(cuid())
   userId      String
   puzzleId    String
-<<<<<<< HEAD:prisma/schema.prisma
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  attempts    Int
-  solved      Boolean
-  durationMs  Int?
-  hardMode    Boolean     @default(false)
-=======
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -107,17 +80,11 @@ model DailyResult {
   durationMs   Int?     // optional
   hardMode     Boolean  @default(false)
 
->>>>>>> f2024d4c2b5c539a22def6acaa8fcda1be6f2a1a:server/prisma/schema.prisma
   /// anti-cheat hints (optional)
   submittedIp String?
   userAgent   String?
   clientBuild String?
-  completed   Boolean     @default(false)
-  completedAt DateTime?
-  /// gameplay data
-  guesses     String[]
-  patterns    Json[]
-  won         Boolean
+  
   puzzle      DailyPuzzle @relation(fields: [puzzleId], references: [id])
   user        User        @relation(fields: [userId], references: [id])
 

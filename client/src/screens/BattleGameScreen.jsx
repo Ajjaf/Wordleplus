@@ -83,10 +83,6 @@ function BattleGameScreen({
                 activeGuess={activeGuessForBattle}
                 errorShakeKey={shakeKey}
                 errorActiveRow={showActiveError}
-                maxTile={88}
-                minTile={48}
-                gap={6}
-                padding={10}
                 guessFlipKey={guessFlipKey}
               />
             </div>
@@ -302,16 +298,12 @@ function BattleGameScreen({
                 </div>
               )}
               */}
-              <div className="w-full max-w-[min(1100px,95vw)] max-h-[calc(100dvh-260px)] flex items-center justify-center min-h-0">
+              <div className="w-full max-w-[min(1100px,95vw)] flex items-center justify-center min-h-0">
                 <Board
                   guesses={me?.guesses || []}
                   activeGuess={activeGuessForBattle}
                   errorShakeKey={shakeKey}
                   errorActiveRow={showActiveError}
-                  maxTile={112}
-                  minTile={56}
-                  gap={10}
-                  padding={12}
                   guessFlipKey={guessFlipKey}
                 />
               </div>
@@ -326,10 +318,6 @@ function BattleGameScreen({
                     activeGuess={activeGuessForBattle}
                     errorShakeKey={shakeKey}
                     errorActiveRow={showActiveError}
-                    maxTile={112}
-                    minTile={56}
-                    gap={10}
-                    padding={12}
                     guessFlipKey={guessFlipKey}
                   />
                 </div>

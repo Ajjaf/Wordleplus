@@ -12,10 +12,10 @@ export default function Board({
   // layout & visuals
   gap = 8,
   tile = 48, // fallback tile for non-autoFit
-  padding = 16, // internal padding, matches p-4 feel
+  padding = 12, // internal padding
   autoFit = true, // auto-fit to parent (width & height). Set false for fixed tile grids (spectate)
-  minTile = 28, // clamp to keep cells usable on tiny screens
-  maxTile = 92, // clamp to avoid giant tiles on large screens
+  minTile = 36, // clamp to keep cells usable and readable on mobile
+  maxTile = 72, // clamp to balance mobile constraints with desktop space
   showGuessesLabel = true,
   // player attribution for shared boards
   players = {}, // { [playerId]: { name, ... } } for showing who made each guess
