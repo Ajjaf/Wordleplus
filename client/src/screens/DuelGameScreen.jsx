@@ -55,6 +55,8 @@ function DuelGameScreen({
   const opponentRequestedRematch = !!opponent?.rematchRequested;
   const bothRequestedRematch = hasRequestedRematch && opponentRequestedRematch;
   const canGuess = isGameStarted && !isGameEnded;
+  const showSecretEntry = !isGameStarted && !isGameEnded;
+  const showBoardArea = isGameStarted || isGameEnded;
   const myGuesses = me?.guesses || [];
   const latestGuessWord = myGuesses.length
     ? (myGuesses[myGuesses.length - 1]?.guess || "").toUpperCase()
@@ -542,161 +544,180 @@ function DuelGameScreen({
             )}
 
             {/* Secret Word Entry Section */}
-            <div className="flex flex-col items-center gap-2">
-              <div className="text-[10px] uppercase tracking-[0.35em] text-white/50 text-center">
-                Choose your secret word
-              </div>
-
-              {canSetSecret && secretWordInput.length === 5 && (
-                <div className="text-center text-xs text-white/70">
-                  Press <span className="font-semibold text-white">Enter</span>{" "}
-                  to lock your word
+            {showSecretEntry && (
+              <div className="flex flex-col items-center gap-2">
+                <div className="text-[10px] uppercase tracking-[0.35em] text-white/50 text-center">
+                  Choose your secret word
                 </div>
-              )}
 
-              <div
-                className="relative flex justify-center"
-                style={{
-                  width:
-                    secretRowWidth + (canSetSecret ? diceSize + secretGap : 0),
-                  minHeight: secretTileSize,
-                  paddingRight: canSetSecret ? diceSize + secretGap : 0,
-                }}
-              >
-                {/* Secret Word Tiles */}
+                {canSetSecret && secretWordInput.length === 5 && (
+                  <div className="text-center text-xs text-white/70">
+                    Press <span className="font-semibold text-white">Enter</span>{" "}
+                    to lock your word
+                  </div>
+                )}
+
                 <div
-                  className="flex"
+                  className="relative flex justify-center"
                   style={{
-                    gap: secretGap,
+                    width:
+                      secretRowWidth + (canSetSecret ? diceSize + secretGap : 0),
+                    minHeight: secretTileSize,
+                    paddingRight: canSetSecret ? diceSize + secretGap : 0,
                   }}
                 >
-                  {Array.from({ length: 5 }).map((_, i) => {
-                    const typingLen = secretWordInput.length;
-                    const show =
-                      mySecretState === "typing"
-                        ? secretWordInput.padEnd(5, " ")
-                        : mySecretWord || "";
-                    const letter = show[i] || "";
-                    const isEmpty = letter === "" || letter === " ";
-                    const isActive =
-                      mySecretState === "typing" && isEmpty && i === typingLen;
-
-                    let bg = "var(--tile-empty-bg)",
-                      color = "var(--tile-text)",
-                      border = "1px solid var(--tile-empty-border)";
-
-                    if (mySecretState === "set" && !isEmpty) {
-                      bg = "#e3f2fd";
-                      color = "#1976d2";
-                      border = "1px solid #1976d2";
-                    } else if (isActive) {
-                      bg = "var(--tile-typed-bg)";
-                      border = "1px solid #999";
-                    }
-
-                    if (secretErrorActive) {
-                      bg = "#fee2e2";
-                      color = "#991b1b";
-                      border = "1px solid #ef4444";
-                    }
-
-                    return (
-                      <div
-                        key={`secret-${i}`}
-                        className={secretErrorActive ? "tile-error" : ""}
-                        style={{
-                          width: secretTileSize,
-                          height: secretTileSize,
-                          display: "grid",
-                          placeItems: "center",
-                          background: bg,
-                          color,
-                          fontWeight: "bold",
-                          fontSize: secretFontSize,
-                          lineHeight: 1,
-                          textTransform: "uppercase",
-                          border,
-                          borderRadius: 6,
-                          overflow: "hidden",
-                          transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-                          transform:
-                            mySecretState === "typing" && isEmpty
-                              ? "scale(1.05)"
-                              : "scale(1)",
-                          boxShadow:
-                            mySecretState === "set" && !isEmpty
-                              ? "0 4px 12px rgba(25, 118, 210, 0.3)"
-                              : mySecretState === "typing" && isEmpty
-                              ? "0 2px 8px rgba(0, 0, 0, 0.2)"
-                              : "0 1px 3px rgba(0, 0, 0, 0.1)",
-                          animation:
-                            mySecretState === "typing" && isEmpty
-                              ? "pulse 1.5s ease-in-out infinite"
-                              : "none",
-                        }}
-                      >
-                        {mySecretState === "typing"
-                          ? letter.trim()
-                          : letter || ""}
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Generate Button */}
-                {canSetSecret && (
-                  <motion.button
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={handleGenerateSecret}
-                    disabled={genBusy}
-                    title="Generate a random word"
-                    aria-label="Generate a random word"
-                    className="w-12 h-12 rounded-full border border-white/20 bg-white/10 backdrop-blur-sm shadow-lg grid place-items-center text-xl"
-                    whileHover={{
-                      scale: 1.1,
-                      backgroundColor: "rgba(255, 255, 255, 0.15)",
-                    }}
-                    whileTap={{ scale: 0.95 }}
+                  {/* Secret Word Tiles */}
+                  <div
+                    className="flex"
                     style={{
-                      position: "absolute",
-                      right: 0,
-                      top: "50%",
-                      transform: "translateY(-50%)",
-                      width: diceSize,
-                      height: diceSize,
-                      fontSize: Math.round(diceSize * 0.45),
+                      gap: secretGap,
                     }}
                   >
-                    {genBusy ? "\u2026" : "\u{1F3B2}"}
-                  </motion.button>
-                )}
-              </div>
-            </div>
-            {/* Guesses Board Section */}
-            <div className="flex flex-col items-center gap-2 flex-1 min-h-0">
-              <div className="text-[10px] uppercase tracking-[0.35em] text-white/50 text-center flex-shrink-0">
-                Guesses
-              </div>
+                    {Array.from({ length: 5 }).map((_, i) => {
+                      const typingLen = secretWordInput.length;
+                      const show =
+                        mySecretState === "typing"
+                          ? secretWordInput.padEnd(5, " ")
+                          : mySecretWord || "";
+                      const letter = show[i] || "";
+                      const isEmpty = letter === "" || letter === " ";
+                      const isActive =
+                        mySecretState === "typing" && isEmpty && i === typingLen;
 
-              <div className="w-full flex-1 flex justify-center min-h-0">
-                <div className="w-full max-w-md h-full">
-                  <Board
-                    guesses={me?.guesses || []}
-                    activeGuess={activeGuessForMe}
-                    errorShakeKey={shakeKey}
-                    errorActiveRow={showActiveError}
-                    secretWord={null}
-                    isOwnBoard={true}
-                    autoFit={true}
-                    showGuessesLabel={false}
-                    secretWordReveal={showSecretReveal}
-                    guessFlipKey={guessFlipKey}
-                    onMeasure={handleBoardMeasure}
-                  />
+                      let bg = "var(--tile-empty-bg)",
+                        color = "var(--tile-text)",
+                        border = "1px solid var(--tile-empty-border)";
+
+                      if (mySecretState === "set" && !isEmpty) {
+                        bg = "#e3f2fd";
+                        color = "#1976d2";
+                        border = "1px solid #1976d2";
+                      } else if (isActive) {
+                        bg = "var(--tile-typed-bg)";
+                        border = "1px solid #999";
+                      }
+
+                      if (secretErrorActive) {
+                        bg = "#fee2e2";
+                        color = "#991b1b";
+                        border = "1px solid #ef4444";
+                      }
+
+                      return (
+                        <div
+                          key={`secret-${i}`}
+                          className={secretErrorActive ? "tile-error" : ""}
+                          style={{
+                            width: secretTileSize,
+                            height: secretTileSize,
+                            display: "grid",
+                            placeItems: "center",
+                            background: bg,
+                            color,
+                            fontWeight: "bold",
+                            fontSize: secretFontSize,
+                            lineHeight: 1,
+                            textTransform: "uppercase",
+                            border,
+                            borderRadius: 6,
+                            overflow: "hidden",
+                            transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                            transform:
+                              mySecretState === "typing" && isEmpty
+                                ? "scale(1.05)"
+                                : "scale(1)",
+                            boxShadow:
+                              mySecretState === "set" && !isEmpty
+                                ? "0 4px 12px rgba(25, 118, 210, 0.3)"
+                                : mySecretState === "typing" && isEmpty
+                                ? "0 2px 8px rgba(0, 0, 0, 0.2)"
+                                : "0 1px 3px rgba(0, 0, 0, 0.1)",
+                            animation:
+                              mySecretState === "typing" && isEmpty
+                                ? "pulse 1.5s ease-in-out infinite"
+                                : "none",
+                          }}
+                        >
+                          {mySecretState === "typing"
+                            ? letter.trim()
+                            : letter || ""}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Generate Button */}
+                  {canSetSecret && (
+                    <motion.button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={handleGenerateSecret}
+                      disabled={genBusy}
+                      title="Generate a random word"
+                      aria-label="Generate a random word"
+                      className="w-12 h-12 rounded-full border border-white/20 bg-white/10 backdrop-blur-sm shadow-lg grid place-items-center text-xl"
+                      whileHover={{
+                        scale: 1.1,
+                        backgroundColor: "rgba(255, 255, 255, 0.15)",
+                      }}
+                      whileTap={{ scale: 0.95 }}
+                      style={{
+                        position: "absolute",
+                        right: 0,
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        width: diceSize,
+                        height: diceSize,
+                        fontSize: Math.round(diceSize * 0.45),
+                      }}
+                    >
+                      {genBusy ? "\u2026" : "\u{1F3B2}"}
+                    </motion.button>
+                  )}
                 </div>
               </div>
-            </div>
+            )}
+            {/* Guesses Board Section */}
+            {showBoardArea ? (
+              <div
+                className={`flex flex-col items-center flex-1 min-h-0 ${
+                  isMobile ? "gap-1" : "gap-2"
+                }`}
+              >
+                <div className="text-[10px] uppercase tracking-[0.35em] text-white/50 text-center flex-shrink-0">
+                  Guesses
+                </div>
+
+                <div className="w-full flex-1 flex justify-center min-h-0">
+                  <div className="w-full max-w-md h-full">
+                    <Board
+                      guesses={me?.guesses || []}
+                      activeGuess={activeGuessForMe}
+                      errorShakeKey={shakeKey}
+                      errorActiveRow={showActiveError}
+                      secretWord={null}
+                      isOwnBoard={true}
+                      autoFit={true}
+                      showGuessesLabel={false}
+                      secretWordReveal={showSecretReveal}
+                      guessFlipKey={guessFlipKey}
+                      onMeasure={handleBoardMeasure}
+                      padding={isMobile ? 8 : 12}
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-3 flex-1 min-h-0 justify-center text-center px-6">
+                <div className="text-[10px] uppercase tracking-[0.35em] text-white/50">
+                  Guesses
+                </div>
+                <p className="text-sm text-white/60">
+                  The board appears once both players lock in their secret
+                  words and the round begins.
+                </p>
+              </div>
+            )}
           </div>
         </main>
 
