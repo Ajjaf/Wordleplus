@@ -64,15 +64,63 @@ function isValidWordLocal(word) {
 // ---------- Express app ----------
 const app = express();
 
+const DEFAULT_ALLOWED_ORIGINS = [
+  "http://localhost:5000",
+  "http://127.0.0.1:5000",
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+];
+
+const normalizeOrigin = (value) => {
+  if (!value) return null;
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+};
+
+const allowedOrigins = (() => {
+  const origins = new Set(
+    DEFAULT_ALLOWED_ORIGINS.map(normalizeOrigin).filter(Boolean)
+  );
+
+  const baseOrigin = normalizeOrigin(process.env.BASE_URL);
+  if (baseOrigin) {
+    origins.add(baseOrigin);
+  }
+
+  const extraOrigins =
+    process.env.CORS_ALLOWED_ORIGINS?.split(",") ?? [];
+  for (const origin of extraOrigins) {
+    const normalized = normalizeOrigin(origin.trim());
+    if (normalized) {
+      origins.add(normalized);
+    }
+  }
+
+  return Array.from(origins);
+})();
+
+const allowedOriginSet = new Set(allowedOrigins);
+
 const corsOptions = {
   origin: (origin, cb) => {
-    cb(null, true);
+    if (!origin) {
+      return cb(null, true);
+    }
+    const normalizedOrigin = normalizeOrigin(origin);
+    if (normalizedOrigin && allowedOriginSet.has(normalizedOrigin)) {
+      return cb(null, true);
+    }
+    return cb(new Error(`Origin ${origin} not allowed by CORS`));
   },
-  methods: ["GET", "POST", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "X-User-Id"],
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "X-User-Id", "Authorization"],
   credentials: true,
 };
 app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 app.use(express.json());
 app.use(cookieParser());
 
@@ -418,8 +466,9 @@ const httpServer = createServer(app);
 // const io = new Server(httpServer, { cors: corsOptions });
 const io = new Server(httpServer, {
   cors: {
-    origin: true, // or ['https://964d668fba0f.ngrok-free.app ']
+    origin: allowedOrigins.length > 0 ? allowedOrigins : true, // reflect exact origins for credentials
     methods: ["GET", "POST"],
+    credentials: true,
   },
   pingInterval: 10000, // send pings every 10s
   pingTimeout: 30000, // allow 30s before declaring dead
