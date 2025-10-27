@@ -47,6 +47,10 @@ function DuelGameScreen({
   // Generate random word
   const [genBusy, setGenBusy] = useState(false);
   const [boardMetrics, setBoardMetrics] = useState(null);
+  const [viewportHeight, setViewportHeight] = useState(() => {
+    if (typeof window === "undefined") return 0;
+    return window.visualViewport?.height ?? window.innerHeight;
+  });
 
   // Derived flags
   const isGameStarted = !!room?.started;
@@ -102,6 +106,53 @@ function DuelGameScreen({
       return prev;
     });
   }, []);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const vv = window.visualViewport;
+    const handleViewportChange = () => {
+      const next = vv?.height ?? window.innerHeight;
+      setViewportHeight(next);
+    };
+    handleViewportChange();
+    if (vv) {
+      vv.addEventListener("resize", handleViewportChange);
+      vv.addEventListener("scroll", handleViewportChange);
+      return () => {
+        vv.removeEventListener("resize", handleViewportChange);
+        vv.removeEventListener("scroll", handleViewportChange);
+      };
+    }
+    window.addEventListener("resize", handleViewportChange);
+    return () => {
+      window.removeEventListener("resize", handleViewportChange);
+    };
+  }, []);
+  const boardTileBounds = useMemo(() => {
+    const defaults = {
+      min: isMobile ? 34 : 36,
+      max: isMobile ? 60 : 72,
+    };
+
+    if (!viewportHeight) {
+      return defaults;
+    }
+
+    if (viewportHeight < 520) {
+      return { min: 30, max: 40 };
+    }
+
+    if (viewportHeight < 600) {
+      return { min: 32, max: isMobile ? 46 : 52 };
+    }
+
+    if (viewportHeight < 680) {
+      return { min: 34, max: isMobile ? 54 : 64 };
+    }
+
+    return defaults;
+  }, [viewportHeight, isMobile]);
+  const boardPadding =
+    viewportHeight && viewportHeight < 560 ? 6 : isMobile ? 8 : 12;
 
   const [secretErrorActive, setSecretErrorActive] = useState(false);
   const [secretErrorKey, setSecretErrorKey] = useState(0);
@@ -426,10 +477,18 @@ function DuelGameScreen({
         <ConfettiEffect trigger={showConfetti} />
 
         {/* Game Status */}
-        <div className="px-3 pt-3 pb-2">
-          <div className="flex items-center justify-between gap-4 mb-3">
+        <div className={`px-3 ${isMobile ? "pt-2 pb-2" : "pt-3 pb-3"}`}>
+          <div
+            className={`flex items-center justify-between gap-4 ${
+              isMobile ? "mb-2" : "mb-3"
+            }`}
+          >
             <div className="flex-1 text-center">
-              <h2 className="text-base md:text-lg font-semibold text-white">
+              <h2
+                className={`font-semibold text-white ${
+                  isMobile ? "text-sm" : "text-base md:text-lg"
+                }`}
+              >
                 {isGameEnded ? (
                   bothRequestedRematch ? (
                     "Rematch starting..."
@@ -437,16 +496,26 @@ function DuelGameScreen({
                     "Game ended - ready for rematch?"
                   )
                 ) : deadline ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <span className="text-white/70">Time Remaining:</span>
+                  <span
+                    className={`flex items-center justify-center ${
+                      isMobile ? "gap-1" : "gap-2"
+                    }`}
+                  >
                     <span
-                      className={`font-mono px-3 py-1 rounded-xl ${
+                      className={`text-white/70 ${
+                        isMobile ? "text-xs uppercase tracking-[0.3em]" : ""
+                      }`}
+                    >
+                      Time Remaining:
+                    </span>
+                    <span
+                      className={`font-mono rounded-xl ${
                         low
                           ? "bg-red-500/20 text-red-300 border border-red-500/30"
                           : warn
                           ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
                           : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                      }`}
+                      } ${isMobile ? "px-2 py-0.5 text-sm" : "px-3 py-1"}`}
                     >
                       {timerLabel}
                     </span>
@@ -458,7 +527,12 @@ function DuelGameScreen({
 
           {/* Modern gradient progress bar when round is live */}
           {!isGameEnded && deadline && (
-            <div className="mx-auto mt-2 w-full max-w-xl h-2 rounded-full bg-white/10 overflow-hidden">
+            <div
+              className={`mx-auto w-full max-w-xl overflow-hidden rounded-full bg-white/10 ${
+                isMobile ? "mt-1" : "mt-2"
+              }`}
+              style={{ height: isMobile ? 6 : 8 }}
+            >
               <motion.div
                 className={`h-full rounded-full ${
                   low
@@ -683,7 +757,7 @@ function DuelGameScreen({
                         transformOrigin: "center",
                       }}
                     >
-                      🎲
+                      {"\u{1F3B2}"}
                     </motion.button>
                   )}
                 </div>
@@ -714,7 +788,9 @@ function DuelGameScreen({
                       secretWordReveal={showSecretReveal}
                       guessFlipKey={guessFlipKey}
                       onMeasure={handleBoardMeasure}
-                      padding={isMobile ? 8 : 12}
+                      padding={boardPadding}
+                      minTile={boardTileBounds.min}
+                      maxTile={boardTileBounds.max}
                     />
                   </div>
                 </div>
@@ -781,3 +857,5 @@ function DuelGameScreen({
 }
 
 export default DuelGameScreen;
+
+
