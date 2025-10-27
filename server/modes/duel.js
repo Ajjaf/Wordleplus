@@ -47,12 +47,7 @@ function computeDuelWinner(room) {
       const [a, b] = ids;
       const A = room.players[a];
       const B = room.players[b];
-      if (winner !== "draw") {
-        const loser = winner === a ? b : a;
-        room.players[winner].wins = (room.players[winner].wins || 0) + 1;
-        room.players[winner].streak = (room.players[winner].streak || 0) + 1;
-        room.players[loser].streak = 0;
-      } else {
+      if (winner === "draw") {
         A.streak = 0;
         B.streak = 0;
       }

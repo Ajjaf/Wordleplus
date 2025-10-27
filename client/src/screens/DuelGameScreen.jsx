@@ -47,6 +47,10 @@ function DuelGameScreen({
   // Generate random word
   const [genBusy, setGenBusy] = useState(false);
   const [boardMetrics, setBoardMetrics] = useState(null);
+  const [viewportHeight, setViewportHeight] = useState(() => {
+    if (typeof window === "undefined") return 0;
+    return window.visualViewport?.height ?? window.innerHeight;
+  });
 
   // Derived flags
   const isGameStarted = !!room?.started;
@@ -82,6 +86,13 @@ function DuelGameScreen({
   const secretRowWidth = secretTileSize * 5 + secretGap * 4;
   const diceSize = Math.max(36, Math.min(48, secretTileSize));
   const secretFontSize = Math.max(18, secretTileSize * 0.55);
+  const getInitial = (value, fallback) => {
+    if (typeof value !== "string") return fallback;
+    const trimmed = value.trim();
+    return trimmed ? trimmed.charAt(0).toUpperCase() : fallback;
+  };
+  const myAvatarInitial = getInitial(me?.name, "Y");
+  const opponentAvatarInitial = getInitial(opponent?.name, "?");
   const handleBoardMeasure = useCallback((metrics) => {
     setBoardMetrics((prev) => {
       if (
@@ -95,6 +106,53 @@ function DuelGameScreen({
       return prev;
     });
   }, []);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const vv = window.visualViewport;
+    const handleViewportChange = () => {
+      const next = vv?.height ?? window.innerHeight;
+      setViewportHeight(next);
+    };
+    handleViewportChange();
+    if (vv) {
+      vv.addEventListener("resize", handleViewportChange);
+      vv.addEventListener("scroll", handleViewportChange);
+      return () => {
+        vv.removeEventListener("resize", handleViewportChange);
+        vv.removeEventListener("scroll", handleViewportChange);
+      };
+    }
+    window.addEventListener("resize", handleViewportChange);
+    return () => {
+      window.removeEventListener("resize", handleViewportChange);
+    };
+  }, []);
+  const boardTileBounds = useMemo(() => {
+    const defaults = {
+      min: isMobile ? 34 : 36,
+      max: isMobile ? 60 : 72,
+    };
+
+    if (!viewportHeight) {
+      return defaults;
+    }
+
+    if (viewportHeight < 520) {
+      return { min: 30, max: 40 };
+    }
+
+    if (viewportHeight < 600) {
+      return { min: 32, max: isMobile ? 46 : 52 };
+    }
+
+    if (viewportHeight < 680) {
+      return { min: 34, max: isMobile ? 54 : 64 };
+    }
+
+    return defaults;
+  }, [viewportHeight, isMobile]);
+  const boardPadding =
+    viewportHeight && viewportHeight < 560 ? 6 : isMobile ? 8 : 12;
 
   const [secretErrorActive, setSecretErrorActive] = useState(false);
   const [secretErrorKey, setSecretErrorKey] = useState(0);
@@ -419,10 +477,18 @@ function DuelGameScreen({
         <ConfettiEffect trigger={showConfetti} />
 
         {/* Game Status */}
-        <div className="px-3 pt-3 pb-2">
-          <div className="flex items-center justify-between gap-4 mb-3">
+        <div className={`px-3 ${isMobile ? "pt-2 pb-2" : "pt-3 pb-3"}`}>
+          <div
+            className={`flex items-center justify-between gap-4 ${
+              isMobile ? "mb-2" : "mb-3"
+            }`}
+          >
             <div className="flex-1 text-center">
-              <h2 className="text-base md:text-lg font-semibold text-white">
+              <h2
+                className={`font-semibold text-white ${
+                  isMobile ? "text-sm" : "text-base md:text-lg"
+                }`}
+              >
                 {isGameEnded ? (
                   bothRequestedRematch ? (
                     "Rematch starting..."
@@ -430,16 +496,26 @@ function DuelGameScreen({
                     "Game ended - ready for rematch?"
                   )
                 ) : deadline ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <span className="text-white/70">Time Remaining:</span>
+                  <span
+                    className={`flex items-center justify-center ${
+                      isMobile ? "gap-1" : "gap-2"
+                    }`}
+                  >
                     <span
-                      className={`font-mono px-3 py-1 rounded-xl ${
+                      className={`text-white/70 ${
+                        isMobile ? "text-xs uppercase tracking-[0.3em]" : ""
+                      }`}
+                    >
+                      Time Remaining:
+                    </span>
+                    <span
+                      className={`font-mono rounded-xl ${
                         low
                           ? "bg-red-500/20 text-red-300 border border-red-500/30"
                           : warn
                           ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
                           : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                      }`}
+                      } ${isMobile ? "px-2 py-0.5 text-sm" : "px-3 py-1"}`}
                     >
                       {timerLabel}
                     </span>
@@ -451,7 +527,12 @@ function DuelGameScreen({
 
           {/* Modern gradient progress bar when round is live */}
           {!isGameEnded && deadline && (
-            <div className="mx-auto mt-2 w-full max-w-xl h-2 rounded-full bg-white/10 overflow-hidden">
+            <div
+              className={`mx-auto w-full max-w-xl overflow-hidden rounded-full bg-white/10 ${
+                isMobile ? "mt-1" : "mt-2"
+              }`}
+              style={{ height: isMobile ? 6 : 8 }}
+            >
               <motion.div
                 className={`h-full rounded-full ${
                   low
@@ -512,7 +593,7 @@ function DuelGameScreen({
                   name={me?.name || "You"}
                   wins={me?.wins}
                   streak={me?.streak}
-                  avatar="\u{1F642}"
+                  avatar={myAvatarInitial}
                   host={room?.hostId === me?.id}
                   isTyping={canSetSecret && !!secretWordInput}
                   hasSecret={myReady}
@@ -528,7 +609,7 @@ function DuelGameScreen({
                   name={opponent?.name || "?"}
                   wins={opponent?.wins}
                   streak={opponent?.streak}
-                  avatar="\u{1F916}"
+                  avatar={opponentAvatarInitial}
                   host={room?.hostId === opponent?.id}
                   isTyping={false}
                   hasSecret={oppReady || isGameStarted}
@@ -552,8 +633,9 @@ function DuelGameScreen({
 
                 {canSetSecret && secretWordInput.length === 5 && (
                   <div className="text-center text-xs text-white/70">
-                    Press <span className="font-semibold text-white">Enter</span>{" "}
-                    to lock your word
+                    Press{" "}
+                    <span className="font-semibold text-white">Enter</span> to
+                    lock your word
                   </div>
                 )}
 
@@ -561,7 +643,8 @@ function DuelGameScreen({
                   className="relative flex justify-center"
                   style={{
                     width:
-                      secretRowWidth + (canSetSecret ? diceSize + secretGap : 0),
+                      secretRowWidth +
+                      (canSetSecret ? diceSize + secretGap : 0),
                     minHeight: secretTileSize,
                     paddingRight: canSetSecret ? diceSize + secretGap : 0,
                   }}
@@ -582,7 +665,9 @@ function DuelGameScreen({
                       const letter = show[i] || "";
                       const isEmpty = letter === "" || letter === " ";
                       const isActive =
-                        mySecretState === "typing" && isEmpty && i === typingLen;
+                        mySecretState === "typing" &&
+                        isEmpty &&
+                        i === typingLen;
 
                       let bg = "var(--tile-empty-bg)",
                         color = "var(--tile-text)",
@@ -665,13 +750,14 @@ function DuelGameScreen({
                         position: "absolute",
                         right: 0,
                         top: "50%",
-                        transform: "translateY(-50%)",
+                        marginTop: -(diceSize / 2),
                         width: diceSize,
                         height: diceSize,
                         fontSize: Math.round(diceSize * 0.45),
+                        transformOrigin: "center",
                       }}
                     >
-                      {genBusy ? "\u2026" : "\u{1F3B2}"}
+                      {"\u{1F3B2}"}
                     </motion.button>
                   )}
                 </div>
@@ -702,7 +788,9 @@ function DuelGameScreen({
                       secretWordReveal={showSecretReveal}
                       guessFlipKey={guessFlipKey}
                       onMeasure={handleBoardMeasure}
-                      padding={isMobile ? 8 : 12}
+                      padding={boardPadding}
+                      minTile={boardTileBounds.min}
+                      maxTile={boardTileBounds.max}
                     />
                   </div>
                 </div>
@@ -713,8 +801,8 @@ function DuelGameScreen({
                   Guesses
                 </div>
                 <p className="text-sm text-white/60">
-                  The board appears once both players lock in their secret
-                  words and the round begins.
+                  The board appears once both players lock in their secret words
+                  and the round begins.
                 </p>
               </div>
             )}
@@ -769,3 +857,5 @@ function DuelGameScreen({
 }
 
 export default DuelGameScreen;
+
+

@@ -27,7 +27,12 @@ const WORDLIST_PATH =
 
 let WORDS = [];
 let WORDSET = new Set();
-const ROUND_MS = Number(process.env.DUEL_ROUND_MS || 360000); // 2 minutes
+const DEFAULT_ROUND_MS = 6 * 60 * 1000; // 6 minutes
+const envRoundMs = Number(process.env.DUEL_ROUND_MS);
+const ROUND_MS =
+  Number.isFinite(envRoundMs) && envRoundMs > 0
+    ? Math.min(envRoundMs, DEFAULT_ROUND_MS)
+    : DEFAULT_ROUND_MS;
 
 function loadWords() {
   const raw = fs.readFileSync(WORDLIST_PATH, "utf8");
@@ -457,6 +462,13 @@ function handleDuelTimeout(roomId) {
   const room = rooms.get(roomId);
   if (!room || room.mode !== "duel") return;
   duelMode.resolveDuelTimeout({ room });
+  if (room.winner && room.winner !== "draw") {
+    updateStatsOnWin(room, room.winner);
+  } else if (room.winner === "draw") {
+    Object.keys(room.players).forEach((id) => {
+      room.players[id].streak = 0;
+    });
+  }
   duelMode.clearDuelTimer(room);
   io.to(roomId).emit("roomState", sanitizeRoom(room));
 }
