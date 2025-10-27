@@ -85,6 +85,15 @@ const normalizeOrigin = (value) => {
   }
 };
 
+const getHostname = (value) => {
+  if (!value) return null;
+  try {
+    return new URL(value).hostname;
+  } catch {
+    return null;
+  }
+};
+
 const allowedOrigins = (() => {
   const origins = new Set(
     DEFAULT_ALLOWED_ORIGINS.map(normalizeOrigin).filter(Boolean)
@@ -108,18 +117,54 @@ const allowedOrigins = (() => {
 })();
 
 const allowedOriginSet = new Set(allowedOrigins);
+const allowedOriginSuffixes =
+  process.env.CORS_ALLOWED_ORIGIN_SUFFIXES?.split(",")
+    .map((suffix) => suffix.trim())
+    .filter(Boolean) ?? [];
+
+const hostnameMatchesSuffix = (hostname, suffix) => {
+  if (!hostname || !suffix) return false;
+  const normalizedHostname = hostname.toLowerCase();
+  const cleanedSuffix = suffix
+    .toLowerCase()
+    .replace(/^\*\./, "")
+    .replace(/^https?:\/\//, "")
+    .replace(/\/$/, "")
+    .replace(/^\./, "");
+
+  return (
+    normalizedHostname === cleanedSuffix ||
+    normalizedHostname.endsWith(`.${cleanedSuffix}`)
+  );
+};
+
+const isOriginAllowed = (origin) => {
+  if (!origin) return false;
+  if (allowedOriginSet.has(origin)) {
+    return true;
+  }
+
+  const hostname = getHostname(origin);
+  return allowedOriginSuffixes.some((suffix) =>
+    hostnameMatchesSuffix(hostname, suffix)
+  );
+};
+
+const evaluateCorsOrigin = (origin, cb) => {
+  if (!origin) {
+    return cb(null, true);
+  }
+
+  const normalizedOrigin = normalizeOrigin(origin);
+  if (normalizedOrigin && isOriginAllowed(normalizedOrigin)) {
+    return cb(null, true);
+  }
+
+  return cb(new Error(`Origin ${origin} not allowed by CORS`));
+};
 
 const corsOptions = {
-  origin: (origin, cb) => {
-    if (!origin) {
-      return cb(null, true);
-    }
-    const normalizedOrigin = normalizeOrigin(origin);
-    if (normalizedOrigin && allowedOriginSet.has(normalizedOrigin)) {
-      return cb(null, true);
-    }
-    return cb(new Error(`Origin ${origin} not allowed by CORS`));
-  },
+  origin: evaluateCorsOrigin,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "X-User-Id", "Authorization"],
   credentials: true,
@@ -478,7 +523,7 @@ const httpServer = createServer(app);
 // const io = new Server(httpServer, { cors: corsOptions });
 const io = new Server(httpServer, {
   cors: {
-    origin: allowedOrigins.length > 0 ? allowedOrigins : true, // reflect exact origins for credentials
+    origin: evaluateCorsOrigin,
     methods: ["GET", "POST"],
     credentials: true,
   },
