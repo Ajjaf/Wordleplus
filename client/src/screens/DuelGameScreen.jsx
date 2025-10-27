@@ -82,6 +82,13 @@ function DuelGameScreen({
   const secretRowWidth = secretTileSize * 5 + secretGap * 4;
   const diceSize = Math.max(36, Math.min(48, secretTileSize));
   const secretFontSize = Math.max(18, secretTileSize * 0.55);
+  const getInitial = (value, fallback) => {
+    if (typeof value !== "string") return fallback;
+    const trimmed = value.trim();
+    return trimmed ? trimmed.charAt(0).toUpperCase() : fallback;
+  };
+  const myAvatarInitial = getInitial(me?.name, "Y");
+  const opponentAvatarInitial = getInitial(opponent?.name, "?");
   const handleBoardMeasure = useCallback((metrics) => {
     setBoardMetrics((prev) => {
       if (
@@ -512,7 +519,7 @@ function DuelGameScreen({
                   name={me?.name || "You"}
                   wins={me?.wins}
                   streak={me?.streak}
-                  avatar="\u{1F642}"
+                  avatar={myAvatarInitial}
                   host={room?.hostId === me?.id}
                   isTyping={canSetSecret && !!secretWordInput}
                   hasSecret={myReady}
@@ -528,7 +535,7 @@ function DuelGameScreen({
                   name={opponent?.name || "?"}
                   wins={opponent?.wins}
                   streak={opponent?.streak}
-                  avatar="\u{1F916}"
+                  avatar={opponentAvatarInitial}
                   host={room?.hostId === opponent?.id}
                   isTyping={false}
                   hasSecret={oppReady || isGameStarted}
@@ -552,8 +559,9 @@ function DuelGameScreen({
 
                 {canSetSecret && secretWordInput.length === 5 && (
                   <div className="text-center text-xs text-white/70">
-                    Press <span className="font-semibold text-white">Enter</span>{" "}
-                    to lock your word
+                    Press{" "}
+                    <span className="font-semibold text-white">Enter</span> to
+                    lock your word
                   </div>
                 )}
 
@@ -561,7 +569,8 @@ function DuelGameScreen({
                   className="relative flex justify-center"
                   style={{
                     width:
-                      secretRowWidth + (canSetSecret ? diceSize + secretGap : 0),
+                      secretRowWidth +
+                      (canSetSecret ? diceSize + secretGap : 0),
                     minHeight: secretTileSize,
                     paddingRight: canSetSecret ? diceSize + secretGap : 0,
                   }}
@@ -582,7 +591,9 @@ function DuelGameScreen({
                       const letter = show[i] || "";
                       const isEmpty = letter === "" || letter === " ";
                       const isActive =
-                        mySecretState === "typing" && isEmpty && i === typingLen;
+                        mySecretState === "typing" &&
+                        isEmpty &&
+                        i === typingLen;
 
                       let bg = "var(--tile-empty-bg)",
                         color = "var(--tile-text)",
@@ -665,13 +676,14 @@ function DuelGameScreen({
                         position: "absolute",
                         right: 0,
                         top: "50%",
-                        transform: "translateY(-50%)",
+                        marginTop: -(diceSize / 2),
                         width: diceSize,
                         height: diceSize,
                         fontSize: Math.round(diceSize * 0.45),
+                        transformOrigin: "center",
                       }}
                     >
-                      {genBusy ? "\u2026" : "\u{1F3B2}"}
+                      🎲
                     </motion.button>
                   )}
                 </div>
@@ -713,8 +725,8 @@ function DuelGameScreen({
                   Guesses
                 </div>
                 <p className="text-sm text-white/60">
-                  The board appears once both players lock in their secret
-                  words and the round begins.
+                  The board appears once both players lock in their secret words
+                  and the round begins.
                 </p>
               </div>
             )}
