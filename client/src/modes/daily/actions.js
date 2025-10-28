@@ -1,3 +1,5 @@
+import { buildApiUrl } from "../../config";
+
 const JSON_HEADERS = {
   "Content-Type": "application/json",
 };
@@ -28,7 +30,7 @@ export function createActions() {
     async loadChallenge() {
       try {
         const userId = getOrCreateUserId();
-        const res = await fetch("/api/daily", {
+        const res = await fetch(buildApiUrl("/api/daily"), {
           method: "GET",
           credentials: "include",
           headers: {
@@ -55,7 +57,7 @@ export function createActions() {
     async submitGuess(guess) {
       try {
         const userId = getOrCreateUserId();
-        const res = await fetch("/api/daily/guess", {
+        const res = await fetch(buildApiUrl("/api/daily/guess"), {
           method: "POST",
           credentials: "include",
           headers: {

@@ -6,6 +6,7 @@ import DailyChallengeHero from "../components/ui/DailyChallengeHero";
 import AnimatedGameCard from "../components/ui/AnimatedGameCard";
 import GlowButton from "../components/ui/GlowButton";
 import { useAuth } from "../contexts/AuthContext";
+import { buildApiUrl } from "../config";
 
 const DEFAULT_DAILY_STATS = {
   currentStreak: 0,
@@ -73,7 +74,7 @@ export default function HomeScreenV2({
 
     async function loadDailyStats() {
       try {
-        const response = await fetch("/api/daily/stats", {
+        const response = await fetch(buildApiUrl("/api/daily/stats"), {
           credentials: "include",
         });
 

@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
+import { buildApiUrl } from "../config";
 
 const AuthContext = createContext(null);
 
@@ -13,7 +14,7 @@ export function AuthProvider({ children }) {
   async function loadUser() {
     try {
       setIsLoading(true);
-      const response = await fetch("/api/auth/user", {
+      const response = await fetch(buildApiUrl("/api/auth/user"), {
         credentials: "include",
       });
       
@@ -41,7 +42,9 @@ export function AuthProvider({ children }) {
     params.set("redirect", window.location.href);
 
     const queryString = params.toString();
-    window.location.href = `/api/login${queryString ? `?${queryString}` : ""}`;
+    window.location.href = buildApiUrl(
+      `/api/login${queryString ? `?${queryString}` : ""}`
+    );
   }
 
   function login() {
@@ -56,9 +59,9 @@ export function AuthProvider({ children }) {
     if (typeof window === "undefined") return;
 
     const redirectTarget = window.location.origin;
-    window.location.href = `/api/logout?redirect=${encodeURIComponent(
-      redirectTarget
-    )}`;
+    window.location.href = buildApiUrl(
+      `/api/logout?redirect=${encodeURIComponent(redirectTarget)}`
+    );
   }
 
   const value = {
