@@ -13,3 +13,11 @@ const localDefault =
     : fromWindow;
 
 export const SERVER_URL = fromEnv || localDefault || "http://localhost:8080";
+
+export function buildApiUrl(path = "") {
+  if (!path) return SERVER_URL;
+  if (path.startsWith("http://") || path.startsWith("https://")) {
+    return path;
+  }
+  return `${SERVER_URL}${path.startsWith("/") ? path : `/${path}`}`;
+}

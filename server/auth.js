@@ -219,7 +219,6 @@ export async function setupAuth(app) {
   passport.deserializeUser((user, cb) => cb(null, user));
 
   // Login route
-  // Login route
   app.get("/api/login", (req, res, next) => {
     const hostOnly = (req.headers.host || "").split(":")[0]; // drop port
     if (req.session) {
@@ -229,7 +228,8 @@ export async function setupAuth(app) {
     const authMode = req.query.mode === "signup" ? "signup" : "login";
     const authOptions = {
       scope: ["openid", "email", "profile"],
-      prompt: authMode === "signup" ? "consent select_account" : "login consent",
+      prompt:
+        authMode === "signup" ? "consent select_account" : "login consent",
     };
 
     if (authMode === "signup") {
