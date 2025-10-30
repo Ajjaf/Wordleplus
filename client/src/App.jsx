@@ -780,7 +780,9 @@ export default function App() {
                       }
                     }}
                     onStartAiRound={async () => {
-                      console.debug("onStartAiRound called", { roomId: room?.id });
+                      console.debug("onStartAiRound called", {
+                        roomId: room?.id,
+                      });
                       if (!room?.id) {
                         const error = "No room id available";
                         setMsg(error);
@@ -791,15 +793,21 @@ export default function App() {
                         if (!aiBattleActions?.startRound) {
                           throw new Error("AI battle actions not available");
                         }
-                        const result = await aiBattleActions.startRound(room.id);
-                        console.debug("aiBattleActions.startRound result", result);
+                        const result = await aiBattleActions.startRound(
+                          room.id
+                        );
+                        console.debug(
+                          "aiBattleActions.startRound result",
+                          result
+                        );
                         if (result?.error) {
                           setMsg(result.error);
                           return result;
                         }
                         return { success: true };
                       } catch (err) {
-                        const error = err?.message || "Failed to start AI battle";
+                        const error =
+                          err?.message || "Failed to start AI battle";
                         setMsg(error);
                         console.error("onStartAiRound error", err);
                         return { error };
@@ -858,15 +866,21 @@ export default function App() {
                         if (!aiBattleActions?.startRound) {
                           throw new Error("AI battle actions not available");
                         }
-                        const result = await aiBattleActions.startRound(room.id);
-                        console.debug("aiBattleActions.startRound result", result);
+                        const result = await aiBattleActions.startRound(
+                          room.id
+                        );
+                        console.debug(
+                          "aiBattleActions.startRound result",
+                          result
+                        );
                         if (result?.error) {
                           setMsg(result.error);
                           return result;
                         }
                         return { success: true };
                       } catch (err) {
-                        const error = err?.message || "Failed to start AI battle";
+                        const error =
+                          err?.message || "Failed to start AI battle";
                         setMsg(error);
                         console.error("onStartAiRound error", err);
                         return { error };

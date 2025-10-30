@@ -48,6 +48,7 @@ export default function ProfileModal({ open, onOpenChange, view = "profile" }) {
     typeof window !== "undefined"
       ? window.localStorage?.getItem("wp.lastName")?.trim()
       : "";
+
   const playerName =
     (user.displayName && user.displayName.trim()) ||
     storedName ||
@@ -177,7 +178,9 @@ export default function ProfileModal({ open, onOpenChange, view = "profile" }) {
                   <div className="flex-1">
                     <p className="text-sm font-semibold text-white">{title}</p>
                     {description && (
-                      <p className="text-xs text-white/60 mt-1">{description}</p>
+                      <p className="text-xs text-white/60 mt-1">
+                        {description}
+                      </p>
                     )}
                     {earnedAt && !Number.isNaN(earnedAt.valueOf()) && (
                       <p className="text-[11px] text-white/40 mt-1">
@@ -199,7 +202,9 @@ export default function ProfileModal({ open, onOpenChange, view = "profile" }) {
   );
 
   const content =
-    activeView === "achievements" ? renderAchievementsSection() : renderStatsSection();
+    activeView === "achievements"
+      ? renderAchievementsSection()
+      : renderStatsSection();
 
   return createPortal(
     <AnimatePresence>
