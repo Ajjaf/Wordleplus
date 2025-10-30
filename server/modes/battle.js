@@ -1,4 +1,4 @@
-function nonHostPlayerIds(room) {
+﻿function nonHostPlayerIds(room) {
   return Object.keys(room.players || {}).filter((pid) => pid !== room.hostId);
 }
 
@@ -8,6 +8,10 @@ export function initBattleRoom(room) {
     started: false,
     winner: null,
     lastRevealedWord: null,
+    deadline: null,
+    countdownEndsAt: null,
+    aiHost: null,
+    pendingStart: false,
   };
 }
 
@@ -40,6 +44,8 @@ export function endBattleRound(room, winnerId, { updateStatsOnWin }) {
   room.battle.started = false;
   room.battle.winner = winnerId || null;
   room.battle.lastRevealedWord = room.battle.secret || null;
+  room.battle.deadline = null;
+  room.battle.countdownEndsAt = null;
   nonHostPlayerIds(room).forEach((pid) => {
     room.players[pid].done = true;
   });
@@ -91,6 +97,8 @@ export function resetBattleRound(room) {
   room.battle.started = false;
   room.battle.winner = null;
   room.roundClosed = false;
+  room.battle.deadline = null;
+  room.battle.countdownEndsAt = null;
 }
 
 export function sanitizeBattle(room) {
@@ -101,5 +109,16 @@ export function sanitizeBattle(room) {
     hasSecret: !!room.battle.secret,
     secret: null,
     lastRevealedWord: room.battle.lastRevealedWord || null,
+    deadline: room.battle.deadline ?? null,
+    countdownEndsAt: room.battle.countdownEndsAt ?? null,
+    pendingStart: room.battle.pendingStart ?? false,
+    aiHost: room.battle.aiHost
+      ? {
+          mode: room.battle.aiHost.mode,
+          claimedBy: room.battle.aiHost.claimedBy || null,
+          pendingStart: room.battle.aiHost.pendingStart ?? room.battle.pendingStart ?? false,
+        }
+      : null,
   };
 }
+
