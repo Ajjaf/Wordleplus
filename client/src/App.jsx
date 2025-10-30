@@ -11,6 +11,7 @@ import HostSpectateScreen from "./screens/HostSpectateScreen.jsx";
 import VictoryModal from "./components/VictoryModal.jsx";
 import NavHeaderV2 from "./components/ui/NavHeaderV2.jsx";
 import Backdrop from "./components/Backdrop.jsx";
+import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import { RefreshCw } from "lucide-react";
 
 // Extracted Hooks
@@ -691,86 +692,94 @@ export default function App() {
             <div className="h-full overflow-hidden">
               {/* DUEL GAME */}
               {room?.mode === "duel" && (
-                <DuelGameScreen
-                  room={room}
-                  me={me}
-                  opponent={opponent}
-                  currentGuess={currentGuess}
-                  shakeKey={shakeKey}
-                  showActiveError={showActiveError}
-                  letterStates={letterStates}
-                  onKeyPress={handleDuelKey}
-                  onSubmitSecret={async (secret) => {
-                    const result = await duelActions.submitSecret(
-                      roomId,
-                      secret
-                    ); // { ok: true } or { error: "..." }
-                    if (result?.error) setMsg(result.error);
-                    return result;
-                  }}
-                  onRematch={async () => {
-                    try {
-                      await duelActions.playAgain(roomId);
-                    } catch (e) {
-                      // no-op; UI will still update via roomState events
-                    }
-                  }}
-                />
+                <ErrorBoundary componentName="Duel Game" onReset={() => setScreen("home")}>
+                  <DuelGameScreen
+                    room={room}
+                    me={me}
+                    opponent={opponent}
+                    currentGuess={currentGuess}
+                    shakeKey={shakeKey}
+                    showActiveError={showActiveError}
+                    letterStates={letterStates}
+                    onKeyPress={handleDuelKey}
+                    onSubmitSecret={async (secret) => {
+                      const result = await duelActions.submitSecret(
+                        roomId,
+                        secret
+                      ); // { ok: true } or { error: "..." }
+                      if (result?.error) setMsg(result.error);
+                      return result;
+                    }}
+                    onRematch={async () => {
+                      try {
+                        await duelActions.playAgain(roomId);
+                      } catch (e) {
+                        // no-op; UI will still update via roomState events
+                      }
+                    }}
+                  />
+                </ErrorBoundary>
               )}
 
               {/* SHARED DUEL */}
               {room?.mode === "shared" && (
-                <SharedDuelGameScreen
-                  room={room}
-                  me={me}
-                  currentGuess={currentGuess}
-                  letterStates={letterStates}
-                  onKeyPress={handleDuelKey}
-                  onStartShared={async () => {
-                    const res = await sharedActions.startRound(roomId);
-                    if (res?.error) {
-                      console.error("Start shared error:", res.error);
-                      setMsg(res.error || "Failed to start shared duel");
-                    }
-                    return res;
-                  }}
-                  onRematch={async () => {
-                    try {
-                      await sharedActions.playAgain(roomId);
-                    } catch (e) {
-                      // no-op
-                    }
-                  }}
-                />
+                <ErrorBoundary componentName="Shared Game" onReset={() => setScreen("home")}>
+                  <SharedDuelGameScreen
+                    room={room}
+                    me={me}
+                    currentGuess={currentGuess}
+                    letterStates={letterStates}
+                    onKeyPress={handleDuelKey}
+                    onStartShared={async () => {
+                      const res = await sharedActions.startRound(roomId);
+                      if (res?.error) {
+                        console.error("Start shared error:", res.error);
+                        setMsg(res.error || "Failed to start shared duel");
+                      }
+                      return res;
+                    }}
+                    onRematch={async () => {
+                      try {
+                        await sharedActions.playAgain(roomId);
+                      } catch (e) {
+                        // no-op
+                      }
+                    }}
+                  />
+                </ErrorBoundary>
               )}
 
               {/* BATTLE ROYALE - Host sees spectate view, players see game view */}
               {room?.mode === "battle" &&
                 (viewingHost ? (
-                  <HostSpectateScreen
-                    key="host"
-                    room={room}
-                    players={players}
-                    onWordSubmit={async (word) => {
-                      await battleActions.setWordAndStart(room.id, word); // emits setHostWord then startBattle
-                    }}
-                  />
+                  <ErrorBoundary componentName="Battle Host View" onReset={() => setScreen("home")}>
+                    <HostSpectateScreen
+                      key="host"
+                      room={room}
+                      players={players}
+                      onWordSubmit={async (word) => {
+                        await battleActions.setWordAndStart(room.id, word); // emits setHostWord then startBattle
+                      }}
+                    />
+                  </ErrorBoundary>
                 ) : (
-                  <BattleGameScreen
-                    key="player" // force a full swap
-                    room={room}
-                    players={players}
-                    allPlayers={allPlayers}
-                    otherPlayers={otherPlayers}
-                    me={me}
-                    isHost={isHost}
-                    currentGuess={currentGuess}
-                    shakeKey={shakeKey}
-                    showActiveError={showActiveError}
-                    letterStates={letterStates}
-                    canGuessBattle={canGuessBattle}
-                    onKeyPress={handleBattleKey}
-                  />
+                  <ErrorBoundary componentName="Battle Game" onReset={() => setScreen("home")}>
+                    <BattleGameScreen
+                      key="player" // force a full swap
+                      room={room}
+                      players={players}
+                      allPlayers={allPlayers}
+                      otherPlayers={otherPlayers}
+                      me={me}
+                      isHost={isHost}
+                      currentGuess={currentGuess}
+                      shakeKey={shakeKey}
+                      showActiveError={showActiveError}
+                      letterStates={letterStates}
+                      canGuessBattle={canGuessBattle}
+                      onKeyPress={handleBattleKey}
+                    />
+                  </ErrorBoundary>
                 ))}
             </div>
           </div>
@@ -794,25 +803,27 @@ export default function App() {
             profileMenuVariant="game"
           />
           <div className="flex-1">
-            <DailyGameScreen
-              challenge={dailyChallenge}
-              guesses={dailyGuessEntries}
-              currentGuess={dailyCurrentGuess}
-              letterStates={dailyLetterStates}
-              onKeyPress={handleDailyKey}
-              statusMessage={dailyStatus}
-              loading={dailyLoading}
-              gameOver={dailyGameOver}
-              correctWord={dailyCorrectWord}
-              won={dailyGuessEntries.some((g) =>
-                g.pattern?.every((s) => s === "green")
-              )}
-              shakeKey={dailyShakeKey}
-              showActiveError={dailyShowActiveError}
-              notificationMessage={dailyNotificationMessage}
-              onNotificationDismiss={() => setDailyNotificationMessage("")}
-              guessFlipKey={dailyGuessFlipKey}
-            />
+            <ErrorBoundary componentName="Daily Challenge" onReset={() => setScreen("home")}>
+              <DailyGameScreen
+                challenge={dailyChallenge}
+                guesses={dailyGuessEntries}
+                currentGuess={dailyCurrentGuess}
+                letterStates={dailyLetterStates}
+                onKeyPress={handleDailyKey}
+                statusMessage={dailyStatus}
+                loading={dailyLoading}
+                gameOver={dailyGameOver}
+                correctWord={dailyCorrectWord}
+                won={dailyGuessEntries.some((g) =>
+                  g.pattern?.every((s) => s === "green")
+                )}
+                shakeKey={dailyShakeKey}
+                showActiveError={dailyShowActiveError}
+                notificationMessage={dailyNotificationMessage}
+                onNotificationDismiss={() => setDailyNotificationMessage("")}
+                guessFlipKey={dailyGuessFlipKey}
+              />
+            </ErrorBoundary>
           </div>
           {/* Victory Modal for Daily Challenge */}
           {showVictory && dailyGameOver && (
