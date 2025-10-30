@@ -23,7 +23,7 @@ export function useKeyboardHandling({
 
       if (room?.mode === "duel") {
         onDuelKey(key);
-      } else if (room?.mode === "battle") {
+      } else if (room?.mode === "battle" || room?.mode === "battle_ai") {
         onBattleKey(key);
       }
     };

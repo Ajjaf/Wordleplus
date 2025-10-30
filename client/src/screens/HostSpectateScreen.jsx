@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useRef } from "react";
+﻿import React, { useEffect, useMemo, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Trophy, Crown } from "lucide-react";
 import SpectateCard from "../components/SpectateCard.jsx";
@@ -6,8 +6,20 @@ import SecretWordInputRow from "../components/SecretWordInputRow.jsx";
 import GradientBackground from "../components/ui/GradientBackground";
 import GlowButton from "../components/ui/GlowButton";
 
-function HostSpectateScreen({ room, players = [], onWordSubmit }) {
+function HostSpectateScreen({
+  room,
+  players = [],
+  onWordSubmit,
+  onStartAiRound,
+  pendingStart = false,
+  onReleaseHost,
+}) {
   const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [releasing, setReleasing] = useState(false);
+  const [startingRound, setStartingRound] = useState(false);
+  const [startError, setStartError] = useState("");
+  const [countdownRemaining, setCountdownRemaining] = useState(null);
+  const isAiMode = room?.mode === "battle_ai";
 
   // one-shot "reconnected" badge
   const [showReconnected, setShowReconnected] = useState(() => {
@@ -36,6 +48,21 @@ function HostSpectateScreen({ room, players = [], onWordSubmit }) {
   const roundActive = started;
   const roundFinished =
     !started && (Boolean(room?.battle?.winner) || hasAnyGuesses);
+  const canReleaseHost =
+    isAiMode && typeof onReleaseHost === "function" && !roundActive;
+  const canStartRound =
+    isAiMode &&
+    typeof onStartAiRound === "function" &&
+    !roundActive &&
+    pendingStart;
+
+  const formatDuration = (ms) => {
+    if (typeof ms !== "number" || !Number.isFinite(ms)) return null;
+    const totalSeconds = Math.max(Math.floor(ms / 1000), 0);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+  };
 
   const winnerName = useMemo(() => {
     const id = room?.battle?.winner;
@@ -47,13 +74,79 @@ function HostSpectateScreen({ room, players = [], onWordSubmit }) {
     );
   }, [room?.battle?.winner, room?.players, players]);
 
+  const countdownLabel =
+    countdownRemaining !== null ? formatDuration(countdownRemaining) : null;
+
+  const standbyMessage = (() => {
+    if (roundActive) return null;
+    if (isAiMode) {
+      if (pendingStart) return "Waiting for someone to start the game...";
+      if (countdownLabel) return `Next round in ${countdownLabel}`;
+      return roundFinished
+        ? "Game ended — AI host is preparing the next round..."
+        : "Waiting for AI host to start the game...";
+    }
+    return roundFinished
+      ? "Game ended — waiting for host to start the next round..."
+      : "Waiting for players...";
+  })();
+
+  const handleReleaseHost = async () => {
+    if (!canReleaseHost || releasing) return;
+    try {
+      setReleasing(true);
+      await onReleaseHost?.();
+    } finally {
+      setReleasing(false);
+    }
+  };
+
+  const handleStartRound = async () => {
+    if (!canStartRound || startingRound) return;
+    try {
+      setStartingRound(true);
+      const result = await onStartAiRound?.();
+      if (result?.error) {
+        setStartError(result.error || "Unable to start the game");
+      } else {
+        setStartError("");
+      }
+    } finally {
+      setStartingRound(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!pendingStart) {
+      setStartError("");
+    }
+  }, [pendingStart]);
+
+  useEffect(() => {
+    if (!isAiMode) {
+      setCountdownRemaining(null);
+      return;
+    }
+    const target = Number(room?.battle?.countdownEndsAt);
+    if (!Number.isFinite(target)) {
+      setCountdownRemaining(null);
+      return;
+    }
+    const update = () => {
+      setCountdownRemaining(Math.max(target - Date.now(), 0));
+    };
+    update();
+    const interval = setInterval(update, 500);
+    return () => clearInterval(interval);
+  }, [isAiMode, room?.battle?.countdownEndsAt]);
+
   // simple leaderboard data (exclude host)
   const leaderboard = useMemo(() => {
     return [...players]
       .filter((p) => p && p.id && p.id !== room?.hostId) // Exclude host from leaderboard
       .map((p) => ({
         id: p.id,
-        name: p.name || "—",
+        name: p.name || "Player",
         wins: p.wins ?? 0,
         streak: p.streak ?? 0,
         disconnected: !!p.disconnected,
@@ -97,12 +190,34 @@ function HostSpectateScreen({ room, players = [], onWordSubmit }) {
               <Trophy className="w-4 h-4 mr-1" />
               Leaderboard
             </GlowButton>
-
+            {canStartRound && (
+              <GlowButton
+                onClick={handleStartRound}
+                variant="primary"
+                size="sm"
+                disabled={startingRound}
+              >
+                {startingRound ? "Starting..." : "Start Game"}
+              </GlowButton>
+            )}
+            {canReleaseHost && (
+              <GlowButton
+                onClick={handleReleaseHost}
+                variant="ghost"
+                size="sm"
+                disabled={releasing}
+              >
+                {releasing ? "Releasing..." : "Release to AI"}
+              </GlowButton>
+            )}
             <span className="text-xs text-white/60">
               {connectedCount}/{players.length} online
             </span>
           </div>
         </div>
+        {startError && (
+          <div className="px-3 text-xs text-red-300">{startError}</div>
+        )}
 
         {/* Title / status */}
         <div className="text-center mt-2 mb-3 px-3">
@@ -121,34 +236,65 @@ function HostSpectateScreen({ room, players = [], onWordSubmit }) {
             </motion.div>
           ) : (
             <>
-              {roundFinished ? (
+              {isAiMode ? (
                 <motion.div
-                  className="mx-auto max-w-xl mb-3 bg-emerald-500/20 border border-emerald-500/30 rounded-2xl p-4 backdrop-blur-sm"
+                  className="mx-auto max-w-xl mb-3 bg-white/10 border border-white/20 rounded-2xl p-4 backdrop-blur-sm"
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ duration: 0.2 }}
                 >
-                  <p className="text-sm text-emerald-300 font-medium">
-                    {winnerName
-                      ? `Round finished — ${winnerName} won!`
-                      : "Round finished — no winner."}
-                  </p>
-                  <p className="text-xs text-emerald-400 mt-1">
-                    Enter a new word below to start the next round.
-                  </p>
+                  {roundFinished ? (
+                    <p className="text-sm text-emerald-300 font-medium">
+                      {winnerName
+                        ? `Round finished — ${winnerName} won!`
+                        : "Round finished — no winner."}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-white/70">
+                      The AI host is holding the lobby until a player starts the game.
+                    </p>
+                  )}
+                  {standbyMessage && (
+                    <p className="text-xs text-white/60 mt-2">{standbyMessage}</p>
+                  )}
+                  {canStartRound && (
+                    <p className="text-xs text-amber-200 mt-2">
+                      Press the Start Game button when everyone is ready.
+                    </p>
+                  )}
                 </motion.div>
               ) : (
-                <p className="text-sm text-white/70 mb-2">
-                  Enter a word to start the game.
-                </p>
-              )}
-              {!room?.battle?.started && (
-                <SecretWordInputRow
-                  onSubmit={onWordSubmit}
-                  submitHint="Press Enter to set word"
-                  showGenerate={true}
-                  size={64}
-                />
+                <>
+                  {roundFinished ? (
+                    <motion.div
+                      className="mx-auto max-w-xl mb-3 bg-emerald-500/20 border border-emerald-500/30 rounded-2xl p-4 backdrop-blur-sm"
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <p className="text-sm text-emerald-300 font-medium">
+                        {winnerName
+                          ? `Round finished — ${winnerName} won!`
+                          : "Round finished — no winner."}
+                      </p>
+                      <p className="text-xs text-emerald-400 mt-1">
+                        Enter a new word below to start the next round.
+                      </p>
+                    </motion.div>
+                  ) : (
+                    <p className="text-sm text-white/70 mb-2">
+                      Enter a word to start the game.
+                    </p>
+                  )}
+                  {!room?.battle?.started && (
+                    <SecretWordInputRow
+                      onSubmit={onWordSubmit}
+                      submitHint="Press Enter to set word"
+                      showGenerate={true}
+                      size={64}
+                    />
+                  )}
+                </>
               )}
             </>
           )}
@@ -262,3 +408,16 @@ function HostSpectateScreen({ room, players = [], onWordSubmit }) {
 }
 
 export default HostSpectateScreen;
+
+
+
+
+
+
+
+
+
+
+
+
+

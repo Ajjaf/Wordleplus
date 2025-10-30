@@ -57,6 +57,10 @@ export function useGameState(room) {
       otherPlayersValue = Object.entries(room.players)
         .filter(([id]) => id !== room.hostId && id !== socket.id)
         .map(([id, p]) => ({ id, ...p }));
+    } else if (room.mode === "battle_ai") {
+      otherPlayersValue = Object.entries(room.players)
+        .filter(([id]) => id !== socket.id)
+        .map(([id, p]) => ({ id, ...p }));
     }
     setOtherPlayers(otherPlayersValue);
 
@@ -96,7 +100,9 @@ export function useGameState(room) {
   const canGuessShared =
     room?.mode === "shared" ? Boolean(modeState.canGuess) : false;
   const canGuessBattle =
-    room?.mode === "battle" ? Boolean(modeState.canGuess) : false;
+    room?.mode === "battle" || room?.mode === "battle_ai"
+      ? Boolean(modeState.canGuess)
+      : false;
 
   const letterStates = modeState.letterStates || {};
   const shouldShowVictory = Boolean(modeState.shouldShowVictory);

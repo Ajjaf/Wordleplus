@@ -1,6 +1,15 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Swords, Users, Shield, Trophy, Star } from "lucide-react";
+import {
+  Swords,
+  Users,
+  Shield,
+  Trophy,
+  Star,
+  Clock,
+  CalendarClock,
+  Zap,
+} from "lucide-react";
 import GradientBackground from "../components/ui/GradientBackground";
 import DailyChallengeHero from "../components/ui/DailyChallengeHero";
 import AnimatedGameCard from "../components/ui/AnimatedGameCard";
@@ -15,6 +24,69 @@ const DEFAULT_DAILY_STATS = {
   totalWins: 0,
   totalPlayed: 0,
 };
+
+const MODE_META = {
+  duel: {
+    label: "Duel",
+    icon: Swords,
+    badgeClass: "bg-violet-500/15 text-violet-100",
+    gradient: "from-violet-500/25 via-violet-500/5 to-transparent",
+  },
+  battle: {
+    label: "Battle Royale",
+    icon: Users,
+    badgeClass: "bg-cyan-500/15 text-cyan-100",
+    gradient: "from-cyan-500/25 via-cyan-500/5 to-transparent",
+  },
+  battle_ai: {
+    label: "AI Battle",
+    icon: Zap,
+    badgeClass: "bg-amber-500/15 text-amber-100",
+    gradient: "from-amber-500/25 via-amber-500/5 to-transparent",
+  },
+  shared: {
+    label: "Shared Duel",
+    icon: Shield,
+    badgeClass: "bg-purple-500/15 text-purple-100",
+    gradient: "from-purple-500/25 via-purple-500/5 to-transparent",
+  },
+};
+
+const DEFAULT_MODE_META = {
+  label: "Multiplayer",
+  icon: Users,
+  badgeClass: "bg-white/10 text-white/80",
+  gradient: "from-white/10 via-transparent to-transparent",
+};
+
+const EVENT_CARDS = [
+  {
+    id: "speed-battle",
+    title: "Speed Battle Hour",
+    mode: "Battle Royale",
+    status: "Live",
+    tone: "live",
+    reward: "+100 XP",
+    timeLabel: "45m remaining",
+    description:
+      "Compete in rapid-fire battles and climb the leaderboard!",
+    ctaLabel: "Join Event",
+    disabled: false,
+  },
+  {
+    id: "weekend-duel",
+    title: "Weekend Duel Tournament",
+    mode: "Duel",
+    status: "Upcoming",
+    tone: "upcoming",
+    reward: "+200 XP",
+    timeLabel: "Starts in 1h 59m",
+    description:
+      "Challenge friends in intense 1v1 matches for double points.",
+    ctaLabel: "Coming Soon",
+    disabled: true,
+  },
+];
 
 export default function HomeScreenV2({
   name,
@@ -34,6 +106,10 @@ export default function HomeScreenV2({
   const { user, isAuthenticated, refreshUser } = useAuth();
   const isAnonymous = !isAuthenticated || user?.isAnonymous;
   const [dailyStats, setDailyStats] = useState(DEFAULT_DAILY_STATS);
+  const [openRooms, setOpenRooms] = useState([]);
+  const [roomsLoading, setRoomsLoading] = useState(true);
+  const [roomsError, setRoomsError] = useState("");
+  const [joiningRoomId, setJoiningRoomId] = useState(null);
 
   useEffect(() => {
     if (!isAuthenticated || isAnonymous) return;
@@ -122,6 +198,47 @@ export default function HomeScreenV2({
     };
   }, [isNameSet, isAuthenticated, isAnonymous, refreshUser, user?.stats]);
 
+  useEffect(() => {
+    if (!isNameSet) {
+      setOpenRooms([]);
+      setRoomsLoading(false);
+      return;
+    }
+
+    let isActive = true;
+
+    const fetchRooms = async (showLoader = false) => {
+      if (!isActive) return;
+      if (showLoader) setRoomsLoading(true);
+      try {
+        const response = await fetch(buildApiUrl("/api/rooms/open"), {
+          credentials: "include",
+        });
+        if (!response.ok) {
+          throw new Error(`Failed to load open rooms (${response.status})`);
+        }
+        const data = await response.json();
+        if (!isActive) return;
+        setOpenRooms(Array.isArray(data?.rooms) ? data.rooms : []);
+        setRoomsError("");
+      } catch (error) {
+        if (!isActive) return;
+        console.error("Failed to load open rooms:", error);
+        setRoomsError("Unable to load open rooms right now.");
+      } finally {
+        if (isActive) setRoomsLoading(false);
+      }
+    };
+
+    fetchRooms(true);
+    const intervalId = setInterval(() => fetchRooms(false), 15000);
+
+    return () => {
+      isActive = false;
+      clearInterval(intervalId);
+    };
+  }, [isNameSet]);
+
   const handleNameSubmit = () => {
     if (name.trim()) {
       setIsNameSet(true);
@@ -143,11 +260,28 @@ export default function HomeScreenV2({
   };
 
   const handleJoinRoom = async () => {
+    if (!roomId || roomId.length !== 6) return;
     setJoining(true);
     try {
-      await onJoin();
+      await onJoin(roomId);
     } finally {
       setJoining(false);
+    }
+  };
+
+  const handleQuickJoin = async (targetRoomId, targetMode) => {
+    if (!targetRoomId || joining || joiningRoomId) return;
+    const normalizedId = String(targetRoomId).toUpperCase();
+    if (normalizedId.length !== 6) return;
+    setJoiningRoomId(normalizedId);
+    setRoomId(normalizedId);
+    if (targetMode) {
+      setMode(targetMode);
+    }
+    try {
+      await onJoin(normalizedId, targetMode);
+    } finally {
+      setJoiningRoomId(null);
     }
   };
 
@@ -165,6 +299,13 @@ export default function HomeScreenV2({
       subtitle: "Multiplayer",
       description: "Last one standing",
       mode: "battle",
+    },
+    {
+      icon: <Zap className="w-8 h-8 text-amber-400" />,
+      title: "AI Battle",
+      subtitle: "Server Host",
+      description: "AI-hosted rounds",
+      mode: "battle_ai",
     },
     {
       icon: <Shield className="w-8 h-8 text-purple-400" />,
@@ -283,6 +424,191 @@ export default function HomeScreenV2({
                   </div>
                 ))}
               </div>
+            </div>
+          </section>
+
+          <section>
+            <motion.h2
+              className="text-2xl md:text-3xl font-bold text-white mb-6"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.3 }}
+            >
+              Open Game Rooms
+            </motion.h2>
+
+            <div className="space-y-4">
+              {roomsError && !roomsLoading && (
+                <div className="text-sm text-red-300 bg-red-500/10 border border-red-500/20 rounded-2xl px-4 py-3">
+                  {roomsError}
+                </div>
+              )}
+
+              {roomsLoading ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">
+                  {Array.from({ length: 3 }).map((_, index) => (
+                    <div
+                      key={index}
+                      className="h-full min-h-[180px] rounded-3xl border border-white/10 bg-white/5 animate-pulse"
+                    />
+                  ))}
+                </div>
+              ) : openRooms.length === 0 ? (
+                <motion.div
+                  className="rounded-3xl border border-white/10 bg-white/5 p-6 md:p-8 text-white/60 text-center"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                >
+                  <p className="text-base">
+                    No open rooms right now. Create one or check back soon!
+                  </p>
+                </motion.div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">
+                  {openRooms.map((room, index) => {
+                    const meta = MODE_META[room.mode] || DEFAULT_MODE_META;
+                    const ModeIcon = meta.icon || Users;
+                    const playerLabel = room.capacity
+                      ? `${room.playerCount}/${room.capacity}`
+                      : `${room.playerCount} player${
+                          room.playerCount === 1 ? "" : "s"
+                        }`;
+                    const statusLabel = room.isInProgress ? "In Match" : "Waiting";
+                    const statusClass = room.isInProgress
+                      ? "text-amber-300"
+                      : "text-emerald-300";
+                    const hostName =
+                      typeof room.hostName === "string" && room.hostName.trim()
+                        ? room.hostName.trim()
+                        : "Mystery Host";
+                    return (
+                      <motion.div
+                        key={room.id}
+                        className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/5 backdrop-blur-sm p-6 flex flex-col"
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.2 + index * 0.05 }}
+                        whileHover={{ borderColor: "rgba(255,255,255,0.3)", y: -4 }}
+                      >
+                        <div
+                          className={`absolute inset-0 pointer-events-none bg-gradient-to-br ${meta.gradient}`}
+                        />
+                        <div className="relative z-10 flex flex-col h-full">
+                          <div className="flex items-start justify-between gap-3">
+                            <span
+                              className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide ${meta.badgeClass}`}
+                            >
+                              <ModeIcon className="w-4 h-4" />
+                              {meta.label}
+                            </span>
+                            <span className="text-xs font-mono text-white/60 tracking-[0.35em]">
+                              {room.id}
+                            </span>
+                          </div>
+
+                          <div className="mt-6">
+                            <p className="text-xs uppercase tracking-wide text-white/50">
+                              Host
+                            </p>
+                            <p className="text-lg font-semibold text-white mt-1">
+                              {hostName}
+                            </p>
+                          </div>
+
+                          <div className="mt-auto pt-6 flex items-end justify-between gap-4">
+                            <div>
+                              <p className="text-2xl font-bold text-white leading-none">
+                                {playerLabel}
+                              </p>
+                              <p
+                                className={`text-xs uppercase tracking-wide mt-2 ${statusClass}`}
+                              >
+                                {statusLabel}
+                              </p>
+                            </div>
+                            <GlowButton
+                              size="md"
+                              onClick={() => handleQuickJoin(room.id, room.mode)}
+                              disabled={Boolean(joiningRoomId) || joining}
+                            >
+                              {joiningRoomId === room.id ? "Joining..." : "Join Room"}
+                            </GlowButton>
+                          </div>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </section>
+
+          <section>
+            <motion.h2
+              className="text-2xl md:text-3xl font-bold text-white mb-6"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.35 }}
+            >
+              Active Events
+            </motion.h2>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+              {EVENT_CARDS.map((event, index) => {
+                const isLive = event.tone === "live";
+                const statusClasses = isLive
+                  ? "bg-emerald-500/15 text-emerald-200"
+                  : "bg-white/10 text-white/70";
+                const StatusIcon = isLive ? Zap : CalendarClock;
+                return (
+                  <motion.div
+                    key={event.id}
+                    className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/5 backdrop-blur-sm p-6 flex flex-col"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.25 + index * 0.05 }}
+                    whileHover={{ borderColor: "rgba(255,255,255,0.3)", y: -4 }}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <span
+                        className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide ${statusClasses}`}
+                      >
+                        <StatusIcon className="w-4 h-4" />
+                        {event.status}
+                      </span>
+                      <span className="text-sm font-semibold text-cyan-200">
+                        {event.reward}
+                      </span>
+                    </div>
+
+                    <div className="mt-4">
+                      <p className="text-xs uppercase tracking-wide text-white/50">
+                        {event.mode}
+                      </p>
+                      <h3 className="text-xl font-bold text-white mt-1">
+                        {event.title}
+                      </h3>
+                      <p className="text-sm text-white/60 mt-2">
+                        {event.description}
+                      </p>
+                    </div>
+
+                    <div className="mt-6 flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-2 text-sm text-white/60">
+                        <Clock className="w-4 h-4 text-white/50" />
+                        <span>{event.timeLabel}</span>
+                      </div>
+                      <GlowButton
+                        size="sm"
+                        variant={event.disabled ? "secondary" : "primary"}
+                        disabled={event.disabled}
+                      >
+                        {event.ctaLabel}
+                      </GlowButton>
+                    </div>
+                  </motion.div>
+                );
+              })}
             </div>
           </section>
 

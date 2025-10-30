@@ -47,9 +47,9 @@ export function useRoomManagement() {
         if (resp?.error) {
           resolve({ error: resp.error });
         } else {
-          // mode is unknown here; don’t overwrite LS_LAST_MODE
-          persistAfterJoinOrCreate({ name, roomId });
-          resolve({ success: true });
+          const respMode = resp?.mode;
+          persistAfterJoinOrCreate({ name, roomId, mode: respMode });
+          resolve({ success: true, mode: respMode });
         }
       });
     });

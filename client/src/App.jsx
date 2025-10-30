@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useCallback } from "react";
+﻿import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { socket } from "./socket";
 
 // Extracted Components
@@ -75,7 +75,8 @@ export default function App() {
   const winner = useMemo(() => {
     if (!room) return null;
     if (room.mode === "duel") return room.winner;
-    if (room.mode === "battle") return room.battle?.winner;
+    if (room.mode === "battle" || room.mode === "battle_ai")
+      return room.battle?.winner;
     return null;
   }, [room]);
   useEffect(() => {
@@ -163,7 +164,12 @@ export default function App() {
   const duelActions = actionsByMode.duel;
   const sharedActions = actionsByMode.shared;
   const battleActions = actionsByMode.battle;
+  const aiBattleActions = actionsByMode["battle_ai"];
   const dailyActions = actionsByMode.daily;
+
+  const battlePendingStart = Boolean(
+    room?.battle?.pendingStart || room?.battle?.aiHost?.pendingStart
+  );
 
   const {
     createRoom,
@@ -415,7 +421,7 @@ export default function App() {
       return;
     }
 
-    if (room.mode === "battle") {
+    if (room.mode === "battle" || room.mode === "battle_ai") {
       // For battle mode, don't show victory modal - let host directly start new rounds
       // The game results are shown in the HostSpectateScreen instead
       setShowVictory(false);
@@ -456,14 +462,19 @@ export default function App() {
     }
   }
 
-  async function join() {
-    const result = await joinRoom(name, roomId);
+  async function join(targetRoomId = roomId, preferredMode) {
+    const normalizedId = (targetRoomId || "").toUpperCase();
+    const result = await joinRoom(name, normalizedId);
     if (result?.error) {
       setMsg(result.error);
     } else {
+      const joinedMode = result?.mode || preferredMode;
+      if (joinedMode && joinedMode !== mode) {
+        setMode(joinedMode);
+      }
+      setRoomId(normalizedId);
       setCurrentGuess("");
       setShowVictory(false);
-      // For both modes, go directly to game screen
       setScreen("game");
     }
   }
@@ -509,7 +520,9 @@ export default function App() {
     if (!canGuessBattle) return;
     if (key === "ENTER") {
       if (currentGuess.length === 5) {
-        const result = await battleActions.submitGuess(
+        const actions =
+          room?.mode === "battle_ai" ? aiBattleActions : battleActions;
+        const result = await actions?.submitGuess?.(
           roomId,
           currentGuess,
           canGuessBattle
@@ -534,11 +547,12 @@ export default function App() {
 
     const onKeyDown = (e) => {
       // If I'm the host in Battle and the round hasn't started yet,
-      // we're on the "type secret" screen — don't handle keys globally.
+      // we're on the "type secret" screen â€” don't handle keys globally.
       const hostTyping =
-        room?.mode === "battle" &&
-        (isHost || wasHost) &&
-        !room?.battle?.started;
+        room?.mode === "battle" ||
+        (room?.mode === "battle_ai" &&
+          (isHost || wasHost) &&
+          !room?.battle?.started);
       if (hostTyping) return;
       const key =
         e.key === "Enter"
@@ -551,7 +565,7 @@ export default function App() {
       if (!key) return;
       if (room?.mode === "duel") handleDuelKey(key);
       if (room?.mode === "shared") handleDuelKey(key); // Shared mode uses same logic as duel
-      if (room?.mode === "battle") {
+      if (room?.mode === "battle" || room?.mode === "battle_ai") {
         // Hosts type the secret word; don't capture their keys here.
         if (isHost && !room?.battle?.started) return;
         handleBattleKey(key);
@@ -574,7 +588,7 @@ export default function App() {
     if (room?.mode === "duel" && room?.started) {
       setScreen("game");
       setCurrentGuess("");
-    } else if (room?.mode === "battle") {
+    } else if (room?.mode === "battle" || room?.mode === "battle_ai") {
       // For battle mode, always go to game screen (which shows host spectate view or player view)
       setScreen("game");
       setCurrentGuess("");
@@ -588,9 +602,10 @@ export default function App() {
   ]);
 
   const viewingHost =
-    room?.mode === "battle" && (isHost || (wasHost && me?.id === room?.hostId));
+    (room?.mode === "battle" || room?.mode === "battle_ai") &&
+    (isHost || (wasHost && me?.id === room?.hostId));
   useEffect(() => {
-    if (room?.mode === "battle") {
+    if (room?.mode === "battle" || room?.mode === "battle_ai") {
       localStorage.setItem("wp.lastSocketId.wasHost", String(isHost));
     }
   }, [room?.mode, isHost]);
@@ -622,7 +637,7 @@ export default function App() {
                 ? "Shared Wordle"
                 : room?.mode === "duel"
                 ? "Duel Mode"
-                : room?.mode === "battle"
+                : room?.mode === "battle" || room?.mode === "battle_ai"
                 ? "Battle Royale"
                 : null
             }
@@ -745,15 +760,61 @@ export default function App() {
               )}
 
               {/* BATTLE ROYALE - Host sees spectate view, players see game view */}
-              {room?.mode === "battle" &&
+              {(room?.mode === "battle" || room?.mode === "battle_ai") &&
                 (viewingHost ? (
                   <HostSpectateScreen
                     key="host"
                     room={room}
                     players={players}
                     onWordSubmit={async (word) => {
-                      await battleActions.setWordAndStart(room.id, word); // emits setHostWord then startBattle
+                      const actions =
+                        room?.mode === "battle_ai"
+                          ? aiBattleActions
+                          : battleActions;
+                      const result = await actions?.setWordAndStart?.(
+                        room.id,
+                        word
+                      );
+                      if (result?.error) {
+                        setMsg(result.error);
+                      }
                     }}
+                    onStartAiRound={async () => {
+                      console.debug("onStartAiRound called", { roomId: room?.id });
+                      if (!room?.id) {
+                        const error = "No room id available";
+                        setMsg(error);
+                        console.warn("onStartAiRound failed:", error);
+                        return { error };
+                      }
+                      try {
+                        if (!aiBattleActions?.startRound) {
+                          throw new Error("AI battle actions not available");
+                        }
+                        const result = await aiBattleActions.startRound(room.id);
+                        console.debug("aiBattleActions.startRound result", result);
+                        if (result?.error) {
+                          setMsg(result.error);
+                          return result;
+                        }
+                        return { success: true };
+                      } catch (err) {
+                        const error = err?.message || "Failed to start AI battle";
+                        setMsg(error);
+                        console.error("onStartAiRound error", err);
+                        return { error };
+                      }
+                    }}
+                    onReleaseHost={
+                      room?.mode === "battle_ai"
+                        ? async () => {
+                            const result = await aiBattleActions?.releaseHost?.(
+                              room.id
+                            );
+                            if (result?.error) setMsg(result.error);
+                          }
+                        : undefined
+                    }
                   />
                 ) : (
                   <BattleGameScreen
@@ -770,6 +831,47 @@ export default function App() {
                     letterStates={letterStates}
                     canGuessBattle={canGuessBattle}
                     onKeyPress={handleBattleKey}
+                    deadline={room?.battle?.deadline ?? null}
+                    countdownEndsAt={room?.battle?.countdownEndsAt ?? null}
+                    pendingStart={room?.battle?.pendingStart ?? false}
+                    onClaimHost={
+                      room?.mode === "battle_ai"
+                        ? async () => {
+                            const result = await aiBattleActions?.claimHost?.(
+                              room.id
+                            );
+                            if (result?.error) setMsg(result.error);
+                          }
+                        : undefined
+                    }
+                    onStartAiRound={async () => {
+                      console.debug("onStartAiRound (player view) called", {
+                        roomId: room?.id,
+                      });
+                      if (!room?.id) {
+                        const error = "No room id available";
+                        setMsg(error);
+                        console.warn("onStartAiRound failed:", error);
+                        return { error };
+                      }
+                      try {
+                        if (!aiBattleActions?.startRound) {
+                          throw new Error("AI battle actions not available");
+                        }
+                        const result = await aiBattleActions.startRound(room.id);
+                        console.debug("aiBattleActions.startRound result", result);
+                        if (result?.error) {
+                          setMsg(result.error);
+                          return result;
+                        }
+                        return { success: true };
+                      } catch (err) {
+                        const error = err?.message || "Failed to start AI battle";
+                        setMsg(error);
+                        console.error("onStartAiRound error", err);
+                        return { error };
+                      }
+                    }}
                   />
                 ))}
             </div>
