@@ -22,7 +22,7 @@ import { useRoomManagement } from "./hooks/useRoomManagement.js";
 import { buildLetterStates } from "./modes/utils.js";
 
 // Error Notification System
-import { ErrorNotificationProvider } from "./contexts/ErrorNotificationContext.jsx";
+import { ErrorNotificationProvider, useErrorNotification } from "./contexts/ErrorNotificationContext.jsx";
 
 // UI Components
 
@@ -132,6 +132,8 @@ export default function App() {
     setScreen
   );
 
+  const { clearNotifications } = useErrorNotification();
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (name && name.trim()) {
@@ -174,6 +176,34 @@ export default function App() {
     clearSavedSession,
     goHome,
   } = useRoomManagement();
+
+  // Comprehensive cleanup function for mode transitions
+  const resetAllGameState = useCallback(() => {
+    // Clear multiplayer game state
+    setCurrentGuess("");
+    setShowVictory(false);
+    setShowActiveError(false);
+    setShakeKey(0);
+    setHostWord("");
+    setMsg("");
+    
+    // Clear daily challenge state
+    setDailyChallenge(null);
+    setDailyGuesses([]);
+    setDailyPatternResponses([]);
+    setDailyCurrentGuess("");
+    setDailyStatus("");
+    setDailyGameOver(false);
+    setDailyLoading(false);
+    setDailyCorrectWord(null);
+    setDailyShakeKey(0);
+    setDailyGuessFlipKey(0);
+    setDailyShowActiveError(false);
+    setDailyNotificationMessage("");
+    
+    // Clear all notifications
+    clearNotifications();
+  }, [clearNotifications]);
 
   const resetDailyProgress = useCallback(() => {
     setDailyChallenge(null);
