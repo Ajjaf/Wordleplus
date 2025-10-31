@@ -5,7 +5,7 @@ import { useErrorNotification } from "../contexts/ErrorNotificationContext";
 const LS_ROOM = "wp.lastRoomId";
 const LS_SOCKET = "wp.lastSocketId";
 const LS_LAST_NAME = "wp.lastName";
-
+//reset my works
 export function useSocketConnection(room, setScreen) {
   const [connected, setConnected] = useState(socket.connected);
   const [rejoinOffered, setRejoinOffered] = useState(false);
@@ -30,7 +30,7 @@ export function useSocketConnection(room, setScreen) {
         dismissNotification(disconnectNotificationIdRef.current);
         disconnectNotificationIdRef.current = null;
       }
-      
+
       // Show reconnected notification if we previously disconnected
       if (hasShownDisconnectRef.current) {
         showNotification("Reconnected to server", "success", {
