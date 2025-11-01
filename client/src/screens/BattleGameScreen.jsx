@@ -235,9 +235,11 @@ function BattleGameScreen({
   const showStartButton =
     isAiMode &&
     aiHostMode === "auto" &&
-    pendingStart &&
     !roundActive &&
-    typeof onStartAiRound === "function";
+    typeof onStartAiRound === "function" &&
+    (pendingStart || !countdownLabel);
+  const startButtonLabel =
+    pendingStart || !countdownLabel ? "Start Game" : "Start Now";
   const showClaimHostButton =
     isAiMode && aiHostMode === "auto" && !roundActive && Boolean(onClaimHost);
   const hostedByName =
@@ -314,7 +316,7 @@ function BattleGameScreen({
                       size="sm"
                       disabled={startingRound}
                     >
-                      {startingRound ? "Starting..." : "Start Game"}
+                      {startingRound ? "Starting..." : startButtonLabel}
                     </GlowButton>
                     {startError && (
                       <span className="text-xs text-red-300 text-center">
@@ -447,7 +449,7 @@ function BattleGameScreen({
                       size="sm"
                       disabled={startingRound}
                     >
-                      {startingRound ? "Starting..." : "Start Game"}
+                      {startingRound ? "Starting..." : startButtonLabel}
                     </GlowButton>
                     {startError && (
                       <span className="text-xs text-red-300">{startError}</span>

@@ -50,11 +50,6 @@ function HostSpectateScreen({
     !started && (Boolean(room?.battle?.winner) || hasAnyGuesses);
   const canReleaseHost =
     isAiMode && typeof onReleaseHost === "function" && !roundActive;
-  const canStartRound =
-    isAiMode &&
-    typeof onStartAiRound === "function" &&
-    !roundActive &&
-    pendingStart;
 
   const formatDuration = (ms) => {
     if (typeof ms !== "number" || !Number.isFinite(ms)) return null;
@@ -63,6 +58,15 @@ function HostSpectateScreen({
     const seconds = totalSeconds % 60;
     return `${minutes}:${seconds.toString().padStart(2, "0")}`;
   };
+
+  const countdownLabel =
+    countdownRemaining !== null ? formatDuration(countdownRemaining) : null;
+
+  const canStartRound =
+    isAiMode &&
+    typeof onStartAiRound === "function" &&
+    !roundActive &&
+    (pendingStart || !countdownLabel);
 
   const winnerName = useMemo(() => {
     const id = room?.battle?.winner;
@@ -73,9 +77,6 @@ function HostSpectateScreen({
       "Unknown player"
     );
   }, [room?.battle?.winner, room?.players, players]);
-
-  const countdownLabel =
-    countdownRemaining !== null ? formatDuration(countdownRemaining) : null;
 
   const standbyMessage = (() => {
     if (roundActive) return null;
@@ -197,7 +198,11 @@ function HostSpectateScreen({
                 size="sm"
                 disabled={startingRound}
               >
-                {startingRound ? "Starting..." : "Start Game"}
+                {startingRound
+                  ? "Starting..."
+                  : pendingStart
+                  ? "Start Game"
+                  : "Start Now"}
               </GlowButton>
             )}
             {canReleaseHost && (
@@ -259,7 +264,7 @@ function HostSpectateScreen({
                   )}
                   {canStartRound && (
                     <p className="text-xs text-amber-200 mt-2">
-                      Press the Start Game button when everyone is ready.
+                      Press the start button when everyone is ready.
                     </p>
                   )}
                 </motion.div>

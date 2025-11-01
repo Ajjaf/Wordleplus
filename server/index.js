@@ -506,6 +506,10 @@ const HOST_DISCONNECT_GRACE_MS = 2 * 60 * 1000; // 2 minutes
 function summarizeJoinableRoom(room) {
   if (!room) return null;
 
+  const players = Object.values(room.players || {});
+  const activePlayers = players.filter((player) => !player?.disconnected);
+  if (activePlayers.length === 0) return null;
+
   let joinable = true;
   let capacity = null;
 
@@ -516,7 +520,7 @@ function summarizeJoinableRoom(room) {
     joinable = !(sharedMode.canJoinShared(room)?.error);
     capacity = 2;
   } else if (room.mode === "battle" || room.mode === "battle_ai") {
-    joinable = !room.battle?.started;
+    joinable = room.mode === "battle_ai" ? true : !room.battle?.started;
   } else {
     joinable = false;
   }
@@ -528,23 +532,27 @@ function summarizeJoinableRoom(room) {
     if (!host || host.disconnected) return null;
   }
 
-  const players = Object.values(room.players || {});
-  const activePlayers = players.filter((player) => !player?.disconnected);
-  if (activePlayers.length === 0) return null;
   const updatedAt = Number(room.updatedAt || room.createdAt || Date.now());
   const createdAt = Number(room.createdAt || updatedAt);
 
   const isInProgress =
-    (room.mode === "battle" || room.mode === "battle_ai")
+      (room.mode === "battle" || room.mode === "battle_ai")
       ? Boolean(room.battle?.started)
       : room.mode === "shared"
       ? Boolean(room.shared?.started)
       : Boolean(room.started);
 
+  const displayHostName =
+    room.mode === "battle_ai"
+      ? room.battle?.aiHost?.mode === "player"
+        ? host?.name || "Player Host"
+        : "AI Host"
+      : host?.name || "Host";
+
   return {
     id: room.id,
     mode: room.mode,
-    hostName: host?.name || "Host",
+    hostName: displayHostName,
     playerCount: activePlayers.length,
     totalPlayers: players.length,
     capacity,
@@ -735,23 +743,36 @@ function maybeEnsureAiBattleRound(roomId) {
   if (!room || !isAiBattleRoom(room)) return;
   if (room.battle.aiHost?.mode !== "auto") return;
   if (room.battle.started) return;
-  if (room.battle.pendingStart) return;
-  if (room.battle.countdownEndsAt) return;
 
   const active = getActivePlayerIds(room);
+  let touched = false;
+
   if (active.length === 0) {
-    clearAiBattleTimers(room);
-    room.battle.deadline = null;
-    room.battle.countdownEndsAt = null;
+    if (room.battle.countdownEndsAt || room.battle.deadline) {
+      clearAiBattleTimers(room);
+      room.battle.deadline = null;
+      room.battle.countdownEndsAt = null;
+      touched = true;
+    }
+    if (touched) {
+      io.to(roomId).emit("roomState", sanitizeRoom(room));
+    }
     return;
   }
 
-  const ensure = autoStartAiBattleRound(roomId);
-  if (!ensure.ok) {
-    room.battle.pendingStart = true;
-    if (room.battle.aiHost) room.battle.aiHost.pendingStart = true;
+  if (room.battle.pendingStart) {
+    room.battle.pendingStart = false;
+    if (room.battle.aiHost) room.battle.aiHost.pendingStart = false;
+    touched = true;
+  }
+
+  if (!room.battle.countdownEndsAt && !room._aiBattleCountdownTimer) {
+    scheduleAiBattleCountdown(roomId);
+    touched = true;
+  }
+
+  if (touched) {
     io.to(roomId).emit("roomState", sanitizeRoom(room));
-    return;
   }
 }
 
@@ -804,10 +825,13 @@ io.on("connection", (socket) => {
     sharedMode.initSharedRoom(room, { pickRandomWords });
     battleMode.initBattleRoom(room);
     if (normalizedMode === "battle_ai") {
-      room.battle.aiHost = { mode: "auto", claimedBy: null };
       room.hostId = null;
-      room.battle.pendingStart = true;
-      room.battle.aiHost.pendingStart = true;
+      room.battle.pendingStart = false;
+      room.battle.aiHost = {
+        mode: "auto",
+        claimedBy: null,
+        pendingStart: false,
+      };
     }
 
     room.players[socket.id] = {
@@ -825,11 +849,11 @@ io.on("connection", (socket) => {
 
     rooms.set(id, room);
     socket.join(id);
+    if (normalizedMode === "battle_ai") {
+      scheduleAiBattleCountdown(id);
+    }
     cb?.({ roomId: id });
     io.to(id).emit("roomState", sanitizeRoom(room));
-    if (normalizedMode === "battle_ai") {
-      maybeEnsureAiBattleRound(id);
-    }
   });
 
   socket.on("joinRoom", ({ name, roomId }, cb) => {
@@ -1147,15 +1171,14 @@ io.on("connection", (socket) => {
     }
 
     clearAiBattleTimers(room);
-    clearAiBattleTimers(room);
     battleMode.resetBattleRound(room);
     room.battle.secret = null;
     room.battle.lastRevealedWord = null;
-    room.battle.aiHost = { mode: "auto", claimedBy: null, pendingStart: true };
+    room.battle.aiHost = { mode: "auto", claimedBy: null, pendingStart: false };
     room.hostId = null;
     room.battle.countdownEndsAt = null;
     room.battle.deadline = null;
-    room.battle.pendingStart = true;
+    room.battle.pendingStart = false;
     room.updatedAt = Date.now();
     io.to(roomId).emit("roomState", sanitizeRoom(room));
     maybeEnsureAiBattleRound(roomId);
@@ -1198,13 +1221,15 @@ io.on("connection", (socket) => {
     if (active.length === 0) return cb?.({ error: "No active players" });
 
     const started = autoStartAiBattleRound(roomId);
-    if (!started) {
+    if (!started?.ok) {
       room.battle.pendingStart = true;
       if (room.battle.aiHost) room.battle.aiHost.pendingStart = true;
       io.to(roomId).emit("roomState", sanitizeRoom(room));
-      return cb?.({ error: "Unable to start round" });
+      return cb?.({
+        error: started?.error || "Unable to start round",
+      });
     }
-    cb?.({ ok: true });
+    cb?.(started);
   });
 
   socket.on("resume", ({ roomId, oldId }, cb) => {
