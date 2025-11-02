@@ -199,7 +199,7 @@ export default function App() {
     persistSession({ name, mode: "daily" });
     setMode("daily");
     setMsg("");
-    goHome();
+    goHome(room?.id || null, { clearRoom: true });
     setRoom(null);
     setRoomId("");
     setCurrentGuess("");
@@ -625,7 +625,7 @@ export default function App() {
         <div className="flex h-[100dvh] flex-col overflow-hidden">
           <NavHeaderV2
             onHomeClick={() => {
-              goHome();
+              goHome(room?.id);
               setRoom(null);
               setScreen("home");
               setRoomId("");
@@ -897,7 +897,7 @@ export default function App() {
         <div className="min-h-screen flex flex-col">
           <NavHeaderV2
             onHomeClick={() => {
-              goHome();
+              goHome(room?.id);
               resetDailyProgress();
               setScreen("home");
               setMode("daily");
@@ -948,7 +948,7 @@ export default function App() {
         <div className="min-h-screen overflow-y-auto">
           <NavHeaderV2
             onHomeClick={() => {
-              goHome();
+              goHome(room?.id);
               setRoom(null);
               setScreen("home");
               setRoomId("");

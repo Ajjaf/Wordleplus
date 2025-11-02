@@ -1475,23 +1475,33 @@ io.on("connection", (socket) => {
     const oldPlayer = room.players[oldId];
     if (!oldPlayer) return cb?.({ error: "Old session not found" });
 
-    if (room.players[socket.id] && socket.id !== oldId) delete room.players[socket.id];
+    const isSameSocket = oldId === socket.id;
 
-    room.players[socket.id] = {
+    if (!isSameSocket && room.players[socket.id]) delete room.players[socket.id];
+
+    const resumedPlayer = {
       ...oldPlayer,
       disconnected: false,
       disconnectedAt: null,
     };
 
-    if (room.hostId === oldId) room.hostId = socket.id;
-    if (room.winner === oldId) room.winner = socket.id;
-    if (room.battle?.winner === oldId) room.battle.winner = socket.id;
-    if (room.battle?.aiHost?.claimedBy === oldId) {
-      room.battle.aiHost.claimedBy = socket.id;
-    }
-    if (room.shared?.turn === oldId) room.shared.turn = socket.id;
+    room.players[isSameSocket ? oldId : socket.id] = resumedPlayer;
 
-    delete room.players[oldId];
+    if (room.hostId === oldId) room.hostId = isSameSocket ? oldId : socket.id;
+    if (room.winner === oldId) room.winner = isSameSocket ? oldId : socket.id;
+    if (room.battle?.winner === oldId) {
+      room.battle.winner = isSameSocket ? oldId : socket.id;
+    }
+    if (room.battle?.aiHost?.claimedBy === oldId) {
+      room.battle.aiHost.claimedBy = isSameSocket ? oldId : socket.id;
+    }
+    if (room.shared?.turn === oldId) {
+      room.shared.turn = isSameSocket ? oldId : socket.id;
+    }
+
+    if (!isSameSocket) {
+      delete room.players[oldId];
+    }
     room.updatedAt = Date.now();
 
     socket.join(roomId);
@@ -1500,6 +1510,75 @@ io.on("connection", (socket) => {
       maybeEnsureAiBattleRound(roomId);
     }
     cb?.({ ok: true, mode: room.mode });
+  });
+
+  socket.on("leaveRoom", ({ roomId } = {}, cb) => {
+    const now = Date.now();
+    let handled = false;
+
+    for (const [id, room] of rooms) {
+      if (roomId && id !== roomId) continue;
+      const player = room.players[socket.id];
+      if (!player) continue;
+
+      if (!player.disconnected) {
+        player.disconnected = true;
+        player.disconnectedAt = now;
+        sharedMode.handleSharedDisconnect(room, socket.id);
+
+        if (room.hostId === socket.id) {
+          if (room.mode === "battle_ai") {
+            if (room.meta?.isEvent) {
+              room.hostId = "server";
+              room.hostConnected = true;
+            } else {
+              room.hostId = null;
+              room.hostConnected = false;
+            }
+            if (room.battle?.aiHost) {
+              room.battle.aiHost.mode = "auto";
+              room.battle.aiHost.claimedBy = null;
+            }
+          } else {
+            const replacement = Object.keys(room.players).find(
+              (pid) => pid !== socket.id && !room.players[pid].disconnected
+            );
+            if (replacement) {
+              room.hostId = replacement;
+            }
+          }
+        }
+      }
+
+      room.updatedAt = now;
+      socket.leave(id);
+      io.to(id).emit("roomState", sanitizeRoom(room));
+
+      if (room.mode === "battle_ai") {
+        const active = getActivePlayerIds(room);
+        if (active.length === 0) {
+          clearAiBattleTimers(room);
+          room.battle.deadline = null;
+          room.battle.countdownEndsAt = null;
+          battleMode.resetBattleRound(room);
+          room.battle.secret = null;
+          room.battle.lastRevealedWord = null;
+          if (room.meta?.isEvent && isAiBattleEventActive()) {
+            ensureAiBattleEventRoom();
+          }
+        } else if (
+          room.battle.aiHost?.mode === "auto" &&
+          !room.battle.started &&
+          !room.battle.countdownEndsAt
+        ) {
+          maybeEnsureAiBattleRound(id);
+        }
+      }
+
+      handled = true;
+    }
+
+    cb?.({ ok: handled });
   });
 
   socket.on("disconnect", () => {
