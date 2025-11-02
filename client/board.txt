@@ -1,3 +1,5 @@
+//board
+
 // Board.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
@@ -23,8 +25,6 @@ export default function Board({
 
   className = "",
   style = {},
-  horizontalAlign = "center",
-  verticalAlign = "center",
   // feedback
   errorShakeKey = 0,
   errorActiveRow = false,
@@ -126,19 +126,6 @@ export default function Board({
       onMeasure({ tile: computedTile, gap, padding });
     }
   }, [computedTile, gap, padding, onMeasure]);
-  const normalizeAlign = (value, fallback = "center") => {
-    if (!value) return fallback;
-    const normalized = value.toString().toLowerCase();
-    if (["start", "flex-start", "top"].includes(normalized)) return "start";
-    if (["end", "flex-end", "bottom"].includes(normalized)) return "end";
-    if (["center", "middle"].includes(normalized)) return "center";
-    if (["stretch"].includes(normalized)) return "stretch";
-    return fallback;
-  };
-
-  const resolvedVerticalAlign = normalizeAlign(verticalAlign, "center");
-  const resolvedHorizontalAlign = normalizeAlign(horizontalAlign, "center");
-
   return (
     <>
       <style>
@@ -169,8 +156,7 @@ export default function Board({
           padding,
           boxSizing: "border-box",
           display: "grid",
-          alignItems: resolvedVerticalAlign,
-          justifyItems: resolvedHorizontalAlign,
+          placeItems: "center",
           ...style,
         }}
       >

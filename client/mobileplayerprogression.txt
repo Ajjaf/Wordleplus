@@ -1,3 +1,5 @@
+//mobile player 
+
 import React, { useMemo } from "react";
 import MicroProgressGrid from "./MicroProgressGrid.jsx";
 
@@ -47,45 +49,32 @@ export default function MobilePlayerProgressCard({
     ? Math.min(totalGuesses, rowsToShow) * DISPLAY_COLS
     : 0;
 
-  const baseClasses =
-    "flex w-full items-center rounded-2xl border transition-all duration-200";
+  const baseClasses = compact
+    ? "flex w-full max-w-[9rem] items-center gap-1.5 rounded-xl border px-2 py-1.5 transition-all duration-200"
+    : "flex w-full max-w-[11rem] items-center gap-2 rounded-2xl border px-2.5 py-2 transition-all duration-200";
   const activeClasses =
     "border-violet-400 bg-violet-500/15 shadow-md shadow-violet-500/25";
   const inactiveClasses = "border-white/15 bg-white/10";
-  const spacingClasses = compact
-    ? "max-w-[9rem] gap-1.5 px-2 py-1.5"
-    : "max-w-[11rem] gap-2 px-2.5 py-2";
 
   const Wrapper = onSelect ? "button" : "div";
 
-  const avatarClasses = compact ? "h-9 w-9 text-sm" : "h-12 w-12 text-base";
-  const avatarBadgeClasses = compact ? "bottom-0.5 right-0.5" : "bottom-1 right-1";
+  const avatarSize = compact ? "h-9 w-9" : "h-12 w-12";
+  const indicatorSize = compact ? "h-2 w-2" : "h-2.5 w-2.5";
   const gridSize = compact ? 7 : 9;
   const gridGap = compact ? 1 : 1.5;
-  const gridRadius = compact ? 1.5 : 2;
-
-  const ariaLabel =
-    typeof name === "string"
-      ? `${name} has ${wins} wins and a streak of ${streak}`
-      : `Player card with ${wins} wins and a streak of ${streak}`;
 
   return (
     <Wrapper
       type={onSelect ? "button" : undefined}
       onClick={onSelect}
-      className={`${baseClasses} ${spacingClasses} ${
-        isActive ? activeClasses : inactiveClasses
-      }`}
-      aria-label={onSelect ? ariaLabel : undefined}
+      className={`${baseClasses} ${isActive ? activeClasses : inactiveClasses}`}
     >
-      <div
-        className={`relative flex flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-cyan-500 text-white font-semibold ${avatarClasses}`}
-      >
+      <div className={`relative flex ${avatarSize} flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-cyan-500 text-white font-semibold ${compact ? 'text-xs' : 'text-sm'}`}>
         {getInitial(name)}
         <span
-          className={`absolute h-2.5 w-2.5 rounded-full border-2 border-white ${
+          className={`absolute ${compact ? 'bottom-0 right-0' : 'bottom-1 right-1'} ${indicatorSize} rounded-full border-2 border-white ${
             isActive ? "bg-emerald-400" : "bg-slate-400/70"
-          } ${avatarBadgeClasses}`}
+          }`}
         />
       </div>
 
@@ -95,7 +84,7 @@ export default function MobilePlayerProgressCard({
           cols={DISPLAY_COLS}
           size={gridSize}
           gap={gridGap}
-          radius={gridRadius}
+          radius={compact ? 1.5 : 2}
           patterns={patterns}
           fallbackFilled={fallbackFilled}
           showWrapper={false}
@@ -109,18 +98,14 @@ export default function MobilePlayerProgressCard({
             className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold shadow-sm"
             style={{ backgroundColor: BADGE_BG, color: BADGE_TEXT }}
           >
-            <span role="img" aria-hidden="true">
-              {"\u{1F3C6}"}
-            </span>
+            <span role="img" aria-hidden="true">🏆</span>
             <span>{wins}</span>
           </div>
           <div
             className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold shadow-sm"
             style={{ backgroundColor: BADGE_BG, color: BADGE_TEXT }}
           >
-            <span role="img" aria-hidden="true">
-              {"\u{1F525}"}
-            </span>
+            <span role="img" aria-hidden="true">🔥</span>
             <span>{streak}</span>
           </div>
         </div>

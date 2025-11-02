@@ -1,3 +1,5 @@
+//duel game 
+
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import Board from "../components/Board.jsx";
 import Keyboard from "../components/Keyboard.jsx";
@@ -129,7 +131,7 @@ function DuelGameScreen({
   }, []);
   const boardTileBounds = useMemo(() => {
     const defaults = {
-      min: isMobile ? 34 : 36,
+      min: isMobile ? 32 : 36,
       max: isMobile ? 56 : 72,
     };
 
@@ -137,33 +139,32 @@ function DuelGameScreen({
       return defaults;
     }
 
+    // More aggressive scaling for mobile when keyboard is visible
+    // iPhone 11 viewport: ~896px normal, ~600-650px with keyboard
     if (viewportHeight < 480) {
-      return { min: 26, max: 34 };
+      return { min: 26, max: 34 }; // Very tight - keyboard likely visible
     }
 
     if (viewportHeight < 560) {
-      return { min: 28, max: 38 };
+      return { min: 28, max: 38 }; // Compact for small viewports
     }
 
     if (viewportHeight < 650) {
-      return { min: 30, max: 44 };
+      return { min: 30, max: isMobile ? 44 : 52 }; // Medium compact
     }
 
     if (viewportHeight < 740) {
-      return { min: 32, max: isMobile ? 50 : 58 };
+      return { min: 32, max: isMobile ? 50 : 64 }; // Standard mobile
     }
 
     return defaults;
   }, [viewportHeight, isMobile]);
-  const boardPadding = !isMobile
-    ? 12
-    : !viewportHeight
-    ? 8
-    : viewportHeight < 480
-    ? 4
-    : viewportHeight < 560
-    ? 6
-    : 8;
+  const boardPadding = useMemo(() => {
+    if (!viewportHeight) return isMobile ? 8 : 12;
+    if (viewportHeight < 480) return 4; // Keyboard visible
+    if (viewportHeight < 560) return 6;
+    return isMobile ? 8 : 12;
+  }, [viewportHeight, isMobile]);
 
   const [secretErrorActive, setSecretErrorActive] = useState(false);
   const [secretErrorKey, setSecretErrorKey] = useState(0);
@@ -487,110 +488,129 @@ function DuelGameScreen({
         />
         <ConfettiEffect trigger={showConfetti} />
 
-        {/* Game Status */}
-        <div className={`px-3 ${isMobile ? "pt-1.5 pb-1" : "pt-3 pb-3"}`}>
-          <div
-            className={`flex items-center justify-between gap-4 ${
-              isMobile ? "mb-1.5" : "mb-3"
-            }`}
-          >
-            <div className="flex-1 text-center">
-              <h2
-                className={`font-semibold text-white ${
-                  isMobile
-                    ? "text-[10px] uppercase tracking-[0.35em] leading-4"
-                    : "text-base md:text-lg"
-                }`}
-              >
-                {isGameEnded ? (
-                  bothRequestedRematch ? (
-                    "Rematch starting..."
-                  ) : (
-                    "Game ended - ready for rematch?"
-                  )
-                ) : deadline ? (
-                  <span
-                    className={`flex items-center justify-center ${
-                      isMobile ? "gap-1" : "gap-2"
+        {/* Compact Mobile Header */}
+        {isMobile ? (
+          <div className="px-2 pt-1.5 pb-1 flex-shrink-0">
+            {/* Timer - Ultra compact */}
+            {!isGameEnded && deadline && (
+              <div className="flex items-center justify-center gap-1.5 mb-1">
+                <span className="text-[10px] text-white/60 uppercase tracking-wider">
+                  Time
+                </span>
+                <span
+                  className={`font-mono text-xs rounded-md px-1.5 py-0.5 ${
+                    low
+                      ? "bg-red-500/20 text-red-300 border border-red-500/30"
+                      : warn
+                      ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                      : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                  }`}
+                >
+                  {timerLabel}
+                </span>
+                {/* Inline mini progress bar */}
+                <div className="flex-1 max-w-[120px] h-1 rounded-full bg-white/10 overflow-hidden">
+                  <motion.div
+                    className={`h-full rounded-full ${
+                      low
+                        ? "bg-gradient-to-r from-red-500 to-red-600"
+                        : warn
+                        ? "bg-gradient-to-r from-amber-500 to-amber-600"
+                        : "bg-gradient-to-r from-emerald-500 to-cyan-500"
                     }`}
-                  >
-                    <span
-                      className={`text-white/60 ${
-                        isMobile
-                          ? "text-[10px] uppercase tracking-[0.4em]"
-                          : "text-sm"
-                      }`}
-                    >
-                      Time Remaining:
-                    </span>
-                    <span
-                      className={`font-mono rounded-xl ${
-                        low
-                          ? "bg-red-500/20 text-red-300 border border-red-500/30"
-                          : warn
-                          ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
-                          : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                      } ${isMobile ? "px-1.5 py-0.5 text-xs" : "px-3 py-1"}`}
-                    >
-                      {timerLabel}
-                    </span>
-                  </span>
-                ) : null}
-              </h2>
-            </div>
+                    style={{ width: `${pct ?? 100}%` }}
+                    initial={{ width: "100%" }}
+                    animate={{ width: `${pct ?? 100}%` }}
+                    transition={{ duration: 0.3 }}
+                  />
+                </div>
+              </div>
+            )}
+            {isGameEnded && (
+              <div className="text-center py-1">
+                <div className="text-xs text-white/70">
+                  {bothRequestedRematch
+                    ? "\u{1F680} Starting rematch..."
+                    : hasRequestedRematch
+                    ? "\u{1F525} Opponent requested rematch"
+                    : "\u{23F3} Waiting..."}
+                </div>
+              </div>
+            )}
           </div>
-
-          {/* Modern gradient progress bar when round is live */}
-          {!isGameEnded && deadline && (
-            <div
-              className={`mx-auto w-full overflow-hidden rounded-full bg-white/10 ${
-                isMobile ? "mt-1 max-w-[120px]" : "mt-2 max-w-xl"
-              }`}
-              style={{ height: isMobile ? 3 : 8 }}
-            >
-              <motion.div
-                className={`h-full rounded-full ${
-                  low
-                    ? "bg-gradient-to-r from-red-500 to-red-600"
-                    : warn
-                    ? "bg-gradient-to-r from-amber-500 to-amber-600"
-                    : "bg-gradient-to-r from-emerald-500 to-cyan-500"
-                }`}
-                style={{ width: `${pct ?? 100}%` }}
-                initial={{ width: "100%" }}
-                animate={{ width: `${pct ?? 100}%` }}
-                transition={{ duration: 0.3 }}
-              />
-            </div>
-          )}
-
-          {isGameEnded && (
-            <div className="text-center mt-3">
-              <div className="text-sm text-white/80">
-                {bothRequestedRematch
-                  ? "\u{1F680} Both players ready! Starting rematch..."
-                  : hasRequestedRematch
-                  ? "\u{1F525} Opponent requested rematch"
-                  : "\u{23F3} Waiting for opponent"}
+        ) : (
+          /* Desktop Header */
+          <div className="px-3 pt-3 pb-3">
+            <div className="flex items-center justify-between gap-4 mb-3">
+              <div className="flex-1 text-center">
+                <h2 className="font-semibold text-white text-base md:text-lg">
+                  {isGameEnded ? (
+                    bothRequestedRematch ? (
+                      "Rematch starting..."
+                    ) : (
+                      "Game ended - ready for rematch?"
+                    )
+                  ) : deadline ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <span className="text-white/70">Time Remaining:</span>
+                      <span
+                        className={`font-mono rounded-xl px-3 py-1 ${
+                          low
+                            ? "bg-red-500/20 text-red-300 border border-red-500/30"
+                            : warn
+                            ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
+                            : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                        }`}
+                      >
+                        {timerLabel}
+                      </span>
+                    </span>
+                  ) : null}
+                </h2>
               </div>
             </div>
-          )}
-        </div>
+
+            {!isGameEnded && deadline && (
+              <div
+                className="mx-auto w-full max-w-xl overflow-hidden rounded-full bg-white/10 mt-2"
+                style={{ height: 8 }}
+              >
+                <motion.div
+                  className={`h-full rounded-full ${
+                    low
+                      ? "bg-gradient-to-r from-red-500 to-red-600"
+                      : warn
+                      ? "bg-gradient-to-r from-amber-500 to-amber-600"
+                      : "bg-gradient-to-r from-emerald-500 to-cyan-500"
+                  }`}
+                  style={{ width: `${pct ?? 100}%` }}
+                  initial={{ width: "100%" }}
+                  animate={{ width: `${pct ?? 100}%` }}
+                  transition={{ duration: 0.3 }}
+                />
+              </div>
+            )}
+
+            {isGameEnded && (
+              <div className="text-center mt-3">
+                <div className="text-sm text-white/80">
+                  {bothRequestedRematch
+                    ? "\u{1F680} Both players ready! Starting rematch..."
+                    : hasRequestedRematch
+                    ? "\u{1F525} Opponent requested rematch"
+                    : "\u{23F3} Waiting for opponent"}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Main */}
-        <main
-          className={`flex-1 px-3 md:px-4 ${
-            isMobile ? "pt-1.5 pb-2" : "pt-2 pb-3"
-          } min-h-0 flex flex-col`}
-        >
-          <div
-            className={`w-full max-w-4xl mx-auto flex flex-col flex-1 min-h-0 ${
-              isMobile ? "gap-3" : "gap-4"
-            }`}
-          >
-            {/* Player Cards Row */}
+        <main className={`flex-1 min-h-0 flex flex-col ${isMobile ? 'px-2 pt-1 pb-1' : 'px-3 md:px-4 pt-2 pb-3'}`}>
+          <div className="w-full max-w-4xl mx-auto flex flex-col flex-1 min-h-0" style={{ gap: isMobile ? '6px' : '16px' }}>
+            {/* Player Cards Row - Ultra Compact on Mobile */}
             {isMobile ? (
-              <div className="-mx-1 flex gap-2 overflow-x-auto px-1 py-1">
+              <div className="flex gap-2 justify-center flex-shrink-0">
                 <MobilePlayerProgressCard
                   name={me?.name || "You"}
                   wins={me?.wins || 0}
@@ -599,7 +619,7 @@ function DuelGameScreen({
                   maxGuesses={6}
                   isActive={mobileView === "me"}
                   onSelect={() => setMobileView("me")}
-                  compact
+                  compact={true}
                 />
                 <MobilePlayerProgressCard
                   name={opponent?.name || "Opponent"}
@@ -609,7 +629,7 @@ function DuelGameScreen({
                   maxGuesses={6}
                   isActive={mobileView === "opponent"}
                   onSelect={() => setMobileView("opponent")}
-                  compact
+                  compact={true}
                 />
               </div>
             ) : (
@@ -788,23 +808,15 @@ function DuelGameScreen({
                 </div>
               </div>
             )}
-            {/* Guesses Board Section */}
+            {/* Guesses Board Section - Optimized for mobile keyboard */}
             {showBoardArea ? (
-              <div
-                className={`flex flex-col items-center flex-1 min-h-0 ${
-                  isMobile ? "gap-1" : "gap-2"
-                }`}
-              >
-                <div className="text-[10px] uppercase tracking-[0.35em] text-white/50 text-center flex-shrink-0">
+              <div className="flex flex-col items-center flex-1 min-h-0" style={{ gap: isMobile ? '4px' : '8px' }}>
+                <div className={`uppercase tracking-[0.35em] text-white/50 text-center flex-shrink-0 ${isMobile ? 'text-[9px]' : 'text-[10px]'}`}>
                   Guesses
                 </div>
 
-                <div className="w-full flex-1 flex justify-center items-start min-h-0">
-                  <div
-                    className={`w-full h-full mx-auto ${
-                      isMobile ? "max-w-[20rem]" : "max-w-md"
-                    }`}
-                  >
+                <div className="w-full flex-1 flex justify-center min-h-0">
+                  <div className="w-full max-w-md h-full">
                     <Board
                       guesses={me?.guesses || []}
                       activeGuess={activeGuessForMe}
@@ -820,8 +832,6 @@ function DuelGameScreen({
                       padding={boardPadding}
                       minTile={boardTileBounds.min}
                       maxTile={boardTileBounds.max}
-                      verticalAlign="start"
-                      horizontalAlign="center"
                     />
                   </div>
                 </div>
@@ -841,16 +851,7 @@ function DuelGameScreen({
         </main>
 
         {/* Footer */}
-        <footer
-          className={`w-full px-2 sm:px-4 flex-shrink-0 ${
-            isMobile ? "py-1.5" : "py-2"
-          }`}
-          style={{
-            paddingBottom: isMobile
-              ? "calc(env(safe-area-inset-bottom) + 0.25rem)"
-              : undefined,
-          }}
-        >
+        <footer className="w-full px-2 sm:px-4 py-2 flex-shrink-0">
           <div className="mx-auto w-full max-w-5xl">
             {isGameEnded ? (
               <div className="text-center">
@@ -882,14 +883,7 @@ function DuelGameScreen({
 
         {/* Keyboard - Now in its own grid row */}
         {(canSetSecret || canGuess) && (
-          <div
-            className="w-full px-2 sm:px-4 pb-2 flex-shrink-0"
-            style={{
-              paddingBottom: isMobile
-                ? "calc(env(safe-area-inset-bottom) + 0.25rem)"
-                : undefined,
-            }}
-          >
+          <div className="w-full px-2 sm:px-4 pb-2 flex-shrink-0">
             <div className="mx-auto w-full max-w-5xl">
               <Keyboard
                 onKeyPress={handleKeyPress}
@@ -904,3 +898,5 @@ function DuelGameScreen({
 }
 
 export default DuelGameScreen;
+
+
