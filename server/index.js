@@ -1,4 +1,4 @@
-﻿// server/index.js
+// server/index.js
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
@@ -18,6 +18,7 @@ import {
 } from "./daily-db.js";
 import { setupAuth, getUserIdFromRequest } from "./auth.js";
 import { getFullUserProfile } from "./mergeService.js";
+import createAdminEventsRouter from "./admin/events.js";
 
 // ---------- Word list loader (.txt) ----------
 const __filename = fileURLToPath(import.meta.url);
@@ -42,7 +43,7 @@ function loadWords() {
     .map((w) => w.trim())
     .filter(Boolean)
     .map((w) => w.toUpperCase())
-    .filter((w) => /^[A-Z]{5}$/.test(w)); // only Aâ€“Z 5-letter words
+    .filter((w) => /^[A-Z]{5}$/.test(w)); // only A–Z 5-letter words
 
   WORDS = Array.from(new Set(arr)); // dedupe
   WORDSET = new Set(WORDS);
@@ -212,10 +213,10 @@ if (process.env.NODE_ENV === "production") {
       </head>
       <body>
         <div class="container">
-          <h1>ðŸŽ® WordlePlus Backend API</h1>
+          <h1>🎮 WordlePlus Backend API</h1>
           <p>You've reached the backend API server. The WordlePlus game frontend is running on a different port.</p>
           <p><strong>Click the button below to access the game:</strong></p>
-          <a href="${frontendUrl}" class="button">Open WordlePlus Game â†’</a>
+          <a href="${frontendUrl}" class="button">Open WordlePlus Game →</a>
           <p style="margin-top: 30px; font-size: 14px; color: #999;">Backend API running on port 8080 | Frontend on port 5000</p>
         </div>
       </body>
@@ -442,7 +443,7 @@ app.post("/api/daily/guess", async (req, res) => {
       won,
       word: completed ? puzzle.word : undefined,
       message: won 
-        ? "ðŸŽ‰ Congratulations! You solved today's puzzle!" 
+        ? "🎉 Congratulations! You solved today's puzzle!" 
         : outOfGuesses 
         ? `Game over! The word was ${puzzle.word}` 
         : "",
@@ -503,12 +504,228 @@ const VALID_MODES = new Set(["duel", "shared", "battle", "battle_ai"]);
 
 const HOST_DISCONNECT_GRACE_MS = 2 * 60 * 1000; // 2 minutes
 
+const AI_BATTLE_EVENT_BASE_KEY = "ai_battle_hour";
+let aiBattleEventActive =
+  String(process.env.AI_BATTLE_EVENT_ACTIVE || "").toLowerCase() === "true";
+const AI_BATTLE_EVENT_SLOT =
+  process.env.AI_BATTLE_EVENT_SLOT || "20:00-21:00";
+const AI_BATTLE_EVENT_INTERVAL_MS = 30 * 1000;
+let ioRef = null;
+
+const isTruthy = (value) =>
+  typeof value === "string"
+    ? ["true", "1", "yes", "on"].includes(value.toLowerCase())
+    : Boolean(value);
+
+function computeAiBattleEventId(date = new Date()) {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  return `${AI_BATTLE_EVENT_BASE_KEY}_${year}${month}${day}`;
+}
+
+function isAiBattleEventActive() {
+  return aiBattleEventActive;
+}
+
+function setAiBattleEventActive(nextActive) {
+  const normalized = isTruthy(nextActive);
+  const previous = aiBattleEventActive;
+  if (previous === normalized) {
+    if (normalized) {
+      ensureAiBattleEventRoom();
+    } else {
+      retireAiBattleEventRooms();
+    }
+    return getAiBattleEventStatus();
+  }
+  aiBattleEventActive = normalized;
+  if (normalized) {
+    ensureAiBattleEventRoom();
+  } else {
+    retireAiBattleEventRooms();
+  }
+  return getAiBattleEventStatus();
+}
+
+function getAiBattleEventContext() {
+  if (!isAiBattleEventActive()) return null;
+  return {
+    key: AI_BATTLE_EVENT_BASE_KEY,
+    eventId: computeAiBattleEventId(),
+    slot: AI_BATTLE_EVENT_SLOT,
+  };
+}
+
+function tagRoomAsEvent(room, ctx) {
+  room.meta = {
+    ...(room.meta || {}),
+    isEvent: true,
+    eventKey: ctx.key,
+    eventId: ctx.eventId,
+    slot: ctx.slot,
+    featured: true,
+  };
+  room.hostId = "server";
+  room.hostConnected = true;
+}
+
+function ensureEventRoomDefaults(room, ctx) {
+  tagRoomAsEvent(room, ctx);
+  if (!room.battle) {
+    battleMode.initBattleRoom(room);
+  }
+  room.mode = "battle_ai";
+  room.battle.aiHost = {
+    mode: "auto",
+    claimedBy: null,
+    pendingStart: false,
+  };
+  room.battle.pendingStart = false;
+  room.battle.countdownEndsAt = room.battle.countdownEndsAt ?? null;
+  room.battle.deadline = room.battle.deadline ?? null;
+  room.updatedAt = Date.now();
+}
+
+function createAiBattleEventRoom(ctx) {
+  const id = Math.random().toString(36).slice(2, 8).toUpperCase();
+  const now = Date.now();
+  const room = {
+    id,
+    mode: "battle_ai",
+    hostId: "server",
+    hostConnected: true,
+    players: {},
+    started: false,
+    winner: null,
+    duelReveal: undefined,
+    duelDeadline: null,
+    roundClosed: false,
+    createdAt: now,
+    updatedAt: now,
+    meta: {
+      isEvent: true,
+      eventKey: ctx.key,
+      eventId: ctx.eventId,
+      slot: ctx.slot,
+      featured: true,
+    },
+  };
+
+  duelMode.initDuelRoom(room);
+  sharedMode.initSharedRoom(room, { pickRandomWords });
+  battleMode.initBattleRoom(room);
+  room.battle.aiHost = {
+    mode: "auto",
+    claimedBy: null,
+    pendingStart: false,
+  };
+  rooms.set(id, room);
+  scheduleAiBattleCountdown(id);
+  return room;
+}
+
+function ensureAiBattleEventRoom() {
+  const ctx = getAiBattleEventContext();
+  if (!ctx) return null;
+  let activeRoom = null;
+  const staleRooms = [];
+  for (const [roomId, room] of rooms.entries()) {
+    if (room.meta?.isEvent && room.meta.eventKey === ctx.key) {
+      if (room.meta.eventId === ctx.eventId) {
+        activeRoom = room;
+      } else {
+        staleRooms.push({ roomId, room });
+      }
+    }
+  }
+
+  for (const { roomId, room } of staleRooms) {
+    room.meta.isEvent = false;
+    room.meta.featured = false;
+    room.meta.eventEndedAt = Date.now();
+    if (room.hostId === "server") {
+      room.hostId = null;
+      room.hostConnected = false;
+    }
+    if (ioRef) {
+      ioRef.to(roomId).emit("roomState", sanitizeRoom(room));
+    }
+  }
+
+  if (!activeRoom) {
+    activeRoom = createAiBattleEventRoom(ctx);
+  } else {
+    ensureEventRoomDefaults(activeRoom, ctx);
+    if (getActivePlayerIds(activeRoom).length === 0) {
+      scheduleAiBattleCountdown(activeRoom.id);
+    }
+  }
+
+  if (ioRef) {
+    ioRef.to(activeRoom.id).emit("roomState", sanitizeRoom(activeRoom));
+  }
+  return activeRoom;
+}
+
+function findActiveAiBattleEventRoom(ctx = getAiBattleEventContext()) {
+  if (!ctx) return null;
+  for (const room of rooms.values()) {
+    if (
+      room.meta?.isEvent &&
+      room.meta.eventKey === ctx.key &&
+      room.meta.eventId === ctx.eventId
+    ) {
+      return room;
+    }
+  }
+  return null;
+}
+
+function retireAiBattleEventRooms() {
+  for (const [roomId, room] of rooms.entries()) {
+    if (room.meta?.isEvent && room.meta.eventKey === AI_BATTLE_EVENT_BASE_KEY) {
+      room.meta.isEvent = false;
+      room.meta.eventEndedAt = Date.now();
+      room.meta.featured = false;
+      if (room.hostId === "server") {
+        room.hostId = null;
+        room.hostConnected = false;
+      }
+      if (ioRef) {
+        ioRef.to(roomId).emit("roomState", sanitizeRoom(room));
+      }
+    }
+  }
+}
+
+function getAiBattleEventStatus() {
+  const ctx = getAiBattleEventContext();
+  const room = ctx ? findActiveAiBattleEventRoom(ctx) : null;
+  return {
+    active: Boolean(ctx && room),
+    eventKey: ctx?.key ?? AI_BATTLE_EVENT_BASE_KEY,
+    eventId: ctx?.eventId ?? null,
+    slot: ctx?.slot ?? AI_BATTLE_EVENT_SLOT,
+    roomId: room?.id ?? null,
+    featured: Boolean(room?.meta?.featured),
+    hostId: room?.hostId ?? null,
+  };
+}
+
+const adminEventsRouter = createAdminEventsRouter({
+  setAiBattleEventActive,
+  getAiBattleEventStatus,
+});
+app.use("/admin/events", adminEventsRouter);
+
 function summarizeJoinableRoom(room) {
   if (!room) return null;
 
   const players = Object.values(room.players || {});
   const activePlayers = players.filter((player) => !player?.disconnected);
-  if (activePlayers.length === 0) return null;
+  const isEventRoom = Boolean(room.meta?.isEvent);
+  if (activePlayers.length === 0 && !isEventRoom) return null;
 
   let joinable = true;
   let capacity = null;
@@ -546,6 +763,8 @@ function summarizeJoinableRoom(room) {
     room.mode === "battle_ai"
       ? room.battle?.aiHost?.mode === "player"
         ? host?.name || "Player Host"
+        : room.meta?.isEvent
+        ? "AI Battle Hour"
         : "AI Host"
       : host?.name || "Host";
 
@@ -576,6 +795,10 @@ app.get("/api/rooms/open", (_req, res) => {
   });
 
   res.json({ rooms: summaries.slice(0, 20) });
+});
+
+app.get("/api/events/status", (_req, res) => {
+  res.json(getAiBattleEventStatus());
 });
 
 function normalizeMode(mode) {
@@ -788,8 +1011,9 @@ const io = new Server(httpServer, {
   pingInterval: 10000, // send pings every 10s
   pingTimeout: 30000, // allow 30s before declaring dead
   allowEIO3: true, // helps older clients/proxies
-  perMessageDeflate: false, // avoid some proxiesâ€™ compression issues
+  perMessageDeflate: false, // avoid proxy compression issues
 });
+ioRef = io;
 
 // ---------- Socket handlers ----------
 
@@ -888,6 +1112,9 @@ io.on("connection", (socket) => {
       io.to(roomId).emit("roomState", sanitizeRoom(room));
       if (room.mode === "battle_ai") {
         maybeEnsureAiBattleRound(roomId);
+        if (room.meta?.isEvent && isAiBattleEventActive()) {
+          ensureAiBattleEventRoom();
+        }
       }
       return cb?.({ ok: true, resumed: true, mode: room.mode });
     }
@@ -920,6 +1147,9 @@ io.on("connection", (socket) => {
     io.to(roomId).emit("roomState", sanitizeRoom(room));
     if (room.mode === "battle_ai") {
       maybeEnsureAiBattleRound(roomId);
+      if (room.meta?.isEvent && isAiBattleEventActive()) {
+        ensureAiBattleEventRoom();
+      }
     }
   });
 
@@ -1175,7 +1405,13 @@ io.on("connection", (socket) => {
     room.battle.secret = null;
     room.battle.lastRevealedWord = null;
     room.battle.aiHost = { mode: "auto", claimedBy: null, pendingStart: false };
-    room.hostId = null;
+    if (room.meta?.isEvent) {
+      room.hostId = "server";
+      room.hostConnected = true;
+    } else {
+      room.hostId = null;
+      room.hostConnected = false;
+    }
     room.battle.countdownEndsAt = null;
     room.battle.deadline = null;
     room.battle.pendingStart = false;
@@ -1278,7 +1514,13 @@ io.on("connection", (socket) => {
 
       if (room.hostId === socket.id) {
         if (room.mode === "battle_ai") {
-          room.hostId = null;
+          if (room.meta?.isEvent) {
+            room.hostId = "server";
+            room.hostConnected = true;
+          } else {
+            room.hostId = null;
+            room.hostConnected = false;
+          }
           if (room.battle?.aiHost) {
             room.battle.aiHost.mode = "auto";
             room.battle.aiHost.claimedBy = null;
@@ -1304,6 +1546,9 @@ io.on("connection", (socket) => {
           battleMode.resetBattleRound(room);
           room.battle.secret = null;
           room.battle.lastRevealedWord = null;
+          if (room.meta?.isEvent && isAiBattleEventActive()) {
+            ensureAiBattleEventRoom();
+          }
         } else if (
           room.battle.aiHost?.mode === "auto" &&
           !room.battle.started &&
@@ -1322,6 +1567,9 @@ const startRoomCleanupInterval = () =>
   setInterval(() => {
     const now = Date.now();
     for (const [roomId, room] of rooms.entries()) {
+      if (room.meta?.isEvent && isAiBattleEventActive()) {
+        continue;
+      }
       let updated = false;
       for (const pid of Object.keys(room.players)) {
         const player = room.players[pid];
@@ -1333,6 +1581,7 @@ const startRoomCleanupInterval = () =>
           if (room.hostId === pid) {
             if (room.mode === "battle_ai") {
               room.hostId = null;
+              room.hostConnected = false;
               if (room.battle?.aiHost) {
                 room.battle.aiHost.mode = "auto";
                 room.battle.aiHost.claimedBy = null;
@@ -1413,6 +1662,15 @@ const startRoomCleanupInterval = () =>
 
 const roomCleanupInterval =
   process.env.NODE_ENV !== "test" ? startRoomCleanupInterval() : null;
+
+const aiBattleEventInterval =
+  isAiBattleEventActive() && process.env.NODE_ENV !== "test"
+    ? setInterval(() => ensureAiBattleEventRoom(), AI_BATTLE_EVENT_INTERVAL_MS)
+    : null;
+
+if (isAiBattleEventActive()) {
+  ensureAiBattleEventRoom();
+}
 // ---------- Helpers ----------
 function getOpponent(room, socketId) {
   return Object.keys(room.players).find((id) => id !== socketId);

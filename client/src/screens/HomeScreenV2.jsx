@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Swords,
@@ -7,7 +7,6 @@ import {
   Trophy,
   Star,
   Clock,
-  CalendarClock,
   Zap,
 } from "lucide-react";
 import GradientBackground from "../components/ui/GradientBackground";
@@ -59,35 +58,6 @@ const DEFAULT_MODE_META = {
   gradient: "from-white/10 via-transparent to-transparent",
 };
 
-const EVENT_CARDS = [
-  {
-    id: "speed-battle",
-    title: "Speed Battle Hour",
-    mode: "Battle Royale",
-    status: "Live",
-    tone: "live",
-    reward: "+100 XP",
-    timeLabel: "45m remaining",
-    description:
-      "Compete in rapid-fire battles and climb the leaderboard!",
-    ctaLabel: "Join Event",
-    disabled: false,
-  },
-  {
-    id: "weekend-duel",
-    title: "Weekend Duel Tournament",
-    mode: "Duel",
-    status: "Upcoming",
-    tone: "upcoming",
-    reward: "+200 XP",
-    timeLabel: "Starts in 1h 59m",
-    description:
-      "Challenge friends in intense 1v1 matches for double points.",
-    ctaLabel: "Coming Soon",
-    disabled: true,
-  },
-];
-
 export default function HomeScreenV2({
   name,
   setName,
@@ -110,6 +80,9 @@ export default function HomeScreenV2({
   const [roomsLoading, setRoomsLoading] = useState(true);
   const [roomsError, setRoomsError] = useState("");
   const [joiningRoomId, setJoiningRoomId] = useState(null);
+  const [eventStatus, setEventStatus] = useState(null);
+  const [eventLoading, setEventLoading] = useState(true);
+  const [eventError, setEventError] = useState("");
 
   useEffect(() => {
     if (!isAuthenticated || isAnonymous) return;
@@ -238,6 +211,50 @@ export default function HomeScreenV2({
       clearInterval(intervalId);
     };
   }, [isNameSet]);
+
+  useEffect(() => {
+    let isActive = true;
+    const fetchStatus = async () => {
+      if (!isActive) return;
+      try {
+        const response = await fetch(buildApiUrl("/api/events/status"), {
+          credentials: "include",
+        });
+        if (!response.ok) {
+          throw new Error(`Failed to load event status (${response.status})`);
+        }
+        const data = await response.json();
+        if (!isActive) return;
+        setEventStatus(data);
+        setEventError("");
+      } catch (error) {
+        if (!isActive) return;
+        console.error("Failed to load event status:", error);
+        setEventError("Unable to load event status.");
+        setEventStatus(null);
+      } finally {
+        if (isActive) setEventLoading(false);
+      }
+    };
+
+    fetchStatus();
+    const intervalId = setInterval(fetchStatus, 15000);
+
+    return () => {
+      isActive = false;
+      clearInterval(intervalId);
+    };
+  }, []);
+
+  const eventRoom = useMemo(() => {
+    if (!eventStatus?.roomId) return null;
+    return openRooms.find((room) => room.id === eventStatus.roomId) || null;
+  }, [eventStatus?.roomId, openRooms]);
+
+  const eventSlotLabel = useMemo(() => {
+    if (!eventStatus?.slot) return null;
+    return `${eventStatus.slot} GMT`;
+  }, [eventStatus?.slot]);
 
   const handleNameSubmit = () => {
     if (name.trim()) {
@@ -553,62 +570,96 @@ export default function HomeScreenV2({
               Active Events
             </motion.h2>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-              {EVENT_CARDS.map((event, index) => {
-                const isLive = event.tone === "live";
-                const statusClasses = isLive
-                  ? "bg-emerald-500/15 text-emerald-200"
-                  : "bg-white/10 text-white/70";
-                const StatusIcon = isLive ? Zap : CalendarClock;
-                return (
+            <div className="space-y-4">
+              {eventError && !eventLoading && (
+                <div className="text-sm text-red-300 bg-red-500/10 border border-red-500/20 rounded-2xl px-4 py-3">
+                  {eventError}
+                </div>
+              )}
+
+              {eventLoading ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+                  <div className="h-full min-h-[200px] rounded-3xl border border-white/10 bg-white/5 animate-pulse" />
+                </div>
+              ) : eventStatus?.active && eventStatus?.roomId ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                   <motion.div
-                    key={event.id}
                     className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/5 backdrop-blur-sm p-6 flex flex-col"
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.25 + index * 0.05 }}
+                    transition={{ delay: 0.25 }}
                     whileHover={{ borderColor: "rgba(255,255,255,0.3)", y: -4 }}
                   >
                     <div className="flex items-start justify-between gap-4">
-                      <span
-                        className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide ${statusClasses}`}
-                      >
-                        <StatusIcon className="w-4 h-4" />
-                        {event.status}
+                      <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide bg-emerald-500/15 text-emerald-200">
+                        <Zap className="w-4 h-4" />
+                        Live Now
                       </span>
                       <span className="text-sm font-semibold text-cyan-200">
-                        {event.reward}
+                        {eventSlotLabel || "Today"}
                       </span>
                     </div>
 
                     <div className="mt-4">
                       <p className="text-xs uppercase tracking-wide text-white/50">
-                        {event.mode}
+                        AI Battle
                       </p>
                       <h3 className="text-xl font-bold text-white mt-1">
-                        {event.title}
+                        AI Battle Hour
                       </h3>
                       <p className="text-sm text-white/60 mt-2">
-                        {event.description}
+                        Jump into our featured AI-hosted lobby. Rounds auto-cycle
+                        every few seconds—perfect for quick matches.
                       </p>
                     </div>
 
-                    <div className="mt-6 flex items-center justify-between gap-4">
-                      <div className="flex items-center gap-2 text-sm text-white/60">
-                        <Clock className="w-4 h-4 text-white/50" />
-                        <span>{event.timeLabel}</span>
+                    <div className="mt-6 flex flex-wrap items-center justify-between gap-4">
+                      <div className="flex items-center gap-3 text-sm text-white/70">
+                        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-xl bg-white/5 border border-white/10">
+                          <Users className="w-4 h-4 text-white/60" />
+                          <span>
+                            {eventRoom?.playerCount ?? 0}
+                            {eventRoom?.capacity
+                              ? ` / ${eventRoom.capacity}`
+                              : " players"}
+                          </span>
+                        </div>
+                        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-xl bg-white/5 border border-white/10">
+                          <Clock className="w-4 h-4 text-white/60" />
+                          <span>Ends {eventSlotLabel || "soon"}</span>
+                        </div>
                       </div>
                       <GlowButton
                         size="sm"
-                        variant={event.disabled ? "secondary" : "primary"}
-                        disabled={event.disabled}
+                        variant="primary"
+                        onClick={() =>
+                          handleQuickJoin(eventStatus.roomId, "battle_ai")
+                        }
+                        disabled={
+                          !eventStatus.roomId ||
+                          Boolean(joiningRoomId) ||
+                          joining
+                        }
                       >
-                        {event.ctaLabel}
+                        {joiningRoomId === eventStatus.roomId
+                          ? "Joining..."
+                          : "Join Now"}
                       </GlowButton>
                     </div>
                   </motion.div>
-                );
-              })}
+                </div>
+              ) : (
+                <motion.div
+                  className="rounded-3xl border border-white/10 bg-white/5 p-6 md:p-8 text-white/60 text-center"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                >
+                  <p className="text-base">
+                    No live events right now. Check back during the next AI
+                    Battle Hour{eventSlotLabel ? ` (${eventSlotLabel})` : ""}.
+                  </p>
+                </motion.div>
+              )}
             </div>
           </section>
 
