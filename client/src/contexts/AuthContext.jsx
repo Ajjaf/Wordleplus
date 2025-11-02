@@ -1,4 +1,11 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+} from "react";
 import { buildApiUrl } from "../config";
 
 const AuthContext = createContext(null);
@@ -6,18 +13,18 @@ const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const loadingRef = useRef(false);
 
-  useEffect(() => {
-    loadUser();
-  }, []);
+  const loadUser = useCallback(async () => {
+    if (loadingRef.current) return;
+    loadingRef.current = true;
 
-  async function loadUser() {
     try {
       setIsLoading(true);
       const response = await fetch(buildApiUrl("/api/auth/user"), {
         credentials: "include",
       });
-      
+
       if (response.ok) {
         const userData = await response.json();
         setUser(userData);
@@ -29,8 +36,42 @@ export function AuthProvider({ children }) {
       setUser(null);
     } finally {
       setIsLoading(false);
+      loadingRef.current = false;
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    loadUser();
+  }, [loadUser]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof document === "undefined") {
+      return undefined;
+    }
+
+    const handleFocus = () => {
+      if (!user || user.isAnonymous) {
+        loadUser();
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (
+        document.visibilityState === "visible" &&
+        (!user || user.isAnonymous)
+      ) {
+        loadUser();
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [loadUser, user]);
 
   function startAuth(mode = "login") {
     if (typeof window === "undefined") return;
