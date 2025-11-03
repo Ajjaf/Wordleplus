@@ -1,12 +1,16 @@
 import React from "react";
 
 function GameHeader({ mode, room, isHost, players }) {
+  const lastRevealed = room?.battle?.lastRevealedWord;
+  const isAiMode = mode === "battle_ai";
   const getHeaderTitle = () => {
     switch (mode) {
       case "duel":
         return "Fewest guesses wins";
       case "battle":
         return "Battle Royale";
+      case "battle_ai":
+        return "AI Battle";
       default:
         return "Wordle Plus";
     }
@@ -17,6 +21,7 @@ function GameHeader({ mode, room, isHost, players }) {
       case "duel":
         return "px-4 pt-3 pb-2";
       case "battle":
+      case "battle_ai":
         return "px-4 pt-4 pb-6";
       default:
         return "px-4 pt-3 pb-2";
@@ -28,6 +33,7 @@ function GameHeader({ mode, room, isHost, players }) {
       case "duel":
         return "text-base md:text-lg font-semibold text-center text-muted-foreground";
       case "battle":
+      case "battle_ai":
         return "text-2xl font-bold text-slate-800 text-center mb-2";
       default:
         return "text-base md:text-lg font-semibold text-center text-muted-foreground";
@@ -53,7 +59,7 @@ function GameHeader({ mode, room, isHost, players }) {
               </p>
               {room?.battle?.started &&
                 !room?.battle?.winner &&
-                !room?.battle?.reveal && (
+                !lastRevealed && (
                   <p className="text-xs text-emerald-600 font-medium">
                     Game in progress...
                   </p>
@@ -65,7 +71,7 @@ function GameHeader({ mode, room, isHost, players }) {
                     "Unknown"}
                 </p>
               )}
-              {room?.battle?.reveal && !room?.battle?.winner && (
+              {lastRevealed && !room?.battle?.winner && (
                 <p className="text-xs text-amber-600 font-medium">
                   No winner - word revealed
                 </p>
@@ -78,7 +84,7 @@ function GameHeader({ mode, room, isHost, players }) {
             <div className="text-center space-y-1">
               {room?.battle?.started &&
                 !room?.battle?.winner &&
-                !room?.battle?.reveal && (
+                !lastRevealed && (
                   <p className="text-xs text-emerald-600 font-medium">
                     Game in progress... Good luck!
                   </p>
@@ -90,16 +96,18 @@ function GameHeader({ mode, room, isHost, players }) {
                     "Unknown"}
                 </p>
               )}
-              {room?.battle?.reveal && !room?.battle?.winner && (
+              {lastRevealed && !room?.battle?.winner && (
                 <p className="text-xs text-amber-600 font-medium">
                   No winner - word revealed
                 </p>
               )}
               {!room?.battle?.started &&
                 !room?.battle?.winner &&
-                !room?.battle?.reveal && (
+                !lastRevealed && (
                   <p className="text-xs text-slate-600 font-medium">
-                    Waiting for host to start the game...
+                    {isAiMode
+                      ? "Waiting for AI host to start the next round..."
+                      : "Waiting for host to start the game..."}
                   </p>
                 )}
             </div>

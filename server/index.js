@@ -18,6 +18,7 @@ import {
 } from "./daily-db.js";
 import { setupAuth, getUserIdFromRequest } from "./auth.js";
 import { getFullUserProfile } from "./mergeService.js";
+import createAdminEventsRouter from "./admin/events.js";
 
 // ---------- Word list loader (.txt) ----------
 const __filename = fileURLToPath(import.meta.url);
@@ -33,6 +34,7 @@ const ROUND_MS =
   Number.isFinite(envRoundMs) && envRoundMs > 0
     ? Math.min(envRoundMs, DEFAULT_ROUND_MS)
     : DEFAULT_ROUND_MS;
+const AI_BATTLE_COUNTDOWN_MS = 12 * 1000; // 12 seconds between AI-hosted rounds
 
 function loadWords() {
   const raw = fs.readFileSync(WORDLIST_PATH, "utf8");
@@ -68,6 +70,7 @@ function isValidWordLocal(word) {
 
 // ---------- Express app ----------
 const app = express();
+export { app };
 
 const DEFAULT_ALLOWED_ORIGINS = [
   "http://localhost:5000",
@@ -174,8 +177,13 @@ app.options("*", cors(corsOptions));
 app.use(express.json());
 app.use(cookieParser());
 
-// Setup authentication (includes session middleware)
-await setupAuth(app);
+const shouldSetupAuth =
+  process.env.NODE_ENV !== "test" &&
+  process.env.SKIP_AUTH_SETUP !== "true";
+
+if (shouldSetupAuth) {
+  await setupAuth(app);
+}
 
 // Serve static files from client build in production
 if (process.env.NODE_ENV === "production") {
@@ -476,15 +484,322 @@ app.get("/api/daily/stats", async (req, res) => {
 /**
  * Room schema:
  * {
- *   id, mode: 'duel' | 'battle', hostId,
+ *   id, mode: 'duel' | 'battle' | 'battle_ai', hostId,
  *   players: { [socketId]: { name, guesses: [], done: false, ready: false, secret: string|null } },
  *   started, winner,
  *   duelReveal?: { [socketId]: secret }, // populated at end of duel
- *   battle: { secret, started, winner, reveal }
+ *   battle: {
+ *     secret,
+ *     started,
+ *     winner,
+ *     lastRevealedWord,
+ *     deadline,
+ *     countdownEndsAt,
+ *     aiHost?: { mode: 'auto' | 'player', claimedBy: string|null }
+ *   }
  * }
  */
 const rooms = new Map();
-const VALID_MODES = new Set(["duel", "shared", "battle"]);
+const VALID_MODES = new Set(["duel", "shared", "battle", "battle_ai"]);
+
+const HOST_DISCONNECT_GRACE_MS = 2 * 60 * 1000; // 2 minutes
+
+const AI_BATTLE_EVENT_BASE_KEY = "ai_battle_hour";
+let aiBattleEventActive =
+  String(process.env.AI_BATTLE_EVENT_ACTIVE || "").toLowerCase() === "true";
+const AI_BATTLE_EVENT_SLOT =
+  process.env.AI_BATTLE_EVENT_SLOT || "20:00-21:00";
+const AI_BATTLE_EVENT_INTERVAL_MS = 30 * 1000;
+let ioRef = null;
+
+const isTruthy = (value) =>
+  typeof value === "string"
+    ? ["true", "1", "yes", "on"].includes(value.toLowerCase())
+    : Boolean(value);
+
+function computeAiBattleEventId(date = new Date()) {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  return `${AI_BATTLE_EVENT_BASE_KEY}_${year}${month}${day}`;
+}
+
+function isAiBattleEventActive() {
+  return aiBattleEventActive;
+}
+
+function setAiBattleEventActive(nextActive) {
+  const normalized = isTruthy(nextActive);
+  const previous = aiBattleEventActive;
+  if (previous === normalized) {
+    if (normalized) {
+      ensureAiBattleEventRoom();
+    } else {
+      retireAiBattleEventRooms();
+    }
+    return getAiBattleEventStatus();
+  }
+  aiBattleEventActive = normalized;
+  if (normalized) {
+    ensureAiBattleEventRoom();
+  } else {
+    retireAiBattleEventRooms();
+  }
+  return getAiBattleEventStatus();
+}
+
+function getAiBattleEventContext() {
+  if (!isAiBattleEventActive()) return null;
+  return {
+    key: AI_BATTLE_EVENT_BASE_KEY,
+    eventId: computeAiBattleEventId(),
+    slot: AI_BATTLE_EVENT_SLOT,
+  };
+}
+
+function tagRoomAsEvent(room, ctx) {
+  room.meta = {
+    ...(room.meta || {}),
+    isEvent: true,
+    eventKey: ctx.key,
+    eventId: ctx.eventId,
+    slot: ctx.slot,
+    featured: true,
+  };
+  room.hostId = "server";
+  room.hostConnected = true;
+}
+
+function ensureEventRoomDefaults(room, ctx) {
+  tagRoomAsEvent(room, ctx);
+  if (!room.battle) {
+    battleMode.initBattleRoom(room);
+  }
+  room.mode = "battle_ai";
+  room.battle.aiHost = {
+    mode: "auto",
+    claimedBy: null,
+    pendingStart: false,
+  };
+  room.battle.pendingStart = false;
+  room.battle.countdownEndsAt = room.battle.countdownEndsAt ?? null;
+  room.battle.deadline = room.battle.deadline ?? null;
+  room.updatedAt = Date.now();
+}
+
+function createAiBattleEventRoom(ctx) {
+  const id = Math.random().toString(36).slice(2, 8).toUpperCase();
+  const now = Date.now();
+  const room = {
+    id,
+    mode: "battle_ai",
+    hostId: "server",
+    hostConnected: true,
+    players: {},
+    started: false,
+    winner: null,
+    duelReveal: undefined,
+    duelDeadline: null,
+    roundClosed: false,
+    createdAt: now,
+    updatedAt: now,
+    meta: {
+      isEvent: true,
+      eventKey: ctx.key,
+      eventId: ctx.eventId,
+      slot: ctx.slot,
+      featured: true,
+    },
+  };
+
+  duelMode.initDuelRoom(room);
+  sharedMode.initSharedRoom(room, { pickRandomWords });
+  battleMode.initBattleRoom(room);
+  room.battle.aiHost = {
+    mode: "auto",
+    claimedBy: null,
+    pendingStart: false,
+  };
+  rooms.set(id, room);
+  scheduleAiBattleCountdown(id);
+  return room;
+}
+
+function ensureAiBattleEventRoom() {
+  const ctx = getAiBattleEventContext();
+  if (!ctx) return null;
+  let activeRoom = null;
+  const staleRooms = [];
+  for (const [roomId, room] of rooms.entries()) {
+    if (room.meta?.isEvent && room.meta.eventKey === ctx.key) {
+      if (room.meta.eventId === ctx.eventId) {
+        activeRoom = room;
+      } else {
+        staleRooms.push({ roomId, room });
+      }
+    }
+  }
+
+  for (const { roomId, room } of staleRooms) {
+    room.meta.isEvent = false;
+    room.meta.featured = false;
+    room.meta.eventEndedAt = Date.now();
+    if (room.hostId === "server") {
+      room.hostId = null;
+      room.hostConnected = false;
+    }
+    if (ioRef) {
+      ioRef.to(roomId).emit("roomState", sanitizeRoom(room));
+    }
+  }
+
+  if (!activeRoom) {
+    activeRoom = createAiBattleEventRoom(ctx);
+  } else {
+    ensureEventRoomDefaults(activeRoom, ctx);
+    if (getActivePlayerIds(activeRoom).length === 0) {
+      scheduleAiBattleCountdown(activeRoom.id);
+    }
+  }
+
+  if (ioRef) {
+    ioRef.to(activeRoom.id).emit("roomState", sanitizeRoom(activeRoom));
+  }
+  return activeRoom;
+}
+
+function findActiveAiBattleEventRoom(ctx = getAiBattleEventContext()) {
+  if (!ctx) return null;
+  for (const room of rooms.values()) {
+    if (
+      room.meta?.isEvent &&
+      room.meta.eventKey === ctx.key &&
+      room.meta.eventId === ctx.eventId
+    ) {
+      return room;
+    }
+  }
+  return null;
+}
+
+function retireAiBattleEventRooms() {
+  for (const [roomId, room] of rooms.entries()) {
+    if (room.meta?.isEvent && room.meta.eventKey === AI_BATTLE_EVENT_BASE_KEY) {
+      room.meta.isEvent = false;
+      room.meta.eventEndedAt = Date.now();
+      room.meta.featured = false;
+      if (room.hostId === "server") {
+        room.hostId = null;
+        room.hostConnected = false;
+      }
+      if (ioRef) {
+        ioRef.to(roomId).emit("roomState", sanitizeRoom(room));
+      }
+    }
+  }
+}
+
+function getAiBattleEventStatus() {
+  const ctx = getAiBattleEventContext();
+  const room = ctx ? findActiveAiBattleEventRoom(ctx) : null;
+  return {
+    active: Boolean(ctx && room),
+    eventKey: ctx?.key ?? AI_BATTLE_EVENT_BASE_KEY,
+    eventId: ctx?.eventId ?? null,
+    slot: ctx?.slot ?? AI_BATTLE_EVENT_SLOT,
+    roomId: room?.id ?? null,
+    featured: Boolean(room?.meta?.featured),
+    hostId: room?.hostId ?? null,
+  };
+}
+
+const adminEventsRouter = createAdminEventsRouter({
+  setAiBattleEventActive,
+  getAiBattleEventStatus,
+});
+app.use("/admin/events", adminEventsRouter);
+
+function summarizeJoinableRoom(room) {
+  if (!room) return null;
+
+  const players = Object.values(room.players || {});
+  const activePlayers = players.filter((player) => !player?.disconnected);
+  const isEventRoom = Boolean(room.meta?.isEvent);
+  if (activePlayers.length === 0 && !isEventRoom) return null;
+
+  let joinable = true;
+  let capacity = null;
+
+  if (room.mode === "duel") {
+    joinable = !(duelMode.canJoinDuel(room)?.error);
+    capacity = 2;
+  } else if (room.mode === "shared") {
+    joinable = !(sharedMode.canJoinShared(room)?.error);
+    capacity = 2;
+  } else if (room.mode === "battle" || room.mode === "battle_ai") {
+    joinable = room.mode === "battle_ai" ? true : !room.battle?.started;
+  } else {
+    joinable = false;
+  }
+
+  if (!joinable) return null;
+
+  const host = room.players ? room.players[room.hostId] : null;
+  if (room.mode !== "battle_ai") {
+    if (!host || host.disconnected) return null;
+  }
+
+  const updatedAt = Number(room.updatedAt || room.createdAt || Date.now());
+  const createdAt = Number(room.createdAt || updatedAt);
+
+  const isInProgress =
+      (room.mode === "battle" || room.mode === "battle_ai")
+      ? Boolean(room.battle?.started)
+      : room.mode === "shared"
+      ? Boolean(room.shared?.started)
+      : Boolean(room.started);
+
+  const displayHostName =
+    room.mode === "battle_ai"
+      ? room.battle?.aiHost?.mode === "player"
+        ? host?.name || "Player Host"
+        : room.meta?.isEvent
+        ? "AI Battle Hour"
+        : "AI Host"
+      : host?.name || "Host";
+
+  return {
+    id: room.id,
+    mode: room.mode,
+    hostName: displayHostName,
+    playerCount: activePlayers.length,
+    totalPlayers: players.length,
+    capacity,
+    isInProgress,
+    createdAt,
+    updatedAt,
+  };
+}
+
+app.get("/api/rooms/open", (_req, res) => {
+  const summaries = [];
+
+  for (const room of rooms.values()) {
+    const summary = summarizeJoinableRoom(room);
+    if (summary) summaries.push(summary);
+  }
+
+  summaries.sort((a, b) => {
+    if (b.updatedAt !== a.updatedAt) return b.updatedAt - a.updatedAt;
+    return b.createdAt - a.createdAt;
+  });
+
+  res.json({ rooms: summaries.slice(0, 20) });
+});
+
+app.get("/api/events/status", (_req, res) => {
+  res.json(getAiBattleEventStatus());
+});
 
 function normalizeMode(mode) {
   const candidate = (mode || "").toString().toLowerCase();
@@ -518,6 +833,172 @@ function handleDuelTimeout(roomId) {
   io.to(roomId).emit("roomState", sanitizeRoom(room));
 }
 
+function isAiBattleRoom(room) {
+  return room?.mode === "battle_ai";
+}
+
+function getActivePlayerIds(room) {
+  return Object.keys(room.players || {}).filter(
+    (id) => !room.players[id].disconnected
+  );
+}
+
+function pickAiBattleWord() {
+  const [word] = pickRandomWords(1);
+  if (word) return word;
+  if (WORDS.length === 0) return null;
+  const idx = Math.floor(Math.random() * WORDS.length);
+  return WORDS[idx] || null;
+}
+
+function clearAiBattleTimers(room) {
+  if (room._aiBattleRoundTimer) {
+    clearTimeout(room._aiBattleRoundTimer);
+    room._aiBattleRoundTimer = null;
+  }
+  if (room._aiBattleCountdownTimer) {
+    clearTimeout(room._aiBattleCountdownTimer);
+    room._aiBattleCountdownTimer = null;
+  }
+}
+
+function scheduleAiBattleCountdown(roomId) {
+  const room = rooms.get(roomId);
+  if (!room || !isAiBattleRoom(room)) return;
+  if (room.battle.aiHost?.mode !== "auto") return;
+  if (room.battle.pendingStart) return;
+  const active = getActivePlayerIds(room);
+  if (active.length === 0) {
+    clearAiBattleTimers(room);
+    room.battle.countdownEndsAt = null;
+    room.battle.deadline = null;
+    return;
+  }
+  if (room._aiBattleCountdownTimer) {
+    clearTimeout(room._aiBattleCountdownTimer);
+  }
+  const countdownEndsAt = Date.now() + AI_BATTLE_COUNTDOWN_MS;
+  room.battle.countdownEndsAt = countdownEndsAt;
+  room.updatedAt = Date.now();
+  room._aiBattleCountdownTimer = setTimeout(() => {
+    room._aiBattleCountdownTimer = null;
+    const result = autoStartAiBattleRound(roomId);
+    if (!result.ok) {
+      room.battle.pendingStart = true;
+      if (room.battle.aiHost) room.battle.aiHost.pendingStart = true;
+      io.to(roomId).emit("roomState", sanitizeRoom(room));
+    }
+  }, AI_BATTLE_COUNTDOWN_MS);
+}
+
+function autoStartAiBattleRound(roomId) {
+  const room = rooms.get(roomId);
+  if (!room || !isAiBattleRoom(room))
+    return { ok: false, error: "Room not available" };
+  if (room.battle.aiHost?.mode !== "auto")
+    return { ok: false, error: "AI host disabled" };
+  if (room.battle.started) return { ok: false, error: "Round already running" };
+  if (room.battle.pendingStart)
+    return { ok: false, error: "Start pending confirmation" };
+  if (room._aiBattleCountdownTimer) {
+    clearTimeout(room._aiBattleCountdownTimer);
+    room._aiBattleCountdownTimer = null;
+  }
+
+  const active = getActivePlayerIds(room);
+  if (active.length === 0) {
+    clearAiBattleTimers(room);
+    room.battle.deadline = null;
+    room.battle.countdownEndsAt = null;
+    return { ok: false, error: "No active players" };
+  }
+
+  const secret = pickAiBattleWord();
+  if (!secret) {
+    console.warn("[aiBattle] Unable to pick secret word");
+    return { ok: false, error: "No words available" };
+  }
+
+  battleMode.resetBattleRound(room);
+  room.battle.secret = secret;
+  room.battle.lastRevealedWord = null;
+  room.battle.countdownEndsAt = null;
+
+  const result = battleMode.startBattleRound({ room });
+  if (result?.error) {
+    console.warn("[aiBattle] startBattleRound failed", result.error);
+    return { ok: false, error: result.error };
+  }
+
+  room.battle.pendingStart = false;
+  if (room.battle.aiHost) room.battle.aiHost.pendingStart = false;
+  room.battle.deadline = Date.now() + ROUND_MS;
+  room.updatedAt = Date.now();
+  if (room._aiBattleRoundTimer) {
+    clearTimeout(room._aiBattleRoundTimer);
+  }
+  room._aiBattleRoundTimer = setTimeout(() => {
+    handleAiBattleTimeout(roomId);
+  }, ROUND_MS);
+
+  io.to(roomId).emit("roomState", sanitizeRoom(room));
+  return { ok: true };
+}
+
+function handleAiBattleTimeout(roomId) {
+  const room = rooms.get(roomId);
+  if (!room || !isAiBattleRoom(room)) return;
+  room._aiBattleRoundTimer = null;
+  if (!room.battle.started) return;
+
+  battleMode.endBattleRound(room, null, { updateStatsOnWin });
+  room.battle.deadline = null;
+  if (room.battle.aiHost?.mode === "auto") {
+    scheduleAiBattleCountdown(roomId);
+  } else {
+    room.battle.countdownEndsAt = null;
+  }
+  io.to(roomId).emit("roomState", sanitizeRoom(room));
+}
+
+function maybeEnsureAiBattleRound(roomId) {
+  const room = rooms.get(roomId);
+  if (!room || !isAiBattleRoom(room)) return;
+  if (room.battle.aiHost?.mode !== "auto") return;
+  if (room.battle.started) return;
+
+  const active = getActivePlayerIds(room);
+  let touched = false;
+
+  if (active.length === 0) {
+    if (room.battle.countdownEndsAt || room.battle.deadline) {
+      clearAiBattleTimers(room);
+      room.battle.deadline = null;
+      room.battle.countdownEndsAt = null;
+      touched = true;
+    }
+    if (touched) {
+      io.to(roomId).emit("roomState", sanitizeRoom(room));
+    }
+    return;
+  }
+
+  if (room.battle.pendingStart) {
+    room.battle.pendingStart = false;
+    if (room.battle.aiHost) room.battle.aiHost.pendingStart = false;
+    touched = true;
+  }
+
+  if (!room.battle.countdownEndsAt && !room._aiBattleCountdownTimer) {
+    scheduleAiBattleCountdown(roomId);
+    touched = true;
+  }
+
+  if (touched) {
+    io.to(roomId).emit("roomState", sanitizeRoom(room));
+  }
+}
+
 // ---------- HTTP + Socket.IO (same server) ----------
 const httpServer = createServer(app);
 // const io = new Server(httpServer, { cors: corsOptions });
@@ -530,8 +1011,9 @@ const io = new Server(httpServer, {
   pingInterval: 10000, // send pings every 10s
   pingTimeout: 30000, // allow 30s before declaring dead
   allowEIO3: true, // helps older clients/proxies
-  perMessageDeflate: false, // avoid some proxies’ compression issues
+  perMessageDeflate: false, // avoid proxy compression issues
 });
+ioRef = io;
 
 // ---------- Socket handlers ----------
 
@@ -547,21 +1029,34 @@ io.on("connection", (socket) => {
   socket.on("createRoom", ({ name, mode = "duel" }, cb) => {
     const id = Math.random().toString(36).slice(2, 8).toUpperCase();
     const normalizedMode = normalizeMode(mode);
+    const initialHostId = normalizedMode === "battle_ai" ? null : socket.id;
+    const now = Date.now();
     const room = {
       id,
       mode: normalizedMode,
-      hostId: socket.id,
+      hostId: initialHostId,
       players: {},
       started: false,
       winner: null,
       duelReveal: undefined,
       duelDeadline: null,
       roundClosed: false,
+      createdAt: now,
+      updatedAt: now,
     };
 
     duelMode.initDuelRoom(room);
     sharedMode.initSharedRoom(room, { pickRandomWords });
     battleMode.initBattleRoom(room);
+    if (normalizedMode === "battle_ai") {
+      room.hostId = null;
+      room.battle.pendingStart = false;
+      room.battle.aiHost = {
+        mode: "auto",
+        claimedBy: null,
+        pendingStart: false,
+      };
+    }
 
     room.players[socket.id] = {
       name,
@@ -573,10 +1068,14 @@ io.on("connection", (socket) => {
       streak: 0,
       disconnected: false,
       rematchRequested: false,
+      disconnectedAt: null,
     };
 
     rooms.set(id, room);
     socket.join(id);
+    if (normalizedMode === "battle_ai") {
+      scheduleAiBattleCountdown(id);
+    }
     cb?.({ roomId: id });
     io.to(id).emit("roomState", sanitizeRoom(room));
   });
@@ -590,20 +1089,34 @@ io.on("connection", (socket) => {
     );
 
     if (oldId) {
-      if (room.players[socket.id] && socket.id !== oldId) delete room.players[socket.id];
+      if (room.players[socket.id] && socket.id !== oldId) {
+        delete room.players[socket.id];
+      }
 
       const oldPlayer = room.players[oldId];
-      room.players[socket.id] = { ...oldPlayer, disconnected: false };
+      room.players[socket.id] = {
+        ...oldPlayer,
+        disconnected: false,
+        disconnectedAt: null,
+      };
 
       if (room.hostId === oldId) room.hostId = socket.id;
       if (room.winner === oldId) room.winner = socket.id;
       if (room.battle?.winner === oldId) room.battle.winner = socket.id;
+      if (room.shared?.turn === oldId) room.shared.turn = socket.id;
 
       delete room.players[oldId];
+      room.updatedAt = Date.now();
 
       socket.join(roomId);
       io.to(roomId).emit("roomState", sanitizeRoom(room));
-      return cb?.({ ok: true, resumed: true });
+      if (room.mode === "battle_ai") {
+        maybeEnsureAiBattleRound(roomId);
+        if (room.meta?.isEvent && isAiBattleEventActive()) {
+          ensureAiBattleEventRoom();
+        }
+      }
+      return cb?.({ ok: true, resumed: true, mode: room.mode });
     }
 
     if (room.mode === "duel") {
@@ -625,11 +1138,19 @@ io.on("connection", (socket) => {
       streak: 0,
       disconnected: false,
       rematchRequested: false,
+      disconnectedAt: null,
     };
+    room.updatedAt = Date.now();
 
     socket.join(roomId);
-    cb?.({ ok: true, resumed: false });
+    cb?.({ ok: true, resumed: false, mode: room.mode });
     io.to(roomId).emit("roomState", sanitizeRoom(room));
+    if (room.mode === "battle_ai") {
+      maybeEnsureAiBattleRound(roomId);
+      if (room.meta?.isEvent && isAiBattleEventActive()) {
+        ensureAiBattleEventRoom();
+      }
+    }
   });
 
   socket.on("setSecret", ({ roomId, secret }, cb) => {
@@ -699,7 +1220,7 @@ io.on("connection", (socket) => {
       return cb?.({ ok: true, pattern: result?.pattern });
     }
 
-    if (room.mode === "battle") {
+    if (room.mode === "battle" || room.mode === "battle_ai") {
       const result = battleMode.handleBattleGuess({
         room,
         socketId: socket.id,
@@ -708,6 +1229,18 @@ io.on("connection", (socket) => {
         updateStatsOnWin,
       });
       if (result?.error) return cb?.(result);
+      if (room.mode === "battle_ai" && result?.ended) {
+        if (room._aiBattleRoundTimer) {
+          clearTimeout(room._aiBattleRoundTimer);
+          room._aiBattleRoundTimer = null;
+        }
+        room.battle.deadline = null;
+        if (room.battle.aiHost?.mode === "auto") {
+          scheduleAiBattleCountdown(roomId);
+        } else {
+          room.battle.countdownEndsAt = null;
+        }
+      }
       io.to(roomId).emit("roomState", sanitizeRoom(room));
       return cb?.({ ok: true, pattern: result?.pattern });
     }
@@ -772,11 +1305,23 @@ io.on("connection", (socket) => {
   socket.on("setHostWord", ({ roomId, secret }, cb) => {
     const room = rooms.get(roomId);
     if (!room) return cb?.({ error: "Room not found" });
-    if (room.mode !== "battle") return cb?.({ error: "Wrong mode" });
+    if (room.mode !== "battle" && room.mode !== "battle_ai") {
+      return cb?.({ error: "Wrong mode" });
+    }
+    if (room.mode === "battle_ai") {
+      if (room.battle?.aiHost?.mode !== "player") {
+        return cb?.({ error: "AI host is active" });
+      }
+    }
     if (socket.id !== room.hostId) return cb?.({ error: "Only host can set word" });
 
     const result = battleMode.setHostWord({ room, secret, validateWord: isValidWordLocal });
     if (result?.error) return cb?.(result);
+
+    if (room.mode === "battle_ai") {
+      clearAiBattleTimers(room);
+      room.battle.countdownEndsAt = null;
+    }
 
     io.to(roomId).emit("roomState", sanitizeRoom(room));
     cb?.({ ok: true });
@@ -785,25 +1330,142 @@ io.on("connection", (socket) => {
   socket.on("startBattle", ({ roomId }, cb) => {
     const room = rooms.get(roomId);
     if (!room) return cb?.({ error: "Room not found" });
-    if (room.mode !== "battle") return cb?.({ error: "Wrong mode" });
+    if (room.mode !== "battle" && room.mode !== "battle_ai") {
+      return cb?.({ error: "Wrong mode" });
+    }
+    if (room.mode === "battle_ai" && room.battle?.aiHost?.mode !== "player") {
+      return cb?.({ error: "AI host is active" });
+    }
     if (socket.id !== room.hostId) return cb?.({ error: "Only host can start" });
 
     const result = battleMode.startBattleRound({ room });
     if (result?.error) return cb?.(result);
 
+    if (room.mode === "battle_ai") {
+      room.battle.lastRevealedWord = null;
+      room.battle.countdownEndsAt = null;
+      room.battle.deadline = Date.now() + ROUND_MS;
+      if (room._aiBattleRoundTimer) {
+        clearTimeout(room._aiBattleRoundTimer);
+      }
+      room._aiBattleRoundTimer = setTimeout(() => {
+        handleAiBattleTimeout(roomId);
+      }, ROUND_MS);
+    }
+
     io.to(roomId).emit("roomState", sanitizeRoom(room));
+    cb?.({ ok: true });
+  });
+
+  socket.on("aiBattleClaimHost", ({ roomId }, cb) => {
+    const room = rooms.get(roomId);
+    if (!room) return cb?.({ error: "Room not found" });
+    if (room.mode !== "battle_ai") return cb?.({ error: "Wrong mode" });
+    if (room.battle?.aiHost?.mode === "player") {
+      return cb?.({ error: "Host already claimed" });
+    }
+    if (room.battle?.started) {
+      return cb?.({ error: "Wait for the round to finish first" });
+    }
+    const player = room.players[socket.id];
+    if (!player || player.disconnected) {
+      return cb?.({ error: "Not in room" });
+    }
+
+    clearAiBattleTimers(room);
+    battleMode.resetBattleRound(room);
+    room.battle.secret = null;
+    room.battle.lastRevealedWord = null;
+    room.battle.aiHost = { mode: "player", claimedBy: socket.id, pendingStart: false };
+    room.hostId = socket.id;
+    room.battle.countdownEndsAt = null;
+    room.battle.deadline = null;
+    room.battle.pendingStart = false;
+    room.updatedAt = Date.now();
+    io.to(roomId).emit("roomState", sanitizeRoom(room));
+    cb?.({ ok: true });
+  });
+
+  socket.on("aiBattleReleaseHost", ({ roomId }, cb) => {
+    const room = rooms.get(roomId);
+    if (!room) return cb?.({ error: "Room not found" });
+    if (room.mode !== "battle_ai") return cb?.({ error: "Wrong mode" });
+    if (room.battle?.aiHost?.mode !== "player") {
+      return cb?.({ error: "No player host to release" });
+    }
+    if (room.battle.aiHost.claimedBy !== socket.id) {
+      return cb?.({ error: "Only the claimed host can release" });
+    }
+    if (room.battle?.started) {
+      return cb?.({ error: "Wait for the round to finish first" });
+    }
+
+    clearAiBattleTimers(room);
+    battleMode.resetBattleRound(room);
+    room.battle.secret = null;
+    room.battle.lastRevealedWord = null;
+    room.battle.aiHost = { mode: "auto", claimedBy: null, pendingStart: false };
+    if (room.meta?.isEvent) {
+      room.hostId = "server";
+      room.hostConnected = true;
+    } else {
+      room.hostId = null;
+      room.hostConnected = false;
+    }
+    room.battle.countdownEndsAt = null;
+    room.battle.deadline = null;
+    room.battle.pendingStart = false;
+    room.updatedAt = Date.now();
+    io.to(roomId).emit("roomState", sanitizeRoom(room));
+    maybeEnsureAiBattleRound(roomId);
     cb?.({ ok: true });
   });
 
   socket.on("playAgain", ({ roomId }, cb) => {
     const room = rooms.get(roomId);
     if (!room) return cb?.({ error: "Room not found" });
-    if (room.mode !== "battle") return cb?.({ error: "Wrong mode" });
+    if (room.mode !== "battle" && room.mode !== "battle_ai") {
+      return cb?.({ error: "Wrong mode" });
+    }
+    if (room.mode === "battle_ai" && room.battle?.aiHost?.mode !== "player") {
+      return cb?.({ error: "AI host is active" });
+    }
     if (socket.id !== room.hostId) return cb?.({ error: "Only host can reset" });
 
     battleMode.resetBattleRound(room);
+    if (room.mode === "battle_ai") {
+      room.battle.secret = null;
+      room.battle.lastRevealedWord = null;
+      room.battle.deadline = null;
+      room.battle.countdownEndsAt = null;
+      clearAiBattleTimers(room);
+    }
     io.to(roomId).emit("roomState", sanitizeRoom(room));
     cb?.({ ok: true });
+  });
+
+  socket.on("aiBattleStart", ({ roomId }, cb) => {
+    const room = rooms.get(roomId);
+    if (!room) return cb?.({ error: "Room not found" });
+    if (room.mode !== "battle_ai") return cb?.({ error: "Wrong mode" });
+    if (room.battle.started) return cb?.({ error: "Round already running" });
+    if (room.battle.aiHost?.mode !== "auto") {
+      return cb?.({ error: "AI host not active" });
+    }
+
+    const active = getActivePlayerIds(room);
+    if (active.length === 0) return cb?.({ error: "No active players" });
+
+    const started = autoStartAiBattleRound(roomId);
+    if (!started?.ok) {
+      room.battle.pendingStart = true;
+      if (room.battle.aiHost) room.battle.aiHost.pendingStart = true;
+      io.to(roomId).emit("roomState", sanitizeRoom(room));
+      return cb?.({
+        error: started?.error || "Unable to start round",
+      });
+    }
+    cb?.(started);
   });
 
   socket.on("resume", ({ roomId, oldId }, cb) => {
@@ -815,54 +1477,200 @@ io.on("connection", (socket) => {
 
     if (room.players[socket.id] && socket.id !== oldId) delete room.players[socket.id];
 
-    room.players[socket.id] = { ...oldPlayer, disconnected: false };
+    room.players[socket.id] = {
+      ...oldPlayer,
+      disconnected: false,
+      disconnectedAt: null,
+    };
 
     if (room.hostId === oldId) room.hostId = socket.id;
     if (room.winner === oldId) room.winner = socket.id;
     if (room.battle?.winner === oldId) room.battle.winner = socket.id;
+    if (room.battle?.aiHost?.claimedBy === oldId) {
+      room.battle.aiHost.claimedBy = socket.id;
+    }
     if (room.shared?.turn === oldId) room.shared.turn = socket.id;
 
     delete room.players[oldId];
+    room.updatedAt = Date.now();
 
     socket.join(roomId);
     io.to(roomId).emit("roomState", sanitizeRoom(room));
-    cb?.({ ok: true });
+    if (room.mode === "battle_ai") {
+      maybeEnsureAiBattleRound(roomId);
+    }
+    cb?.({ ok: true, mode: room.mode });
   });
 
   socket.on("disconnect", () => {
+    const now = Date.now();
     for (const [id, room] of rooms) {
-      if (room.players[socket.id]) {
-        room.players[socket.id].disconnected = true;
-        room.players[socket.id].disconnectedAt = Date.now();
-        sharedMode.handleSharedDisconnect(room, socket.id);
-        io.to(id).emit("roomState", sanitizeRoom(room));
+      const player = room.players[socket.id];
+      if (!player) continue;
+
+      player.disconnected = true;
+      player.disconnectedAt = now;
+      sharedMode.handleSharedDisconnect(room, socket.id);
+
+      if (room.hostId === socket.id) {
+        if (room.mode === "battle_ai") {
+          if (room.meta?.isEvent) {
+            room.hostId = "server";
+            room.hostConnected = true;
+          } else {
+            room.hostId = null;
+            room.hostConnected = false;
+          }
+          if (room.battle?.aiHost) {
+            room.battle.aiHost.mode = "auto";
+            room.battle.aiHost.claimedBy = null;
+          }
+        } else {
+          const replacement = Object.keys(room.players).find(
+            (pid) => pid !== socket.id && !room.players[pid].disconnected
+          );
+          if (replacement) {
+            room.hostId = replacement;
+          }
+        }
+      }
+
+      room.updatedAt = now;
+      io.to(id).emit("roomState", sanitizeRoom(room));
+      if (room.mode === "battle_ai") {
+        const active = getActivePlayerIds(room);
+        if (active.length === 0) {
+          clearAiBattleTimers(room);
+          room.battle.deadline = null;
+          room.battle.countdownEndsAt = null;
+          battleMode.resetBattleRound(room);
+          room.battle.secret = null;
+          room.battle.lastRevealedWord = null;
+          if (room.meta?.isEvent && isAiBattleEventActive()) {
+            ensureAiBattleEventRoom();
+          }
+        } else if (
+          room.battle.aiHost?.mode === "auto" &&
+          !room.battle.started &&
+          !room.battle.countdownEndsAt
+        ) {
+          maybeEnsureAiBattleRound(id);
+        }
       }
     }
   });
 });
 
 const DISCONNECT_TTL_MS = 30 * 60 * 1000;
-setInterval(() => {
-  const now = Date.now();
-  for (const room of rooms.values()) {
-    for (const pid of Object.keys(room.players)) {
-      const player = room.players[pid];
-      if (
-        player.disconnected &&
-        player.disconnectedAt &&
-        now - player.disconnectedAt > DISCONNECT_TTL_MS
-      ) {
-        if (room.hostId === pid) {
-          const next = Object.keys(room.players).find(
-            (id) => !room.players[id].disconnected && id !== pid
-          );
-          if (next) room.hostId = next;
+
+const startRoomCleanupInterval = () =>
+  setInterval(() => {
+    const now = Date.now();
+    for (const [roomId, room] of rooms.entries()) {
+      if (room.meta?.isEvent && isAiBattleEventActive()) {
+        continue;
+      }
+      let updated = false;
+      for (const pid of Object.keys(room.players)) {
+        const player = room.players[pid];
+        if (
+          player.disconnected &&
+          player.disconnectedAt &&
+          now - player.disconnectedAt > DISCONNECT_TTL_MS
+        ) {
+          if (room.hostId === pid) {
+            if (room.mode === "battle_ai") {
+              room.hostId = null;
+              room.hostConnected = false;
+              if (room.battle?.aiHost) {
+                room.battle.aiHost.mode = "auto";
+                room.battle.aiHost.claimedBy = null;
+              }
+            } else {
+              const next = Object.keys(room.players).find(
+                (id) => !room.players[id].disconnected && id !== pid
+              );
+              if (next) room.hostId = next;
+            }
+          }
+          if (room.battle?.aiHost?.claimedBy === pid) {
+            room.battle.aiHost.claimedBy = null;
+            if (room.mode === "battle_ai") {
+              room.battle.aiHost.mode = "auto";
+            }
+          }
+          delete room.players[pid];
+          updated = true;
         }
-        delete room.players[pid];
+      }
+
+      if (updated) {
+        room.updatedAt = now;
+      }
+
+      const activeIds = Object.keys(room.players).filter(
+        (pid) => !room.players[pid].disconnected
+      );
+      const hostPlayer = room.players[room.hostId];
+
+      if (activeIds.length === 0) {
+        if (room.mode === "battle_ai") {
+          clearAiBattleTimers(room);
+          battleMode.resetBattleRound(room);
+          room.battle.secret = null;
+          room.battle.lastRevealedWord = null;
+          room.battle.deadline = null;
+          room.battle.countdownEndsAt = null;
+        }
+        const oldestDisconnect = Math.min(
+          ...Object.values(room.players)
+            .map((p) =>
+              typeof p.disconnectedAt === "number" ? p.disconnectedAt : Infinity
+            )
+        );
+        if (
+          !hostPlayer ||
+          !hostPlayer.disconnectedAt ||
+          now - hostPlayer.disconnectedAt > HOST_DISCONNECT_GRACE_MS ||
+          now - oldestDisconnect > HOST_DISCONNECT_GRACE_MS
+        ) {
+          rooms.delete(roomId);
+        }
+        continue;
+      }
+
+      if (
+        (!hostPlayer || hostPlayer.disconnected) &&
+        room.mode !== "battle_ai"
+      ) {
+        const nextHost = activeIds[0];
+        if (nextHost) {
+          room.hostId = nextHost;
+          room.updatedAt = now;
+        }
+      }
+      if (
+        room.mode === "battle_ai" &&
+        room.battle.aiHost?.mode === "auto" &&
+        !room.battle.started &&
+        !room.battle.countdownEndsAt
+      ) {
+        maybeEnsureAiBattleRound(roomId);
       }
     }
-  }
-}, 5 * 60 * 1000);
+  }, 5 * 60 * 1000);
+
+const roomCleanupInterval =
+  process.env.NODE_ENV !== "test" ? startRoomCleanupInterval() : null;
+
+const aiBattleEventInterval =
+  isAiBattleEventActive() && process.env.NODE_ENV !== "test"
+    ? setInterval(() => ensureAiBattleEventRoom(), AI_BATTLE_EVENT_INTERVAL_MS)
+    : null;
+
+if (isAiBattleEventActive()) {
+  ensureAiBattleEventRoom();
+}
 // ---------- Helpers ----------
 function getOpponent(room, socketId) {
   return Object.keys(room.players).find((id) => id !== socketId);
@@ -936,4 +1744,12 @@ if (process.env.NODE_ENV === "production") {
 
 // ---------- Start server ----------
 const PORT = process.env.PORT || 8080;
-httpServer.listen(PORT, "0.0.0.0", () => console.log("Server listening on", PORT));
+
+if (process.env.NODE_ENV !== "test") {
+  httpServer.listen(PORT, "0.0.0.0", () =>
+    console.log("Server listening on", PORT)
+  );
+}
+
+export { httpServer };
+
