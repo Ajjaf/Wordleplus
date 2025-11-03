@@ -34,7 +34,7 @@ export default function DailyGameScreen({
       <GradientBackground fullHeight className="flex h-full">
         <div className="flex flex-1 flex-col w-full min-h-0 px-3 pt-5 pb-3 gap-4 relative">
           {notificationMessage && (
-            <div className="absolute top-3 inset-x-3 z-10">
+            <div className="absolute top-3 inset-x-3 z-10 flex justify-center pointer-events-none">
               <GameNotification
                 message={notificationMessage}
                 duration={1500}
@@ -116,11 +116,13 @@ export default function DailyGameScreen({
         <main className="flex-1 px-3 md:px-4 pt-2 pb-3 flex flex-col min-h-0 relative">
           {/* Transient Notification */}
           {notificationMessage && (
-            <GameNotification
-              message={notificationMessage}
-              duration={1500}
-              onDismiss={onNotificationDismiss}
-            />
+            <div className="absolute top-4 left-0 right-0 flex justify-center pointer-events-none z-20">
+              <GameNotification
+                message={notificationMessage}
+                duration={1500}
+                onDismiss={onNotificationDismiss}
+              />
+            </div>
           )}
 
           <div className="flex-1 flex flex-col items-center min-h-0">

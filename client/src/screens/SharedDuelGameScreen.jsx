@@ -8,10 +8,22 @@ import GlowButton from "../components/ui/GlowButton";
 import { useIsMobile } from "../hooks/useIsMobile";
 import MobileBoard from "../components/mobile/MobileBoard.jsx";
 
-export default function SharedDuelGameScreen({ room, me, currentGuess, onKeyPress, letterStates, onStartShared, onRematch }) {
-  const opponentEntry = Object.entries(room.players || {}).find(([id]) => id !== me?.id);
-  const opponent = opponentEntry ? { id: opponentEntry[0], ...opponentEntry[1] } : null;
-  
+export default function SharedDuelGameScreen({
+  room,
+  me,
+  currentGuess,
+  onKeyPress,
+  letterStates,
+  onStartShared,
+  onRematch,
+}) {
+  const opponentEntry = Object.entries(room.players || {}).find(
+    ([id]) => id !== me?.id
+  );
+  const opponent = opponentEntry
+    ? { id: opponentEntry[0], ...opponentEntry[1] }
+    : null;
+
   const canGuess = room.shared?.started && !room.shared?.winner;
   const myTurn = room.shared?.turn === me?.id;
   const isHost = room?.hostId === me?.id;
@@ -27,7 +39,7 @@ export default function SharedDuelGameScreen({ room, me, currentGuess, onKeyPres
     }
     prevGuessCountRef.current = count;
   }, [room.shared?.guesses?.length]);
-  
+
   // Check if we have enough players to start
   const playerCount = Object.keys(room?.players || {}).length;
   const canStart = isHost && playerCount >= 2 && !room.shared?.started;
@@ -46,7 +58,10 @@ export default function SharedDuelGameScreen({ room, me, currentGuess, onKeyPres
     : "";
   const normalizedCurrentGuess = (currentGuess || "").toUpperCase();
   const activeGuessForBoard =
-    canGuess && myTurn && normalizedCurrentGuess && normalizedCurrentGuess !== latestGuessWord
+    canGuess &&
+    myTurn &&
+    normalizedCurrentGuess &&
+    normalizedCurrentGuess !== latestGuessWord
       ? currentGuess
       : "";
 
@@ -58,9 +73,13 @@ export default function SharedDuelGameScreen({ room, me, currentGuess, onKeyPres
     }
     if (!room.shared?.started) {
       if (playerCount < 2) {
-        return isHost ? "Waiting for opponent to join..." : "Waiting for host to start...";
+        return isHost
+          ? "Waiting for opponent to join..."
+          : "Waiting for host to start...";
       }
-      return isHost ? "Click 'Start Round' to begin" : "Waiting for host to start...";
+      return isHost
+        ? "Click 'Start Round' to begin"
+        : "Waiting for host to start...";
     }
     if (myTurn) return "Your turn - make a guess!";
     return `${opponent?.name}'s turn`;
@@ -69,7 +88,84 @@ export default function SharedDuelGameScreen({ room, me, currentGuess, onKeyPres
   if (isMobile) {
     return (
       <GradientBackground fullHeight className="flex h-full">
-        <div className="flex flex-1 flex-col w-full min-h-0 px-3 pt-5 pb-3 gap-4">
+        <div className="flex flex-1 flex-col w-full min-h-0 px-3 pt-5 pb-1 gap-4">
+          <div className="rounded-3xl border border-white/15 bg-white/10 backdrop-blur-sm p-4 text-white space-y-3">
+            <div className="flex items-center justify-between text-sm text-white/80">
+              <span className="font-semibold truncate">
+                {me?.name || "You"}
+              </span>
+              <span className="text-[10px] uppercase tracking-[0.3em] text-white/50">
+                Shared Duel
+              </span>
+              <span className="font-semibold truncate text-right">
+                {opponent?.name || "Opponent"}
+              </span>
+            </div>
+
+            {/* <div className="text-xs uppercase tracking-[0.35em] text-white/40">
+              Status
+            </div>
+            <div className="text-sm font-medium text-white/90">
+              {getGameStatus()}
+            </div> */}
+
+            {!room.shared?.started ? (
+              isHost ? (
+                <div className="space-y-2">
+                  <GlowButton
+                    onClick={async () => {
+                      if (starting || !canStart) return;
+                      try {
+                        setStarting(true);
+                        const result = await onStartShared();
+                        if (result?.error) {
+                          console.error("Start shared error:", result.error);
+                        }
+                      } finally {
+                        setStarting(false);
+                      }
+                    }}
+                    disabled={starting || !canStart}
+                    size="lg"
+                    className="w-full"
+                  >
+                    {starting ? "Starting..." : "Start Shared Round"}
+                  </GlowButton>
+                  {playerCount < 2 && (
+                    <div className="text-xs text-white/60 text-center">
+                      Waiting for another player to join…
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-xs text-white/60">
+                  Waiting for host to start…
+                </div>
+              )
+            ) : room.shared?.winner ? (
+              <div className="space-y-2 text-center">
+                <div className="text-sm text-white/80">
+                  {room.shared.winner === "draw"
+                    ? "The round ended in a draw."
+                    : room.shared.winner === me?.id
+                    ? "You won the round!"
+                    : `${
+                        room.players?.[room.shared.winner]?.name || "Opponent"
+                      } won the round.`}
+                </div>
+                <GlowButton onClick={onRematch} size="lg" className="w-full">
+                  Play Again
+                </GlowButton>
+              </div>
+            ) : (
+              <div className="text-xs text-white/60">
+                {myTurn
+                  ? "Your turn — make a guess!"
+                  : `${opponent?.name || "Opponent"} is guessing…`}
+              </div>
+            )}
+          </div>
+
           <MobileBoard
             guesses={room.shared?.guesses || []}
             activeGuess={activeGuessForBoard}
@@ -80,7 +176,9 @@ export default function SharedDuelGameScreen({ room, me, currentGuess, onKeyPres
                 : null
             }
             secretWordState={
-              !room.shared?.started && room.shared?.lastRevealedWord ? "set" : "empty"
+              !room.shared?.started && room.shared?.lastRevealedWord
+                ? "set"
+                : "empty"
             }
             maxTile={88}
             minTile={48}
@@ -145,8 +243,16 @@ export default function SharedDuelGameScreen({ room, me, currentGuess, onKeyPres
                   activeGuess={activeGuessForBoard}
                   isOwnBoard={true}
                   // only reveal secret when round has ended
-                  secretWord={!room.shared?.started && room.shared?.lastRevealedWord ? room.shared.lastRevealedWord : null}
-                  secretWordState={!room.shared?.started && room.shared?.lastRevealedWord ? 'set' : 'empty'}
+                  secretWord={
+                    !room.shared?.started && room.shared?.lastRevealedWord
+                      ? room.shared.lastRevealedWord
+                      : null
+                  }
+                  secretWordState={
+                    !room.shared?.started && room.shared?.lastRevealedWord
+                      ? "set"
+                      : "empty"
+                  }
                   maxTile={140}
                   minTile={50}
                   players={room?.players || {}}
@@ -202,17 +308,16 @@ export default function SharedDuelGameScreen({ room, me, currentGuess, onKeyPres
                 )
               ) : room.shared?.winner ? (
                 <div className="text-center">
-                  <GlowButton
-                    onClick={onRematch}
-                    size="lg"
-                  >
+                  <GlowButton onClick={onRematch} size="lg">
                     Play Again
                   </GlowButton>
                 </div>
               ) : (
                 <div className="text-center">
                   <motion.div
-                    className={`text-sm font-medium mb-2 ${myTurn ? "text-emerald-300" : "text-white/70"}`}
+                    className={`text-sm font-medium mb-2 ${
+                      myTurn ? "text-emerald-300" : "text-white/70"
+                    }`}
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ duration: 0.2 }}

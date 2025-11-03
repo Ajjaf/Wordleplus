@@ -25,9 +25,13 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const WORDLIST_PATH =
   process.env.WORDLIST_PATH || path.join(__dirname, "words.txt");
+const GUESSES_PATH =
+  process.env.GUESSES_PATH || path.join(__dirname, "allowed_guesses.txt");
 
 let WORDS = [];
 let WORDSET = new Set();
+let GUESSES = [];
+let GUESSSET = new Set();
 const DEFAULT_ROUND_MS = 6 * 60 * 1000; // 6 minutes
 const envRoundMs = Number(process.env.DUEL_ROUND_MS);
 const ROUND_MS =
@@ -36,18 +40,40 @@ const ROUND_MS =
     : DEFAULT_ROUND_MS;
 const AI_BATTLE_COUNTDOWN_MS = 12 * 1000; // 12 seconds between AI-hosted rounds
 
-function loadWords() {
-  const raw = fs.readFileSync(WORDLIST_PATH, "utf8");
-  const arr = raw
+function loadWordFile(filePath) {
+  const raw = fs.readFileSync(filePath, "utf8");
+  return raw
     .split(/\r?\n/)
     .map((w) => w.trim())
     .filter(Boolean)
     .map((w) => w.toUpperCase())
-    .filter((w) => /^[A-Z]{5}$/.test(w)); // only A–Z 5-letter words
+    .filter((w) => /^[A-Z]{5}$/.test(w));
+}
 
-  WORDS = Array.from(new Set(arr)); // dedupe
+function loadWords() {
+  if (!fs.existsSync(WORDLIST_PATH)) {
+    throw new Error(`Word list file not found at ${WORDLIST_PATH}`);
+  }
+
+  WORDS = Array.from(new Set(loadWordFile(WORDLIST_PATH)));
   WORDSET = new Set(WORDS);
-  console.log(`[words] Loaded ${WORDS.length} entries from ${WORDLIST_PATH}`);
+
+  const hasGuessFile = fs.existsSync(GUESSES_PATH);
+  const guessWords = hasGuessFile ? loadWordFile(GUESSES_PATH) : WORDS;
+
+  GUESSES = Array.from(new Set([...guessWords, ...WORDS]));
+  GUESSSET = new Set(GUESSES);
+
+  console.log(`[words] Loaded ${WORDS.length} solutions from ${WORDLIST_PATH}`);
+  if (hasGuessFile) {
+    console.log(
+      `[words] Loaded ${guessWords.length} allowed guesses from ${GUESSES_PATH}`
+    );
+  } else {
+    console.warn(
+      `[words] Guess list not found at ${GUESSES_PATH}; using solution list for validation`
+    );
+  }
 }
 loadWords();
 
@@ -65,7 +91,7 @@ function pickRandomWords(n) {
 function isValidWordLocal(word) {
   if (!word) return false;
   const w = word.toUpperCase();
-  return /^[A-Z]{5}$/.test(w) && WORDSET.has(w);
+  return /^[A-Z]{5}$/.test(w) && GUESSSET.has(w);
 }
 
 // ---------- Express app ----------
@@ -1475,23 +1501,33 @@ io.on("connection", (socket) => {
     const oldPlayer = room.players[oldId];
     if (!oldPlayer) return cb?.({ error: "Old session not found" });
 
-    if (room.players[socket.id] && socket.id !== oldId) delete room.players[socket.id];
+    const isSameSocket = oldId === socket.id;
 
-    room.players[socket.id] = {
+    if (!isSameSocket && room.players[socket.id]) delete room.players[socket.id];
+
+    const resumedPlayer = {
       ...oldPlayer,
       disconnected: false,
       disconnectedAt: null,
     };
 
-    if (room.hostId === oldId) room.hostId = socket.id;
-    if (room.winner === oldId) room.winner = socket.id;
-    if (room.battle?.winner === oldId) room.battle.winner = socket.id;
-    if (room.battle?.aiHost?.claimedBy === oldId) {
-      room.battle.aiHost.claimedBy = socket.id;
-    }
-    if (room.shared?.turn === oldId) room.shared.turn = socket.id;
+    room.players[isSameSocket ? oldId : socket.id] = resumedPlayer;
 
-    delete room.players[oldId];
+    if (room.hostId === oldId) room.hostId = isSameSocket ? oldId : socket.id;
+    if (room.winner === oldId) room.winner = isSameSocket ? oldId : socket.id;
+    if (room.battle?.winner === oldId) {
+      room.battle.winner = isSameSocket ? oldId : socket.id;
+    }
+    if (room.battle?.aiHost?.claimedBy === oldId) {
+      room.battle.aiHost.claimedBy = isSameSocket ? oldId : socket.id;
+    }
+    if (room.shared?.turn === oldId) {
+      room.shared.turn = isSameSocket ? oldId : socket.id;
+    }
+
+    if (!isSameSocket) {
+      delete room.players[oldId];
+    }
     room.updatedAt = Date.now();
 
     socket.join(roomId);
@@ -1500,6 +1536,75 @@ io.on("connection", (socket) => {
       maybeEnsureAiBattleRound(roomId);
     }
     cb?.({ ok: true, mode: room.mode });
+  });
+
+  socket.on("leaveRoom", ({ roomId } = {}, cb) => {
+    const now = Date.now();
+    let handled = false;
+
+    for (const [id, room] of rooms) {
+      if (roomId && id !== roomId) continue;
+      const player = room.players[socket.id];
+      if (!player) continue;
+
+      if (!player.disconnected) {
+        player.disconnected = true;
+        player.disconnectedAt = now;
+        sharedMode.handleSharedDisconnect(room, socket.id);
+
+        if (room.hostId === socket.id) {
+          if (room.mode === "battle_ai") {
+            if (room.meta?.isEvent) {
+              room.hostId = "server";
+              room.hostConnected = true;
+            } else {
+              room.hostId = null;
+              room.hostConnected = false;
+            }
+            if (room.battle?.aiHost) {
+              room.battle.aiHost.mode = "auto";
+              room.battle.aiHost.claimedBy = null;
+            }
+          } else {
+            const replacement = Object.keys(room.players).find(
+              (pid) => pid !== socket.id && !room.players[pid].disconnected
+            );
+            if (replacement) {
+              room.hostId = replacement;
+            }
+          }
+        }
+      }
+
+      room.updatedAt = now;
+      socket.leave(id);
+      io.to(id).emit("roomState", sanitizeRoom(room));
+
+      if (room.mode === "battle_ai") {
+        const active = getActivePlayerIds(room);
+        if (active.length === 0) {
+          clearAiBattleTimers(room);
+          room.battle.deadline = null;
+          room.battle.countdownEndsAt = null;
+          battleMode.resetBattleRound(room);
+          room.battle.secret = null;
+          room.battle.lastRevealedWord = null;
+          if (room.meta?.isEvent && isAiBattleEventActive()) {
+            ensureAiBattleEventRoom();
+          }
+        } else if (
+          room.battle.aiHost?.mode === "auto" &&
+          !room.battle.started &&
+          !room.battle.countdownEndsAt
+        ) {
+          maybeEnsureAiBattleRound(id);
+        }
+      }
+
+      handled = true;
+    }
+
+    cb?.({ ok: handled });
   });
 
   socket.on("disconnect", () => {

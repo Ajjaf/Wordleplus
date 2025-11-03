@@ -18,8 +18,14 @@ export function useSocketConnection(room, setScreen) {
   const disconnectNotificationIdRef = useRef(null);
 
   // Read these once; they rarely change during a session
-  const savedRoomId = useMemo(() => localStorage.getItem(LS_ROOM) || "", []);
-  const savedName = useMemo(() => localStorage.getItem(LS_LAST_NAME) || "", []);
+  const savedRoomId = useMemo(
+    () => (typeof window !== "undefined" ? localStorage.getItem(LS_ROOM) || "" : ""),
+    []
+  );
+  const savedName = useMemo(
+    () => (typeof window !== "undefined" ? localStorage.getItem(LS_LAST_NAME) || "" : ""),
+    []
+  );
 
   useEffect(() => {
     const onConnect = () => {
@@ -118,15 +124,36 @@ export function useSocketConnection(room, setScreen) {
     dismissNotification,
   ]);
 
+  useEffect(() => {
+    if (!connected || room?.id) return;
+    if (typeof window === "undefined") return;
+
+    const latestRoomId = localStorage.getItem(LS_ROOM) || "";
+    const latestName = localStorage.getItem(LS_LAST_NAME) || "";
+
+    if (latestRoomId && latestName) {
+      setRejoinOffered(true);
+    }
+  }, [connected, room?.id]);
+
   const canRejoin = connected && !room?.id && rejoinOffered;
 
   const doRejoin = () => {
-    if (!savedRoomId || !savedName) return;
+    const targetRoomId =
+      typeof window !== "undefined"
+        ? localStorage.getItem(LS_ROOM) || savedRoomId
+        : savedRoomId;
+    const targetName =
+      typeof window !== "undefined"
+        ? localStorage.getItem(LS_LAST_NAME) || savedName
+        : savedName;
+
+    if (!targetRoomId || !targetName) return;
     const oldId = localStorage.getItem(LS_SOCKET + ".old");
 
     // Prefer resume to preserve state
     if (oldId) {
-      socket.emit("resume", { roomId: savedRoomId, oldId }, (res) => {
+      socket.emit("resume", { roomId: targetRoomId, oldId }, (res) => {
         if (res?.ok) {
           sessionStorage.setItem("wp.reconnected", "1");
           localStorage.setItem(LS_SOCKET, socket.id);
@@ -137,7 +164,7 @@ export function useSocketConnection(room, setScreen) {
           // Fallback: regular join
           socket.emit(
             "joinRoom",
-            { name: savedName, roomId: savedRoomId },
+            { name: targetName, roomId: targetRoomId },
             (res2) => {
               if (res2?.ok) {
                 localStorage.setItem(LS_SOCKET, socket.id);
@@ -153,7 +180,7 @@ export function useSocketConnection(room, setScreen) {
       // No old socket id—just rejoin fresh
       socket.emit(
         "joinRoom",
-        { name: savedName, roomId: savedRoomId },
+        { name: targetName, roomId: targetRoomId },
         (res2) => {
           if (res2?.ok) {
             localStorage.setItem(LS_SOCKET, socket.id);

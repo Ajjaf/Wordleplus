@@ -179,13 +179,6 @@ export default function Keyboard({
         )}
       >
         <div className="px-1 pt-1 pb-2 md:px-2 md:p-0">
-          {disabled && (
-            <div className="text-center mb-2">
-              <div className="text-xs text-muted-foreground font-medium">
-                Waiting for your turn...
-              </div>
-            </div>
-          )}
           <div className="flex flex-col gap-2 md:gap-1 items-center justify-center">
             {rows.map((row, idx) => (
               <div

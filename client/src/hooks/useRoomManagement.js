@@ -72,12 +72,39 @@ export function useRoomManagement() {
   };
 
   // Go home: leave the room (stop auto-resume), but keep your name & mode
-  const goHome = () => {
-    localStorage.removeItem(LS_LAST_ROOM); // no auto-rejoin
-    localStorage.removeItem(LS_LAST_SOCKET); // current socket snapshot
-    localStorage.removeItem(LS_LAST_SOCKET + ".old"); // old id for resume
+  const goHome = (roomId = null, { clearRoom = false } = {}) => {
+    try {
+      if (socket?.connected) {
+        socket.emit("leaveRoom", roomId ? { roomId } : {});
+      }
+    } catch (error) {
+      console.error("[goHome] failed to emit leaveRoom", error);
+    }
+    if (roomId && !clearRoom) {
+      localStorage.setItem(LS_LAST_ROOM, roomId);
+    } else if (clearRoom) {
+      localStorage.removeItem(LS_LAST_ROOM);
+    }
+
+    if (socket?.id) {
+      const currentSocketId = socket.id;
+      const previousSocketId = localStorage.getItem(LS_LAST_SOCKET);
+
+      if (previousSocketId && previousSocketId !== currentSocketId) {
+        localStorage.setItem(LS_LAST_SOCKET + ".old", previousSocketId);
+      } else {
+        localStorage.setItem(LS_LAST_SOCKET + ".old", currentSocketId);
+      }
+
+      localStorage.setItem(LS_LAST_SOCKET, currentSocketId);
+    }
+
     localStorage.removeItem(LS_LAST_SOCKET + ".wasHost"); // legacy host flag
-    sessionStorage.removeItem("wp.reconnected"); // clear banner
+    if (clearRoom) {
+      localStorage.removeItem(LS_LAST_SOCKET);
+      localStorage.removeItem(LS_LAST_SOCKET + ".old");
+      sessionStorage.removeItem("wp.reconnected"); // clear banner
+    }
     return { success: true };
   };
 

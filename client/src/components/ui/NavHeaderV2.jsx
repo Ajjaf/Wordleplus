@@ -212,7 +212,7 @@ export default function NavHeaderV2({
                       <User className="w-4 h-4 text-white" />
                     </div>
                   )}
-                  <span className="hidden sm:block text-sm md:text-base font-medium text-white">
+                  <span className="text-xs font-medium text-white truncate max-w-[6rem] sm:text-sm sm:max-w-none md:text-base">
                     {displayName}
                   </span>
                   <ChevronDown className="w-4 h-4 text-white/70" />
