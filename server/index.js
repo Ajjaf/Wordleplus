@@ -25,9 +25,13 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const WORDLIST_PATH =
   process.env.WORDLIST_PATH || path.join(__dirname, "words.txt");
+const GUESSES_PATH =
+  process.env.GUESSES_PATH || path.join(__dirname, "allowed_guesses.txt");
 
 let WORDS = [];
 let WORDSET = new Set();
+let GUESSES = [];
+let GUESSSET = new Set();
 const DEFAULT_ROUND_MS = 6 * 60 * 1000; // 6 minutes
 const envRoundMs = Number(process.env.DUEL_ROUND_MS);
 const ROUND_MS =
@@ -36,18 +40,40 @@ const ROUND_MS =
     : DEFAULT_ROUND_MS;
 const AI_BATTLE_COUNTDOWN_MS = 12 * 1000; // 12 seconds between AI-hosted rounds
 
-function loadWords() {
-  const raw = fs.readFileSync(WORDLIST_PATH, "utf8");
-  const arr = raw
+function loadWordFile(filePath) {
+  const raw = fs.readFileSync(filePath, "utf8");
+  return raw
     .split(/\r?\n/)
     .map((w) => w.trim())
     .filter(Boolean)
     .map((w) => w.toUpperCase())
-    .filter((w) => /^[A-Z]{5}$/.test(w)); // only A–Z 5-letter words
+    .filter((w) => /^[A-Z]{5}$/.test(w));
+}
 
-  WORDS = Array.from(new Set(arr)); // dedupe
+function loadWords() {
+  if (!fs.existsSync(WORDLIST_PATH)) {
+    throw new Error(`Word list file not found at ${WORDLIST_PATH}`);
+  }
+
+  WORDS = Array.from(new Set(loadWordFile(WORDLIST_PATH)));
   WORDSET = new Set(WORDS);
-  console.log(`[words] Loaded ${WORDS.length} entries from ${WORDLIST_PATH}`);
+
+  const hasGuessFile = fs.existsSync(GUESSES_PATH);
+  const guessWords = hasGuessFile ? loadWordFile(GUESSES_PATH) : WORDS;
+
+  GUESSES = Array.from(new Set([...guessWords, ...WORDS]));
+  GUESSSET = new Set(GUESSES);
+
+  console.log(`[words] Loaded ${WORDS.length} solutions from ${WORDLIST_PATH}`);
+  if (hasGuessFile) {
+    console.log(
+      `[words] Loaded ${guessWords.length} allowed guesses from ${GUESSES_PATH}`
+    );
+  } else {
+    console.warn(
+      `[words] Guess list not found at ${GUESSES_PATH}; using solution list for validation`
+    );
+  }
 }
 loadWords();
 
@@ -65,7 +91,7 @@ function pickRandomWords(n) {
 function isValidWordLocal(word) {
   if (!word) return false;
   const w = word.toUpperCase();
-  return /^[A-Z]{5}$/.test(w) && WORDSET.has(w);
+  return /^[A-Z]{5}$/.test(w) && GUESSSET.has(w);
 }
 
 // ---------- Express app ----------
