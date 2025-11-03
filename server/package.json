@@ -19,7 +19,7 @@
     "prisma:studio": "prisma studio"
   },
   "dependencies": {
-    "@prisma/client": "^6.17.1",
+    "@prisma/client": "^6.18.0",
     "connect-pg-simple": "^10.0.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
@@ -30,12 +30,17 @@
     "openid-client": "^6.8.1",
     "passport": "^0.7.0",
     "passport-strategy": "^1.0.0",
-    "prisma": "^6.17.1",
     "socket.io": "^4.7.5",
     "uuid": "^13.0.0"
   },
   "devDependencies": {
+    "@types/node": "^24.10.0",
     "jest": "^30.2.0",
-    "supertest": "^7.1.4"
+    "prisma": "^6.18.0",
+    "supertest": "^7.1.4",
+    "tsx": "^4.19.2"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   }
 }
