@@ -20,8 +20,8 @@ As soon as this request succeeds the controller ensures the canonical AI Battle 
 Verify it’s live.
 
 Admin view:
-curl https://<your-server>/admin/events/ai-battle/status \
- -H "Authorization: Bearer super-long-random-string-here"
+curl https://https://wordleplus-1-8f2s.onrender.com/admin/events/ai-battle/status \
+ -H "Authorization: Bearer vHIKKXHZtvipSGpljRbeAvPtRFVwLLtOvDJwYAJDAvPtRFVwLLtOvDJwYAJD"
 Confirms active flag, room id, slot.
 Public/client view:
 curl https://<your-server>/api/events/status
