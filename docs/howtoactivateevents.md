@@ -13,6 +13,7 @@ From any machine, run:
 
 curl -X POST https://<your-server>/admin/events/ai-battle/start \
  -H "Authorization: Bearer super-long-random-string-here"
+
 You should get back JSON like { "ok": true, "active": true, "roomId": "ABC123", ... }.
 As soon as this request succeeds the controller ensures the canonical AI Battle room exists and stays featured.
 
