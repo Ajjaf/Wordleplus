@@ -1,10 +1,33 @@
 import { PrismaClient } from "@prisma/client";
 import { DateTime } from "luxon";
+import { createHash } from "crypto";
 
 const prisma = new PrismaClient();
 
 function normalizeDate(input) {
   return DateTime.fromISO(input).startOf("day");
+}
+
+async function pruneFutureDailyPuzzles(referenceDate = new Date()) {
+  const todayIso = DateTime.fromJSDate(referenceDate).toISODate();
+
+  try {
+    const { count } = await prisma.dailyPuzzle.deleteMany({
+      where: {
+        date: {
+          gt: todayIso,
+        },
+      },
+    });
+
+    if (count > 0) {
+      console.info(
+        `[DailyPuzzle] Pruned ${count} future daily puzzles scheduled after ${todayIso}`
+      );
+    }
+  } catch (error) {
+    console.error("[DailyPuzzle] Failed to prune future daily puzzles", error);
+  }
 }
 
 function deriveDailyStats(results) {
@@ -145,6 +168,8 @@ export async function getOrCreateAnonymousUser(cookieUserId) {
 }
 
 export async function getTodaysPuzzle(date = new Date()) {
+  await pruneFutureDailyPuzzles();
+
   const dateStr = DateTime.fromJSDate(date).toISODate();
   
   let puzzle = await prisma.dailyPuzzle.findUnique({
@@ -166,12 +191,6 @@ export async function getTodaysPuzzle(date = new Date()) {
 }
 
 async function getDeterministicWordForDate(dateStr) {
-  let hash = 0;
-  for (let i = 0; i < dateStr.length; i++) {
-    hash = ((hash << 5) - hash) + dateStr.charCodeAt(i);
-    hash = hash & hash;
-  }
-
   const allWords = await prisma.wordLexicon.findMany({
     where: { active: true, length: 5 }
   });
@@ -180,7 +199,10 @@ async function getDeterministicWordForDate(dateStr) {
     throw new Error("No words available in WordLexicon");
   }
 
-  const index = Math.abs(hash) % allWords.length;
+  // Use a cryptographic hash so consecutive dates do not yield adjacent words.
+  const hashHex = createHash("sha256").update(dateStr).digest("hex");
+  const hashInt = parseInt(hashHex.slice(0, 12), 16);
+  const index = hashInt % allWords.length;
   return allWords[index].word;
 }
 

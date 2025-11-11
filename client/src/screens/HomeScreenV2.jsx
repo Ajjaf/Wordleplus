@@ -1,14 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import {
-  Swords,
-  Users,
-  Shield,
-  Trophy,
-  Star,
-  Clock,
-  Zap,
-} from "lucide-react";
+import { Swords, Users, Shield, Trophy, Star, Clock, Zap } from "lucide-react";
 import GradientBackground from "../components/ui/GradientBackground";
 import DailyChallengeHero from "../components/ui/DailyChallengeHero";
 import AnimatedGameCard from "../components/ui/AnimatedGameCard";
@@ -377,7 +369,7 @@ export default function HomeScreenV2({
 
   return (
     <GradientBackground>
-      <div className="mx-auto w-full max-w-[1400px] px-4 sm:px-6 lg:px-10 py-6 md:py-12 pb-24 md:pb-12">
+      <div className="mx-auto w-full max-w-[1400px] px-4 sm:px-6 lg:px-10 py-6 md:py-12 pb-24 md:pb-12 ">
         <div className="w-full space-y-8">
           <DailyChallengeHero
             onPlay={() => handlePlayMode("daily")}
@@ -490,7 +482,9 @@ export default function HomeScreenV2({
                       : `${room.playerCount} player${
                           room.playerCount === 1 ? "" : "s"
                         }`;
-                    const statusLabel = room.isInProgress ? "In Match" : "Waiting";
+                    const statusLabel = room.isInProgress
+                      ? "In Match"
+                      : "Waiting";
                     const statusClass = room.isInProgress
                       ? "text-amber-300"
                       : "text-emerald-300";
@@ -505,7 +499,10 @@ export default function HomeScreenV2({
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.2 + index * 0.05 }}
-                        whileHover={{ borderColor: "rgba(255,255,255,0.3)", y: -4 }}
+                        whileHover={{
+                          borderColor: "rgba(255,255,255,0.3)",
+                          y: -4,
+                        }}
                       >
                         <div
                           className={`absolute inset-0 pointer-events-none bg-gradient-to-br ${meta.gradient}`}
@@ -545,10 +542,14 @@ export default function HomeScreenV2({
                             </div>
                             <GlowButton
                               size="md"
-                              onClick={() => handleQuickJoin(room.id, room.mode)}
+                              onClick={() =>
+                                handleQuickJoin(room.id, room.mode)
+                              }
                               disabled={Boolean(joiningRoomId) || joining}
                             >
-                              {joiningRoomId === room.id ? "Joining..." : "Join Room"}
+                              {joiningRoomId === room.id
+                                ? "Joining..."
+                                : "Join Room"}
                             </GlowButton>
                           </div>
                         </div>
@@ -608,8 +609,8 @@ export default function HomeScreenV2({
                         AI Battle Hour
                       </h3>
                       <p className="text-sm text-white/60 mt-2">
-                        Jump into our featured AI-hosted lobby. Rounds auto-cycle
-                        every few seconds—perfect for quick matches.
+                        Jump into our featured AI-hosted lobby. Rounds
+                        auto-cycle every few seconds—perfect for quick matches.
                       </p>
                     </div>
 
@@ -741,7 +742,6 @@ export default function HomeScreenV2({
           </footer>
         </div>
       </div>
-
     </GradientBackground>
   );
 }
