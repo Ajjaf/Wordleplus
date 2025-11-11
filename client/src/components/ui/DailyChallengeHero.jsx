@@ -45,7 +45,11 @@ export default function DailyChallengeHero({ onPlay, stats = {} }) {
           </p>
 
           <div className="flex flex-wrap justify-center md:justify-start gap-2">
-            <MiniMetric label="Wins" value={totalWins} icon={<Trophy className="w-4 h-4" />} />
+            <MiniMetric
+              label="Wins"
+              value={totalWins}
+              icon={<Trophy className="w-4 h-4" />}
+            />
             <MiniMetric
               label="Played"
               value={totalPlayed}
@@ -53,7 +57,11 @@ export default function DailyChallengeHero({ onPlay, stats = {} }) {
             />
           </div>
 
-          <GlowButton onClick={onPlay} size="lg" className="mt-2 md:mt-4 mx-auto md:mx-0">
+          <GlowButton
+            onClick={onPlay}
+            size="lg"
+            className="mt-2 md:mt-4 mx-auto md:mx-0"
+          >
             Play Today's Word
           </GlowButton>
         </div>
