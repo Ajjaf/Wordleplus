@@ -41,8 +41,21 @@ export function getSession() {
     tableName: "user_sessions", // Different from our Session model to avoid conflicts
   });
 
+  const sessionSecret = process.env.SESSION_SECRET;
+  if (!sessionSecret) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        "SESSION_SECRET must be set in production. Refusing to start with an insecure default."
+      );
+    } else {
+      console.warn(
+        "[session] SESSION_SECRET not set. Falling back to insecure development secret."
+      );
+    }
+  }
+
   return session({
-    secret: process.env.SESSION_SECRET || "dev-secret-change-in-production",
+    secret: sessionSecret || "dev-secret-change-in-production",
     store: sessionStore,
     resave: false,
     saveUninitialized: false,
@@ -310,13 +323,5 @@ export function getUserIdFromRequest(req) {
   if (req.session?.anonymousUserId) {
     return req.session.anonymousUserId;
   }
-
-  // Fallback to header (for iframe environments)
-  const headerUserId = req.headers["x-user-id"];
-  if (headerUserId) {
-    return headerUserId;
-  }
-
-  // Fallback to cookie
-  return req.cookies?.dailyUserId || null;
+  return null;
 }

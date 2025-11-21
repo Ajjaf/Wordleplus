@@ -96,7 +96,7 @@ window.location.href = buildApiUrl(`/api/login${queryString ? `?${queryString}` 
 const res = await fetch(buildApiUrl("/api/daily/guess"), {
   method: "POST",
   credentials: "include",
-  headers: { ...JSON_HEADERS, "X-User-Id": userId },
+  headers: { ...JSON_HEADERS },
   body: JSON.stringify({ guess }),
 });
 ```
@@ -177,7 +177,7 @@ const evaluateCorsOrigin = (origin, cb) => {
 app.use(cors({
   origin: evaluateCorsOrigin,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "X-User-Id", "Authorization"],
+  allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true,
 }));
 app.options("*", cors({ origin: evaluateCorsOrigin, credentials: true }));

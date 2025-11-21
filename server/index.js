@@ -77,6 +77,21 @@ function loadWords() {
 }
 loadWords();
 
+async function ensureAnonymousSession(req, userId) {
+  if (!req || !req.session || !userId) return;
+  if (req.session.anonymousUserId === userId) return;
+  req.session.anonymousUserId = userId;
+  if (typeof req.session.save !== "function") return;
+  await new Promise((resolve) => {
+    req.session.save((err) => {
+      if (err) {
+        console.warn("[session] Failed to persist anonymous user id", err);
+      }
+      resolve();
+    });
+  });
+}
+
 // Helper to pick N random words from WORDS
 function pickRandomWords(n) {
   const out = [];
@@ -195,7 +210,7 @@ const evaluateCorsOrigin = (origin, cb) => {
 const corsOptions = {
   origin: evaluateCorsOrigin,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "X-User-Id", "Authorization"],
+  allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true,
 };
 app.use(cors(corsOptions));
@@ -349,6 +364,7 @@ app.get("/api/daily", async (req, res) => {
       const user = await getOrCreateAnonymousUser(null);
       userId = user.id;
     }
+    await ensureAnonymousSession(req, userId);
     
     const puzzle = await getTodaysPuzzle();
     const existingResult = await getUserDailyResult(userId, puzzle.id);
@@ -382,7 +398,7 @@ app.get("/api/daily", async (req, res) => {
 // POST /api/daily/guess - Submit a guess
 app.post("/api/daily/guess", async (req, res) => {
   try {
-    const cookieUserId = getUserIdFromRequest(req);
+    const existingUserId = getUserIdFromRequest(req);
     const { guess } = req.body;
     
     if (!guess || typeof guess !== 'string') {
@@ -396,8 +412,9 @@ app.post("/api/daily/guess", async (req, res) => {
     }
     
     // Always create or get user record to ensure userId exists in database
-    const user = await getOrCreateAnonymousUser(cookieUserId);
+    const user = await getOrCreateAnonymousUser(existingUserId);
     const userId = user.id;
+    await ensureAnonymousSession(req, userId);
     
     const puzzle = await getTodaysPuzzle();
     const existingResult = await getUserDailyResult(userId, puzzle.id);
@@ -497,6 +514,7 @@ app.get("/api/daily/stats", async (req, res) => {
         recentResults: []
       });
     }
+    await ensureAnonymousSession(req, cookieUserId);
     
     const stats = await getUserDailyStats(cookieUserId);
     res.json(stats);

@@ -15,9 +15,9 @@ The application features a modern design system with deep navy gradients and vio
 **Technical Implementations & Feature Specifications:**
 - **Real-time Communication:** Utilizes Socket.IO for real-time multiplayer functionality, handling game state, player interactions, and room management.
 - **Game Modes:** Implements Duel (1v1), Battle Royale (multiplayer), Shared Duel, and a Daily Challenge.
-- **Daily Challenge:** Features deterministic word generation, session-based (now localStorage-based) progress tracking, and persistence of guesses and results in a PostgreSQL database.
+- **Daily Challenge:** Features deterministic word generation, session-based progress tracking, and persistence of guesses and results in a PostgreSQL database.
 - **Error Handling:** A centralized `ErrorNotificationProvider` context manages application-wide error, warning, info, and success notifications with severity-based styling and smooth animations. Socket.IO connection status is integrated with this system.
-- **User Persistence:** Anonymous users are tracked via a UUID stored in localStorage on the frontend, sent to the backend via an `X-User-Id` header, and linked to a `User` record in the database.
+- **User Persistence:** Anonymous users are issued on the server side and stored in the session/cookie managed by `express-session`, keeping identifiers off the public API surface.
 - **Deployment Strategy:** Frontend deployed on Vercel, backend on Render, with Vercel rewrites forwarding API and WebSocket traffic to the Render backend.
 
 **System Design Choices:**
@@ -65,7 +65,7 @@ The application features a modern design system with deep navy gradients and vio
   - mergedAt and mergedIntoUserId fields prevent re-merging
   
 - **Session Management Verified**:
-  - getUserIdFromRequest properly prioritizes: authenticated user → session → headers → cookies
+- getUserIdFromRequest properly prioritizes: authenticated user → session
   - AuthContext exposes isAnonymous and isAuthenticated flags correctly
   - Session model with token, deviceId, lastSeenAt, and expiration tracking
 
