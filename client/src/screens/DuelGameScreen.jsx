@@ -418,13 +418,22 @@ function DuelGameScreen({
       : "Game ended - ready for rematch?"
     : null;
 
-  // Status message
+  // Status message - using visual indicators instead of text
   const statusMessage = isGameEnded
     ? bothRequestedRematch
-      ? "🚀 Both players ready! Starting rematch..."
+      ? null // Both ready - no status needed, rematch will start
+      : null // Visual indicators in footer handle status
+    : null;
+
+  // Rematch status for footer (visual indicator)
+  const rematchStatus = isGameEnded
+    ? bothRequestedRematch
+      ? null // Both ready - rematch starting
+      : opponentRequestedRematch
+      ? "Opponent ready" // Opponent has requested
       : hasRequestedRematch
-      ? "🔥 Opponent requested rematch"
-      : "⏳ Waiting for opponent"
+      ? "Waiting for opponent" // You requested, waiting
+      : null // No requests yet
     : null;
 
   // Footer content (rematch button) - returns content only, not footer wrapper
@@ -442,7 +451,16 @@ function DuelGameScreen({
               ? "✅ Rematch Requested"
               : "🚀 Request Rematch"}
           </GlowButton>
-          <p className="text-sm text-white/60 mt-2">{rematchStatus}</p>
+          {rematchStatus && (
+            <div className="flex items-center justify-center gap-2 mt-2">
+              {opponentRequestedRematch ? (
+                <IconStatusBadge type="ready" size="sm" animated={true} />
+              ) : hasRequestedRematch ? (
+                <IconStatusBadge type="waitingForPlayer" size="sm" animated={true} />
+              ) : null}
+              <p className="text-xs text-white/60">{rematchStatus}</p>
+            </div>
+          )}
         </div>
       );
     }
