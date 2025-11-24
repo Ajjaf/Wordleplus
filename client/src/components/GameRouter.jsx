@@ -1,12 +1,22 @@
-import React from "react";
+import React, { Suspense, lazy } from "react";
 import ErrorBoundary from "./ErrorBoundary";
-import DuelGameScreen from "../screens/DuelGameScreen";
-import SharedDuelGameScreen from "../screens/SharedDuelGameScreen";
-import BattleGameScreen from "../screens/BattleGameScreen";
-import HostSpectateScreen from "../screens/HostSpectateScreen";
-import DailyGameScreen from "../screens/DailyGameScreen";
-import HomeScreen from "../screens/HomeScreenV2";
 import VictoryModal from "./VictoryModal";
+import LoadingSpinner, { LoadingOverlay } from "./ui/LoadingSpinner";
+
+// Lazy load screen components for code splitting
+const DuelGameScreen = lazy(() => import("../screens/DuelGameScreen"));
+const SharedDuelGameScreen = lazy(() => import("../screens/SharedDuelGameScreen"));
+const BattleGameScreen = lazy(() => import("../screens/BattleGameScreen"));
+const HostSpectateScreen = lazy(() => import("../screens/HostSpectateScreen"));
+const DailyGameScreen = lazy(() => import("../screens/DailyGameScreen"));
+const HomeScreen = lazy(() => import("../screens/HomeScreenV2"));
+
+// Loading fallback component for lazy-loaded screens
+const ScreenLoadingFallback = () => (
+  <div className="flex items-center justify-center min-h-[400px]">
+    <LoadingSpinner size="lg" variant="primary" text="Loading..." />
+  </div>
+);
 
 export default function GameRouter({
   screen,
@@ -115,7 +125,8 @@ export default function GameRouter({
         {/* DUEL GAME */}
         {room?.mode === "duel" && (
           <ErrorBoundary componentName="DuelGameScreen">
-            <DuelGameScreen
+            <Suspense fallback={<ScreenLoadingFallback />}>
+              <DuelGameScreen
               room={room}
               me={me}
               opponent={opponent}
@@ -138,13 +149,15 @@ export default function GameRouter({
                 }
               }}
             />
+            </Suspense>
           </ErrorBoundary>
         )}
 
         {/* SHARED DUEL */}
         {room?.mode === "shared" && (
           <ErrorBoundary componentName="SharedDuelGameScreen">
-            <SharedDuelGameScreen
+            <Suspense fallback={<ScreenLoadingFallback />}>
+              <SharedDuelGameScreen
               room={room}
               me={me}
               currentGuess={currentGuess}
@@ -166,6 +179,7 @@ export default function GameRouter({
                 }
               }}
             />
+            </Suspense>
           </ErrorBoundary>
         )}
 
@@ -173,7 +187,8 @@ export default function GameRouter({
         {(room?.mode === "battle" || room?.mode === "battle_ai") &&
           (isHost || (wasHost && me?.id === room?.hostId) ? (
             <ErrorBoundary componentName="HostSpectateScreen">
-              <HostSpectateScreen
+              <Suspense fallback={<ScreenLoadingFallback />}>
+                <HostSpectateScreen
                 key="host"
                 room={room}
                 players={players}
@@ -220,10 +235,12 @@ export default function GameRouter({
                     : undefined
                 }
               />
+              </Suspense>
             </ErrorBoundary>
           ) : (
             <ErrorBoundary componentName="BattleGameScreen">
-              <BattleGameScreen
+              <Suspense fallback={<ScreenLoadingFallback />}>
+                <BattleGameScreen
                 key="player"
                 room={room}
                 players={players}
@@ -274,6 +291,7 @@ export default function GameRouter({
                   }
                 }}
               />
+              </Suspense>
             </ErrorBoundary>
           ))}
       </div>
@@ -284,7 +302,8 @@ export default function GameRouter({
     return (
       <div className="flex-1">
         <ErrorBoundary componentName="DailyGameScreen">
-          <DailyGameScreen
+          <Suspense fallback={<ScreenLoadingFallback />}>
+            <DailyGameScreen
             challenge={dailyProps?.challenge}
             guesses={dailyProps?.guesses}
             currentGuess={dailyProps?.currentGuess}
@@ -301,6 +320,7 @@ export default function GameRouter({
             onNotificationDismiss={dailyProps?.setDailyNotificationMessage}
             guessFlipKey={dailyProps?.guessFlipKey}
           />
+          </Suspense>
         </ErrorBoundary>
         {/* Victory Modal for Daily Challenge */}
         {showVictory && dailyProps?.gameOver && (
@@ -319,7 +339,8 @@ export default function GameRouter({
   // Home screen
   return (
     <ErrorBoundary componentName="HomeScreen">
-      <HomeScreen
+      <Suspense fallback={<ScreenLoadingFallback />}>
+        <HomeScreen
         name={name}
         setName={setName}
         roomId={contextRoomId}
@@ -331,6 +352,7 @@ export default function GameRouter({
         onPlayDaily={onPlayDaily}
         message={message}
       />
+      </Suspense>
     </ErrorBoundary>
   );
 }
