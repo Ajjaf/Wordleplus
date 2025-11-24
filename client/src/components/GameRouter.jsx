@@ -300,7 +300,7 @@ export default function GameRouter({
 
   if (screen === "daily") {
     return (
-      <div className="flex-1">
+      <div className="h-full overflow-hidden">
         <ErrorBoundary componentName="DailyGameScreen">
           <Suspense fallback={<ScreenLoadingFallback />}>
             <DailyGameScreen

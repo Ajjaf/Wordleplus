@@ -7,8 +7,6 @@ import { GameEffects } from "../components/features/GameEffects";
 import { GameTimer } from "../components/features/GameTimer";
 import { GameStatusBar } from "../components/features/GameStatusBar";
 import GameResults from "../components/GameResults";
-import Board from "../components/Board";
-import MobileBoard from "../components/mobile/MobileBoard";
 import GlowButton from "../components/ui/GlowButton";
 import { getModeTheme } from "../config/mode-themes";
 import { logger } from "../utils/logger";
@@ -375,33 +373,7 @@ function BattleGameScreen({
   // Custom board render with right rail for other players
   const renderBoard = () => {
     if (isMobile) {
-      return (
-        <div className="flex-1 flex flex-col items-center min-h-0">
-          {roundActive ? (
-            <MobileBoard
-              guesses={me?.guesses || []}
-              activeGuess={activeGuessForBattle}
-              errorShakeKey={shakeKey}
-              errorActiveRow={showActiveError}
-              guessFlipKey={guessFlipKey}
-              reservedBottom={360}
-              maxWidth="min(440px, 96vw)"
-              maxTile={80}
-              minTile={44}
-              gap={6}
-              padding={10}
-            />
-          ) : (
-            <div className="flex-1 w-full flex items-center justify-center">
-              <GameResults
-                room={room}
-                players={allPlayers}
-                correctWord={correctWord}
-              />
-            </div>
-          )}
-        </div>
-      );
+      return null; // MobileBoard is handled by GameLayout
     }
 
     return (
@@ -409,17 +381,7 @@ function BattleGameScreen({
         {/* Center board */}
         {roundActive ? (
           <div className="flex-1 w-full max-w-[min(1100px,95vw)] max-h-[calc(100dvh-260px)] flex items-center justify-center min-h-0">
-            <Board
-              guesses={me?.guesses || []}
-              activeGuess={activeGuessForBattle}
-              errorShakeKey={shakeKey}
-              errorActiveRow={showActiveError}
-              guessFlipKey={guessFlipKey}
-              maxTile={112}
-              minTile={56}
-              gap={10}
-              padding={12}
-            />
+            {/* Board is handled by GameLayout */}
           </div>
         ) : (
           <div className="flex-1 w-full flex items-center justify-center">
@@ -464,17 +426,17 @@ function BattleGameScreen({
   const standbyMessage = (() => {
     if (roundActive) return null;
     if (isAiMode) {
-      if (pendingStart) return "Waiting for host";
+      if (pendingStart) return "Waiting for someone to start the game...";
       if (countdownLabel) {
         return `Next round in ${countdownLabel}`;
       }
       return roundFinished
         ? "Game ended — AI host is preparing the next round..."
-        : "Waiting for AI host";
+        : "Waiting for AI host to start the game...";
     }
     return roundFinished
       ? "Game ended — waiting for host to start the next round..."
-      : "Waiting for host";
+      : "Waiting for host to start the game...";
   })();
 
   return (
@@ -494,15 +456,11 @@ function BattleGameScreen({
         errorShakeKey: shakeKey,
         errorActiveRow: showActiveError,
         guessFlipKey,
-        maxTile: isMobile ? 80 : 112,
-        minTile: isMobile ? 44 : 56,
-        gap: isMobile ? 6 : 10,
-        padding: isMobile ? 10 : 12,
       }}
       letterStates={letterStates}
       onKeyPress={onKeyPress}
-      keyboardDisabled={!canGuessBattle || submittingGuess}
-      showKeyboard={true}
+      keyboardDisabled={submittingGuess}
+      showKeyboard={canGuessBattle}
       effects={{
         showCorrectParticles,
         showStreakParticles,

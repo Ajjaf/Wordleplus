@@ -149,14 +149,27 @@ function Board({
           }
            @keyframes shakeX {
      0%,100% { transform: translateX(0) }
-     20% { transform: translateX(-4px) }
-     40% { transform: translateX(4px) }
-     60% { transform: translateX(-3px) }
-     80% { transform: translateX(3px) }
+     10% { transform: translateX(-6px) }
+     20% { transform: translateX(6px) }
+     30% { transform: translateX(-5px) }
+     40% { transform: translateX(5px) }
+     50% { transform: translateX(-3px) }
+     60% { transform: translateX(3px) }
+     70% { transform: translateX(-2px) }
+     80% { transform: translateX(2px) }
+   }
+   @keyframes flashRed {
+     0%,100% { background-color: transparent; }
+     50% { background-color: rgba(239, 68, 68, 0.3); }
    }
    /* Apply shake to tiles in the active row */
-   .shake-hard > div { animation: shakeX 250ms ease-in-out; }
-   .tile-error { box-shadow: inset 0 0 0 2px #ef4444; }
+   .shake-hard > div { 
+     animation: shakeX 400ms ease-in-out;
+   }
+   .tile-error { 
+     box-shadow: inset 0 0 0 2px #ef4444;
+     animation: flashRed 300ms ease-in-out;
+   }
         `}
       </style>
       <div

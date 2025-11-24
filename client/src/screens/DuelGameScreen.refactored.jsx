@@ -10,8 +10,6 @@ import { GameTimer } from "../components/features/GameTimer";
 import { GameStatusBar } from "../components/features/GameStatusBar";
 import Board from "../components/Board.jsx";
 import GlowButton from "../components/ui/GlowButton";
-import { SmartHint } from "../components/ui/SmartHint";
-import { IconStatusBadge } from "../components/ui/IconStatusBadge";
 import { getModeTheme } from "../config/mode-themes";
 
 function DuelGameScreen({
@@ -137,8 +135,8 @@ function DuelGameScreen({
 
   const boardTileBounds = useMemo(() => {
     const defaults = {
-      min: isMobile ? 44 : 56,
-      max: isMobile ? 80 : 112,
+      min: isMobile ? 34 : 36,
+      max: isMobile ? 56 : 72,
     };
     if (!viewportHeight) return defaults;
     if (viewportHeight < 480) return { min: 26, max: 34 };
@@ -427,44 +425,42 @@ function DuelGameScreen({
       : "⏳ Waiting for opponent"
     : null;
 
-  // Footer content (rematch button) - returns content only, not footer wrapper
+  // Footer content (rematch button)
   const renderFooter = () => {
     if (isGameEnded) {
       return (
-        <div className="text-center mb-2">
-          <GlowButton
-            onClick={handleRematch}
-            disabled={hasRequestedRematch}
-            size="lg"
-            variant={hasRequestedRematch ? "secondary" : "primary"}
-          >
-            {hasRequestedRematch
-              ? "✅ Rematch Requested"
-              : "🚀 Request Rematch"}
-          </GlowButton>
-          <p className="text-sm text-white/60 mt-2">{rematchStatus}</p>
+        <div className="w-full px-2 sm:px-4 flex-shrink-0">
+          <div className="mx-auto w-full max-w-5xl">
+            <div className="text-center">
+              <GlowButton
+                onClick={handleRematch}
+                disabled={hasRequestedRematch}
+                size="lg"
+                variant={hasRequestedRematch ? "secondary" : "primary"}
+              >
+                {hasRequestedRematch
+                  ? "✅ Rematch Requested"
+                  : "🚀 Request Rematch"}
+              </GlowButton>
+            </div>
+          </div>
         </div>
       );
     }
     if (!canSetSecret && !canGuess) {
       return (
-        <div className="text-center py-4 flex flex-col items-center gap-2">
-          {!myReady ? (
-            <div className="flex items-center gap-2">
-              <IconStatusBadge type="ready" size="md" animated={true} />
-              <span className="text-sm text-white/60">Set your secret word</span>
+        <div className="w-full px-2 sm:px-4 flex-shrink-0">
+          <div className="mx-auto w-full max-w-5xl">
+            <div className="text-center py-4">
+              <p className="text-lg font-medium text-white/80">
+                {!myReady
+                  ? "Set your secret word to continue..."
+                  : !oppReady
+                  ? "Waiting for opponent to set their secret word..."
+                  : "Both players ready! Starting..."}
+              </p>
             </div>
-          ) : !oppReady ? (
-            <div className="flex items-center gap-2">
-              <IconStatusBadge type="waitingForPlayer" size="md" animated={true} />
-              <span className="text-sm text-white/60">Waiting for opponent</span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <IconStatusBadge type="ready" size="md" animated={true} />
-              <span className="text-sm text-white/60">Starting...</span>
-            </div>
-          )}
+          </div>
         </div>
       );
     }
@@ -482,7 +478,12 @@ function DuelGameScreen({
               Choose your secret word
             </div>
 
-            {/* Visual indicator: tiles glow when ready to submit */}
+            {canSetSecret && secretWordInput.length === 5 && (
+              <div className="text-center text-xs text-white/70">
+                Press <span className="font-semibold text-white">Enter</span> to
+                lock your word
+              </div>
+            )}
 
             <div
               className="relative flex justify-center"
@@ -495,7 +496,7 @@ function DuelGameScreen({
               }}
             >
               {/* Secret Word Tiles */}
-              <div className="flex relative" style={{ gap: secretGap }}>
+              <div className="flex" style={{ gap: secretGap }}>
                 {Array.from({ length: 5 }).map((_, i) => {
                   const typingLen = secretWordInput.length;
                   const show =
@@ -513,18 +514,10 @@ function DuelGameScreen({
                     color = "var(--tile-text)",
                     border = "1px solid var(--tile-empty-border)";
 
-                  // Ready to submit: all 5 tiles filled - add green glow
-                  const isReadyToSubmit = canSetSecret && secretWordInput.length === 5 && !isEmpty;
-                  
                   if (mySecretState === "set" && !isEmpty) {
                     bg = "#e3f2fd";
                     color = "#1976d2";
                     border = "1px solid #1976d2";
-                  } else if (isReadyToSubmit) {
-                    // Visual indicator: green glow when ready to submit
-                    bg = "var(--tile-typed-bg)";
-                    border = "2px solid #10b981";
-                    // Add glow effect
                   } else if (isActive) {
                     bg = "var(--tile-typed-bg)";
                     border = "1px solid #999";
@@ -560,17 +553,13 @@ function DuelGameScreen({
                             ? "scale(1.05)"
                             : "scale(1)",
                         boxShadow:
-                          isReadyToSubmit
-                            ? "0 0 12px rgba(16, 185, 129, 0.6), 0 4px 12px rgba(16, 185, 129, 0.3)"
-                            : mySecretState === "set" && !isEmpty
+                          mySecretState === "set" && !isEmpty
                             ? "0 4px 12px rgba(25, 118, 210, 0.3)"
                             : mySecretState === "typing" && isEmpty
                             ? "0 2px 8px rgba(0, 0, 0, 0.2)"
                             : "0 1px 3px rgba(0, 0, 0, 0.1)",
                         animation:
-                          isReadyToSubmit
-                            ? "pulse 2s ease-in-out infinite"
-                            : mySecretState === "typing" && isEmpty
+                          mySecretState === "typing" && isEmpty
                             ? "pulse 1.5s ease-in-out infinite"
                             : "none",
                       }}
@@ -582,17 +571,6 @@ function DuelGameScreen({
                   );
                 })}
               </div>
-
-              {/* Optional hint for first-time users - positioned below tiles */}
-              {canSetSecret && secretWordInput.length === 5 && (
-                <SmartHint
-                  show={true}
-                  message="Press Enter"
-                  position="below"
-                  autoHide={4000}
-                  storageKey="duel_secret_word_hint_seen"
-                />
-              )}
 
               {/* Generate Button */}
               {canSetSecret && (
@@ -653,7 +631,6 @@ function DuelGameScreen({
                   guessFlipKey={guessFlipKey}
                   onMeasure={handleBoardMeasure}
                   padding={boardPadding}
-                  gap={isMobile ? 6 : 10}
                   minTile={boardTileBounds.min}
                   maxTile={boardTileBounds.max}
                   verticalAlign="start"
@@ -693,7 +670,7 @@ function DuelGameScreen({
       letterStates={letterStates}
       onKeyPress={handleKeyPress}
       keyboardDisabled={submittingGuess}
-      showKeyboard={true}
+      showKeyboard={canSetSecret || canGuess}
       effects={{
         showParticles,
         showConfetti,

@@ -130,12 +130,12 @@ export function useDailyGame(screen, dailyActions, persistSession, goHome) {
     if (dailyGameOver) return;
     if (dailyLoading) return;
     if (dailyGuesses.length >= maxDailyGuesses) {
-      setDailyNotificationMessage("No more guesses left");
+      // Visual feedback only - no text notification
       setDailyGameOver(true);
       return;
     }
     if (dailyCurrentGuess.length !== dailyWordLength) {
-      setDailyNotificationMessage(`Need ${dailyWordLength} letters`);
+      // Visual feedback: shake animation only
       setDailyShakeKey((prev) => prev + 1);
       setDailyShowActiveError(true);
       if (dailyErrorTimeoutRef.current) {
@@ -145,7 +145,7 @@ export function useDailyGame(screen, dailyActions, persistSession, goHome) {
       return;
     }
     if (dailyGuesses.includes(dailyCurrentGuess)) {
-      setDailyNotificationMessage("Already tried that word");
+      // Visual feedback: shake animation only
       setDailyShakeKey((prev) => prev + 1);
       setDailyShowActiveError(true);
       if (dailyErrorTimeoutRef.current) {
@@ -161,7 +161,7 @@ export function useDailyGame(screen, dailyActions, persistSession, goHome) {
         dailyCurrentGuess.toLowerCase()
       );
       if (result?.error) {
-        setDailyNotificationMessage(result.error);
+        // Visual feedback: shake animation only - no text notification
         setDailyShakeKey((prev) => prev + 1);
         setDailyShowActiveError(true);
         if (dailyErrorTimeoutRef.current) {
@@ -197,19 +197,14 @@ export function useDailyGame(screen, dailyActions, persistSession, goHome) {
       // Store correct word if game is over
       if (result?.word) {
         setDailyCorrectWord(result.word.toUpperCase());
-        // Show correct word in notification if player lost
-        if (!solved && (exhausted || result?.gameOver)) {
-          setDailyNotificationMessage(
-            `The word was: ${result.word.toUpperCase()}`
-          );
-        }
+        // Correct word shown in results modal - no text notification needed
       }
 
       if (solved) {
         setShowVictory(true);
       }
     } catch (err) {
-      setDailyNotificationMessage(err?.message || "Unable to submit guess");
+      // Visual feedback: shake animation only - no text notification
       setDailyShakeKey((prev) => prev + 1);
       setDailyShowActiveError(true);
       if (dailyErrorTimeoutRef.current) {
