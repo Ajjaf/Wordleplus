@@ -440,12 +440,18 @@ function DuelGameScreen({
   const renderFooter = () => {
     if (isGameEnded) {
       return (
-        <div className="text-center mb-2">
+        <div className={cn(
+          "text-center",
+          isMobile ? "pb-4" : "mb-2"
+        )}>
           <GlowButton
             onClick={handleRematch}
             disabled={hasRequestedRematch}
             size="lg"
             variant={hasRequestedRematch ? "secondary" : "primary"}
+            className={cn(
+              isMobile && "w-full max-w-sm mx-auto"
+            )}
           >
             {hasRequestedRematch
               ? "✅ Rematch Requested"
@@ -710,8 +716,8 @@ function DuelGameScreen({
       activeGuess={activeGuessForMe}
       letterStates={letterStates}
       onKeyPress={handleKeyPress}
-      keyboardDisabled={submittingGuess}
-      showKeyboard={true}
+      keyboardDisabled={submittingGuess || isGameEnded}
+      showKeyboard={!isGameEnded}
       effects={{
         showParticles,
         showConfetti,

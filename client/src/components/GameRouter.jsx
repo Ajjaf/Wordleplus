@@ -67,60 +67,80 @@ export default function GameRouter({
     return (
       <div className="h-full overflow-hidden">
         {/* Victory Modal shown while in-game as overlay */}
-        {showVictory && (
-          <VictoryModal
-            open={showVictory}
-            onOpenChange={setShowVictory}
-            mode={room?.mode}
-            winnerName={
-              room?.mode === "shared"
-                ? room?.shared?.winner && room?.shared?.winner !== "draw"
-                  ? room?.players?.[room.shared.winner]?.name
+        {showVictory && (() => {
+          // Get player IDs and objects for duel mode
+          const playerIds = room?.mode === "duel" ? Object.keys(room?.players || {}) : [];
+          const leftPlayerId = playerIds[0] || null;
+          const rightPlayerId = playerIds[1] || null;
+          const leftPlayer = leftPlayerId ? room?.players?.[leftPlayerId] : null;
+          const rightPlayer = rightPlayerId ? room?.players?.[rightPlayerId] : null;
+
+          return (
+            <VictoryModal
+              open={showVictory}
+              onOpenChange={setShowVictory}
+              mode={room?.mode}
+              winnerName={
+                room?.mode === "shared"
+                  ? room?.shared?.winner && room?.shared?.winner !== "draw"
+                    ? room?.players?.[room.shared.winner]?.name
+                    : null
+                  : room?.mode === "duel"
+                  ? room?.winner && room?.winner !== "draw"
+                    ? room?.players?.[room.winner]?.name
+                    : null
                   : null
-                : room?.mode === "duel"
-                ? room?.winner && room?.winner !== "draw"
-                  ? room?.players?.[room.winner]?.name
+              }
+              winnerId={
+                room?.mode === "duel"
+                  ? room?.winner || null
+                  : room?.mode === "shared"
+                  ? room?.shared?.winner || null
                   : null
-                : null
-            }
-            leftName={
-              room?.mode === "duel"
-                ? Object.values(room?.players || {})[0]?.name
-                : null
-            }
-            rightName={
-              room?.mode === "duel"
-                ? Object.values(room?.players || {})[1]?.name
-                : null
-            }
-            leftSecret={
-              room?.mode === "duel"
-                ? room?.duelReveal?.[Object.keys(room?.players || {})[0]]
-                : null
-            }
-            rightSecret={
-              room?.mode === "duel"
-                ? room?.duelReveal?.[Object.keys(room?.players || {})[1]]
-                : null
-            }
-            battleSecret={
-              room?.mode === "shared"
-                ? room?.shared?.lastRevealedWord
-                : room?.battle?.lastRevealedWord
-            }
-            onPlayAgain={
-              room?.mode === "shared" || room?.mode === "duel"
-                ? async () => {
-                    setShowVictory(false);
-                    try {
-                      await duelActions.playAgain(roomId);
-                    } catch (e) {}
-                  }
-                : () => setShowVictory(false)
-            }
-            showPlayAgain={room?.mode === "shared" || room?.mode === "duel"}
-          />
-        )}
+              }
+              leftName={
+                room?.mode === "duel"
+                  ? leftPlayer?.name || null
+                  : null
+              }
+              rightName={
+                room?.mode === "duel"
+                  ? rightPlayer?.name || null
+                  : null
+              }
+              leftSecret={
+                room?.mode === "duel"
+                  ? room?.duelReveal?.[leftPlayerId] || null
+                  : null
+              }
+              rightSecret={
+                room?.mode === "duel"
+                  ? room?.duelReveal?.[rightPlayerId] || null
+                  : null
+              }
+              leftPlayerId={leftPlayerId}
+              rightPlayerId={rightPlayerId}
+              leftPlayer={leftPlayer}
+              rightPlayer={rightPlayer}
+              battleSecret={
+                room?.mode === "shared"
+                  ? room?.shared?.lastRevealedWord
+                  : room?.battle?.lastRevealedWord
+              }
+              onPlayAgain={
+                room?.mode === "shared" || room?.mode === "duel"
+                  ? async () => {
+                      setShowVictory(false);
+                      try {
+                        await duelActions.playAgain(roomId);
+                      } catch (e) {}
+                    }
+                  : () => setShowVictory(false)
+              }
+              showPlayAgain={room?.mode === "shared" || room?.mode === "duel"}
+            />
+          );
+        })()}
 
         {/* DUEL GAME */}
         {room?.mode === "duel" && (

@@ -236,7 +236,9 @@ export function GameLayout({
             )}
             style={{
               paddingBottom: isMobile
-                ? "calc(env(safe-area-inset-bottom) + 0.25rem)"
+                ? renderFooter && !showKeyboard
+                  ? "calc(env(safe-area-inset-bottom) + 1rem)"
+                  : "calc(env(safe-area-inset-bottom) + 0.25rem)"
                 : undefined,
             }}
           >
