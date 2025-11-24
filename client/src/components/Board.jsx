@@ -1,7 +1,7 @@
 // Board.jsx
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState, memo } from "react";
 
-export default function Board({
+function Board({
   guesses = [],
   activeGuess = "",
   // secret word (optional)
@@ -417,3 +417,32 @@ export default function Board({
     </>
   );
 }
+
+// Memoize Board component to prevent unnecessary re-renders
+// Only re-render when props actually change
+export default memo(Board, (prevProps, nextProps) => {
+  // Custom comparison function for better performance
+  // Compare primitive values and reference equality for objects/arrays
+  return (
+    prevProps.guesses === nextProps.guesses &&
+    prevProps.activeGuess === nextProps.activeGuess &&
+    prevProps.secretWord === nextProps.secretWord &&
+    prevProps.secretWordState === nextProps.secretWordState &&
+    prevProps.isOwnBoard === nextProps.isOwnBoard &&
+    prevProps.gap === nextProps.gap &&
+    prevProps.tile === nextProps.tile &&
+    prevProps.padding === nextProps.padding &&
+    prevProps.autoFit === nextProps.autoFit &&
+    prevProps.minTile === nextProps.minTile &&
+    prevProps.maxTile === nextProps.maxTile &&
+    prevProps.showGuessesLabel === nextProps.showGuessesLabel &&
+    prevProps.players === nextProps.players &&
+    prevProps.currentPlayerId === nextProps.currentPlayerId &&
+    prevProps.errorShakeKey === nextProps.errorShakeKey &&
+    prevProps.errorActiveRow === nextProps.errorActiveRow &&
+    prevProps.secretErrorKey === nextProps.secretErrorKey &&
+    prevProps.secretErrorActive === nextProps.secretErrorActive &&
+    prevProps.secretWordReveal === nextProps.secretWordReveal &&
+    prevProps.guessFlipKey === nextProps.guessFlipKey
+  );
+});

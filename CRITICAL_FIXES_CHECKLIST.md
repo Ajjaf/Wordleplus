@@ -181,19 +181,35 @@ export const sanitizeRoomId = (id) => {
 - Socket reconnection shows animated indicator in navigation header
 - All loading states provide visual feedback and prevent user actions during async operations
 
-### 9. Optimize Re-renders (1 day)
+### 9. Optimize Re-renders (1 day) ✅ COMPLETED
 
 **Components to memoize:**
 
-- [ ] `Board.jsx` - Wrap with React.memo
-- [ ] `Keyboard.jsx` - Wrap with React.memo
-- [ ] `PlayerCard.jsx` - Wrap with React.memo
-- [ ] `VictoryModal.jsx` - Wrap with React.memo
+- [x] `Board.jsx` - ✅ Wrapped with React.memo and custom comparison function
+- [x] `Keyboard.jsx` - ✅ Wrapped with React.memo and custom comparison function
+- [x] `PlayerCard.jsx` - ✅ Wrapped with React.memo
+- [x] `VictoryModal.jsx` - ✅ Wrapped with React.memo (including Tiles sub-component)
 
 **Hooks to optimize:**
 
-- [ ] `useGameState.js` - Reduce dependencies
-- [ ] `App.jsx` - Split useEffects
+- [x] `useGameState.js` - ✅ Optimized with useMemo instead of useState+useEffect, reduced dependencies
+- [x] `App.jsx` - ✅ Split large useEffects into smaller, focused effects with reduced dependencies
+
+**Implementation Details:**
+
+- **Board.jsx**: Custom comparison function checks all props to prevent unnecessary re-renders
+- **Keyboard.jsx**: Custom comparison function for onKeyPress, letterStates, disabled, sticky props
+- **PlayerCard.jsx**: Simple memoization (shallow comparison is sufficient)
+- **VictoryModal.jsx**: Memoized main component and Tiles sub-component
+- **useGameState.js**:
+  - Replaced useState+useEffect pattern with useMemo for computed player data
+  - Memoized mode state selectors
+  - Memoized all derived values (canGuess\*, letterStates, shouldShowVictory, duelSecrets)
+  - Reduced dependencies by extracting socketId
+- **App.jsx**:
+  - Split victory modal effect into 3 separate effects (duel, shared, battle)
+  - Split navigation effect into 2 separate effects (duel, battle)
+  - Each effect now has minimal, focused dependencies
 
 ### 10. Code Splitting (4 hours)
 

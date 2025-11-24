@@ -106,37 +106,26 @@ export default function App() {
     aiBattleActions
   );
 
-  // Show victory when there is a real outcome
+  // Show victory for duel mode - separate effect to reduce dependencies
   useEffect(() => {
-    if (!room) return;
+    if (!room || room.mode !== "duel") return;
+    const shouldShow = Boolean(room.winner) || Boolean(room.duelReveal);
+    setShowVictory(shouldShow);
+  }, [room?.mode, room?.winner, room?.duelReveal, setShowVictory]);
 
-    if (room.mode === "duel") {
-      const shouldShow = Boolean(room.winner) || Boolean(room.duelReveal);
-      setShowVictory(shouldShow);
-      return;
-    }
+  // Show victory for shared mode - separate effect to reduce dependencies
+  useEffect(() => {
+    if (!room || room.mode !== "shared") return;
+    const shouldShow =
+      Boolean(room.shared?.winner) || Boolean(room.shared?.lastRevealedWord);
+    setShowVictory(shouldShow);
+  }, [room?.mode, room?.shared?.winner, room?.shared?.lastRevealedWord, setShowVictory]);
 
-    if (room.mode === "shared") {
-      const shouldShow =
-        Boolean(room.shared?.winner) || Boolean(room.shared?.lastRevealedWord);
-      setShowVictory(shouldShow);
-      return;
-    }
-
-    if (room.mode === "battle" || room.mode === "battle_ai") {
-      setShowVictory(false);
-    }
-  }, [
-    room?.mode,
-    room?.winner,
-    room?.duelReveal,
-    room?.shared?.winner,
-    room?.shared?.lastRevealedWord,
-    room?.battle?.started,
-    room?.battle?.winner,
-    room?.battle?.reveal,
-    setShowVictory,
-  ]);
+  // Hide victory for battle modes - separate effect to reduce dependencies
+  useEffect(() => {
+    if (!room || (room.mode !== "battle" && room.mode !== "battle_ai")) return;
+    setShowVictory(false);
+  }, [room?.mode, setShowVictory]);
 
   // Transient toast support
   useEffect(() => {
@@ -145,24 +134,21 @@ export default function App() {
     return () => clearTimeout(t);
   }, [msg, setMsg]);
 
-  // Navigate to game screen when room starts
+  // Navigate to game screen when duel room starts - separate effect
   useEffect(() => {
     if (room?.mode === "duel" && room?.started) {
       setScreen("game");
       setCurrentGuess("");
-    } else if (room?.mode === "battle" || room?.mode === "battle_ai") {
+    }
+  }, [room?.mode, room?.started, setScreen, setCurrentGuess]);
+
+  // Navigate to game screen for battle modes - separate effect
+  useEffect(() => {
+    if (room?.mode === "battle" || room?.mode === "battle_ai") {
       setScreen("game");
       setCurrentGuess("");
     }
-  }, [
-    room?.started,
-    room?.battle?.started,
-    room?.battle?.winner,
-    room?.battle?.reveal,
-    room?.mode,
-    setScreen,
-    setCurrentGuess,
-  ]);
+  }, [room?.mode, setScreen, setCurrentGuess]);
 
   // Track wasHost for battle mode
   useEffect(() => {

@@ -1,7 +1,7 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, memo } from "react";
 import { Button } from "@/components/ui/button";
 
-function Tiles({ word = "" }) {
+const Tiles = memo(function Tiles({ word = "" }) {
   const letters = (word || "").toUpperCase().padEnd(5).slice(0, 5).split("");
   return (
     <div className="flex items-center justify-center">
@@ -18,10 +18,10 @@ function Tiles({ word = "" }) {
       </div>
     </div>
   );
-}
+});
 
 // Accessible, animated modal
-export default function VictoryModal({
+function VictoryModal({
   open,
   onOpenChange,
   mode,
@@ -187,3 +187,6 @@ function Avatar({ name }) {
     </div>
   );
 }
+
+// Memoize VictoryModal component to prevent unnecessary re-renders
+export default memo(VictoryModal);
