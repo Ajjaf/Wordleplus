@@ -71,7 +71,7 @@ export default function App() {
   } = useGameState(room);
 
   // Socket connection management
-  const { canRejoin, doRejoin, savedRoomId, reconnecting } = useSocketConnection(room, setScreen);
+  const { canRejoin, doRejoin, savedRoomId } = useSocketConnection(room, setScreen);
 
   // Game actions by mode
   const actionsByMode = useGameActions();
@@ -88,7 +88,7 @@ export default function App() {
   const dailyGame = useDailyGame(screen, dailyActions, persistSession, goHome);
 
   // Duel game hook
-  const { handleDuelKey, submittingGuess: submittingDuelGuess } = useDuelGame(
+  const { handleDuelKey } = useDuelGame(
     room,
     canGuessDuel,
     canGuessShared,
@@ -97,7 +97,7 @@ export default function App() {
   );
 
   // Battle game hook
-  const { handleBattleKey, submittingGuess: submittingBattleGuess } = useBattleGame(
+  const { handleBattleKey } = useBattleGame(
     room,
     canGuessBattle,
     isHost,
@@ -360,7 +360,6 @@ export default function App() {
             modeLabel={getModeLabel()}
             right={!viewingHost ? rejoinNavControl : null}
             roomId={screen === "home" ? null : roomId}
-            reconnecting={reconnecting}
           />
 
           <div className="max-w-7xl mx-auto p-4 font-sans">

@@ -24,6 +24,7 @@ function DuelGameScreen({
   onKeyPress,
   onSubmitSecret,
   onRematch,
+  submittingGuess = false,
 }) {
   // Local input for MY secret only (we never edit opponent secret locally)
   const [secretWordInput, setSecretWordInput] = useState("");
@@ -894,6 +895,7 @@ function DuelGameScreen({
               <Keyboard
                 onKeyPress={handleKeyPress}
                 letterStates={letterStates}
+                disabled={submittingGuess}
               />
             </div>
           </div>

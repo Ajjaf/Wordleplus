@@ -1,5 +1,6 @@
 import { validateWord } from "../../api";
 import { emitAsync } from "../utils.js";
+import { logger } from "../../utils/logger";
 
 export function createActions(socket) {
   const startRound = (roomId) => emitAsync(socket, "startShared", { roomId });
@@ -17,7 +18,7 @@ export function createActions(socket) {
     });
 
     if (response?.error) {
-      console.warn("[shared makeGuess] error", response.error);
+      logger.warn("[shared makeGuess] error", response.error);
       return { error: response.error };
     }
 

@@ -3,7 +3,7 @@ import { Calendar, TrendingUp, Target, Trophy, BarChart3 } from "lucide-react";
 import GlowButton from "./GlowButton";
 import { BORDER_RADIUS, SHADOWS } from "../../design-system";
 
-export default function DailyChallengeHero({ onPlay, stats = {} }) {
+export default function DailyChallengeHero({ onPlay, stats = {}, loading = false }) {
   const {
     currentStreak = 0,
     maxStreak = 0,
@@ -61,6 +61,8 @@ export default function DailyChallengeHero({ onPlay, stats = {} }) {
             onClick={onPlay}
             size="lg"
             className="mt-2 md:mt-4 mx-auto md:mx-0"
+            loading={loading}
+            loadingText="Loading..."
           >
             Play Today's Word
           </GlowButton>

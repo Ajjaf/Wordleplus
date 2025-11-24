@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import { GRADIENTS, SHADOWS, TRANSITIONS } from '../../design-system';
+import LoadingSpinner from './LoadingSpinner';
 
 export default function GlowButton({ 
   children, 
@@ -8,6 +9,8 @@ export default function GlowButton({
   size = 'md',
   className = '',
   disabled = false,
+  loading = false,
+  loadingText = null,
   ...props 
 }) {
   const sizeClasses = {
@@ -31,31 +34,36 @@ export default function GlowButton({
     },
   };
 
+  const isDisabled = disabled || loading;
+
   return (
     <motion.button
       onClick={onClick}
-      disabled={disabled}
+      disabled={isDisabled}
       className={`
         relative rounded-full font-semibold
         text-white overflow-hidden
         transition-all duration-300 ease-out
         ${sizeClasses[size]}
-        ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+        ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
         ${className}
       `}
       style={{
         ...variantStyles[variant],
         backgroundSize: variant === 'primary' ? '200% 100%' : undefined,
       }}
-      whileHover={disabled ? {} : { 
+      whileHover={isDisabled ? {} : { 
         scale: 1.05,
         backgroundPosition: variant === 'primary' ? '100% 0' : undefined,
       }}
-      whileTap={disabled ? {} : { scale: 0.95 }}
+      whileTap={isDisabled ? {} : { scale: 0.95 }}
       transition={{ duration: 0.2 }}
       {...props}
     >
-      <span className="relative z-10">{children}</span>
+      <span className="relative z-10 flex items-center justify-center gap-2">
+        {loading && <LoadingSpinner size="sm" variant="white" />}
+        {loading && loadingText ? loadingText : children}
+      </span>
     </motion.button>
   );
 }

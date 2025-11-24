@@ -5,8 +5,10 @@ import GradientBackground from "../components/ui/GradientBackground";
 import DailyChallengeHero from "../components/ui/DailyChallengeHero";
 import AnimatedGameCard from "../components/ui/AnimatedGameCard";
 import GlowButton from "../components/ui/GlowButton";
+import LoadingSpinner from "../components/ui/LoadingSpinner";
 import { useAuth } from "../contexts/AuthContext";
 import { buildApiUrl } from "../config";
+import { logger } from "../utils/logger";
 
 const DEFAULT_DAILY_STATS = {
   currentStreak: 0,
@@ -151,7 +153,7 @@ export default function HomeScreenV2({
       } catch (error) {
         if (isActive) {
           setDailyStats(DEFAULT_DAILY_STATS);
-          console.error("Failed to load daily stats:", error);
+          logger.error("Failed to load daily stats:", error);
         }
       }
     }
@@ -188,7 +190,7 @@ export default function HomeScreenV2({
         setRoomsError("");
       } catch (error) {
         if (!isActive) return;
-        console.error("Failed to load open rooms:", error);
+        logger.error("Failed to load open rooms:", error);
         setRoomsError("Unable to load open rooms right now.");
       } finally {
         if (isActive) setRoomsLoading(false);
@@ -221,7 +223,7 @@ export default function HomeScreenV2({
         setEventError("");
       } catch (error) {
         if (!isActive) return;
-        console.error("Failed to load event status:", error);
+        logger.error("Failed to load event status:", error);
         setEventError("Unable to load event status.");
         setEventStatus(null);
       } finally {
@@ -374,6 +376,7 @@ export default function HomeScreenV2({
           <DailyChallengeHero
             onPlay={() => handlePlayMode("daily")}
             stats={dailyStats}
+            loading={creating}
           />
 
           <section>
@@ -546,10 +549,10 @@ export default function HomeScreenV2({
                                 handleQuickJoin(room.id, room.mode)
                               }
                               disabled={Boolean(joiningRoomId) || joining}
+                              loading={joiningRoomId === room.id}
+                              loadingText="Joining..."
                             >
-                              {joiningRoomId === room.id
-                                ? "Joining..."
-                                : "Join Room"}
+                              Join Room
                             </GlowButton>
                           </div>
                         </div>
@@ -641,10 +644,10 @@ export default function HomeScreenV2({
                           Boolean(joiningRoomId) ||
                           joining
                         }
+                        loading={joiningRoomId === eventStatus.roomId}
+                        loadingText="Joining..."
                       >
-                        {joiningRoomId === eventStatus.roomId
-                          ? "Joining..."
-                          : "Join Now"}
+                        Join Now
                       </GlowButton>
                     </div>
                   </motion.div>
@@ -686,9 +689,11 @@ export default function HomeScreenV2({
                   onClick={handleJoinRoom}
                   size="lg"
                   disabled={!roomId || roomId.length !== 6 || joining}
+                  loading={joining}
+                  loadingText="Joining..."
                   className="sm:w-auto"
                 >
-                  {joining ? "Joining..." : "Join Room"}
+                  Join Room
                 </GlowButton>
               </div>
               {message && (

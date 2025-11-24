@@ -1,5 +1,6 @@
 ﻿import { validateWord } from "../../api";
 import { emitAsync } from "../utils.js";
+import { logger } from "../../utils/logger";
 
 export function createActions(socket) {
   const setWordAndStart = async (roomId, word) => {
@@ -35,7 +36,7 @@ export function createActions(socket) {
     });
 
     if (response?.error) {
-      console.warn("[ai-battle makeGuess] error", response.error);
+      logger.warn("[ai-battle makeGuess] error", response.error);
       return { error: response.error };
     }
 

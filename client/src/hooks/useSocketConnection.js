@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { socket } from "../socket";
 import { useErrorNotification } from "../contexts/ErrorNotificationContext";
+import { logger } from "../utils/logger";
 
 const LS_ROOM = "wp.lastRoomId";
 const LS_SOCKET = "wp.lastSocketId";
@@ -8,6 +9,7 @@ const LS_LAST_NAME = "wp.lastName";
 //reset my works
 export function useSocketConnection(room, setScreen) {
   const [connected, setConnected] = useState(socket.connected);
+  const [reconnecting, setReconnecting] = useState(false);
   const [rejoinOffered, setRejoinOffered] = useState(false);
   const { showNotification, dismissNotification } = useErrorNotification();
 
@@ -30,6 +32,7 @@ export function useSocketConnection(room, setScreen) {
   useEffect(() => {
     const onConnect = () => {
       setConnected(true);
+      setReconnecting(false);
       hasConnectedOnceRef.current = true;
 
       if (disconnectNotificationIdRef.current) {
@@ -86,6 +89,7 @@ export function useSocketConnection(room, setScreen) {
       const last = localStorage.getItem(LS_SOCKET);
       if (last) localStorage.setItem(LS_SOCKET + ".old", last);
       setConnected(false);
+      setReconnecting(true);
       hasShownDisconnectRef.current = true;
       if (!disconnectNotificationIdRef.current) {
         disconnectNotificationIdRef.current = showNotification(
@@ -99,7 +103,7 @@ export function useSocketConnection(room, setScreen) {
     };
 
     const onConnectError = (error) => {
-      console.error("Socket connection error:", error);
+      logger.error("Socket connection error:", error);
       showNotification("Connection error - Please check your network", "error");
     };
 
@@ -194,6 +198,7 @@ export function useSocketConnection(room, setScreen) {
 
   return {
     connected,
+    reconnecting,
     canRejoin,
     doRejoin,
     savedRoomId,

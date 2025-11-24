@@ -7,6 +7,7 @@ import GradientBackground from "../components/ui/GradientBackground";
 import GlowButton from "../components/ui/GlowButton";
 import { useIsMobile } from "../hooks/useIsMobile";
 import MobileBoard from "../components/mobile/MobileBoard.jsx";
+import { logger } from "../utils/logger";
 
 export default function SharedDuelGameScreen({
   room,
@@ -16,6 +17,7 @@ export default function SharedDuelGameScreen({
   letterStates,
   onStartShared,
   onRematch,
+  submittingGuess = false,
 }) {
   const opponentEntry = Object.entries(room.players || {}).find(
     ([id]) => id !== me?.id
@@ -119,7 +121,7 @@ export default function SharedDuelGameScreen({
                         setStarting(true);
                         const result = await onStartShared();
                         if (result?.error) {
-                          console.error("Start shared error:", result.error);
+                          logger.error("Start shared error:", result.error);
                         }
                       } finally {
                         setStarting(false);
@@ -192,7 +194,7 @@ export default function SharedDuelGameScreen({
             <Keyboard
               onKeyPress={handleKey}
               letterStates={letterStates}
-              disabled={!myTurn || !canGuess}
+              disabled={!myTurn || !canGuess || submittingGuess}
             />
           </div>
         </div>
@@ -274,7 +276,7 @@ export default function SharedDuelGameScreen({
                           setStarting(true);
                           const result = await onStartShared();
                           if (result?.error) {
-                            console.error("Start shared error:", result.error);
+                            logger.error("Start shared error:", result.error);
                           }
                         } finally {
                           setStarting(false);
@@ -339,7 +341,7 @@ export default function SharedDuelGameScreen({
             <Keyboard
               onKeyPress={handleKey}
               letterStates={letterStates}
-              disabled={!myTurn || !canGuess}
+              disabled={!myTurn || !canGuess || submittingGuess}
             />
           </div>
         </footer>

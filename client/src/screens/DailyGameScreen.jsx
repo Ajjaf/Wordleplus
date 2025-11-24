@@ -4,6 +4,7 @@ import Board from "../components/Board.jsx";
 import Keyboard from "../components/Keyboard.jsx";
 import GameNotification from "../components/GameNotification.jsx";
 import GradientBackground from "../components/ui/GradientBackground";
+import LoadingSpinner, { LoadingOverlay } from "../components/ui/LoadingSpinner";
 import { useIsMobile } from "../hooks/useIsMobile";
 import MobileBoard from "../components/mobile/MobileBoard.jsx";
 
@@ -72,6 +73,9 @@ export default function DailyGameScreen({
 
   return (
     <GradientBackground fullHeight className="flex h-full ">
+      {loading && !challenge && (
+        <LoadingOverlay text="Loading daily challenge..." />
+      )}
       <div className="flex flex-1 flex-col w-full min-h-0 relative overflow-hidden">
         {/* Header */}
         <div

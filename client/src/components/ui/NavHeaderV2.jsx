@@ -7,11 +7,14 @@ import {
   Settings,
   Trophy,
   LogOut,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
 import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import ProfileModal from "../ProfileModal";
 import BrandLogo from "../BrandLogo";
 import { useAuth } from "../../contexts/AuthContext";
+import LoadingSpinner from "./LoadingSpinner";
 
 export default function NavHeaderV2({
   onHomeClick,
@@ -19,6 +22,7 @@ export default function NavHeaderV2({
   modeLabel = null,
   roomId = null,
   profileMenuVariant = "default",
+  reconnecting = false,
 }) {
   const [copied, setCopied] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
@@ -168,6 +172,18 @@ export default function NavHeaderV2({
           )}
 
           <div className="flex items-center gap-2 md:gap-4">
+            {reconnecting && (
+              <motion.div
+                className="flex items-center gap-2 text-xs font-medium text-amber-400 border border-amber-500/30 rounded-full px-3 h-9 bg-amber-500/10 backdrop-blur"
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+              >
+                <LoadingSpinner size="sm" variant="white" />
+                <span className="hidden sm:inline">Reconnecting...</span>
+                <span className="sm:hidden">Reconnecting</span>
+              </motion.div>
+            )}
             {roomId && (
               <div className="flex items-center gap-2 text-xs font-medium text-white/80 border border-white/15 rounded-full pl-3 pr-1 h-9 bg-white/5 backdrop-blur">
                 <span className="font-mono tracking-wider uppercase">{roomId}</span>

@@ -8,6 +8,7 @@ import GameResults from "../components/GameResults.jsx";
 import ParticleEffect from "../components/ParticleEffect.jsx";
 import GradientBackground from "../components/ui/GradientBackground";
 import { useIsMobile } from "../hooks/useIsMobile";
+import { logger } from "../utils/logger";
 import MobilePlayerProgressCard from "../components/mobile/MobilePlayerProgressCard.jsx";
 import MobileBoard from "../components/mobile/MobileBoard.jsx";
 import GlowButton from "../components/ui/GlowButton";
@@ -30,6 +31,7 @@ function BattleGameScreen({
   onClaimHost,
   pendingStart = false,
   onStartAiRound,
+  submittingGuess = false,
 }) {
   const [guessFlipKey, setGuessFlipKey] = useState(0);
 
@@ -152,7 +154,7 @@ function BattleGameScreen({
       setStartingRound(true);
       const result = await onStartAiRound();
       if (result?.error) {
-        console.warn("[ai battle start]", result.error);
+        logger.warn("[ai battle start]", result.error);
         setStartError(result.error || "Unable to start the game");
       } else {
         setStartError("");
@@ -568,7 +570,7 @@ function BattleGameScreen({
           <div className="max-w-5xl mx-auto">
             {
               canGuessBattle ? (
-                <Keyboard onKeyPress={onKeyPress} letterStates={letterStates} />
+                <Keyboard onKeyPress={onKeyPress} letterStates={letterStates} disabled={submittingGuess} />
               ) : (
                 !isMobile &&
                 standbyMessage && (

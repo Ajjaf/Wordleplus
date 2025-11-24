@@ -5,7 +5,7 @@ import { SERVER_URL } from "./config";
 export const socket = io(SERVER_URL, {
   path: "/socket.io",
   transports: ["polling", "websocket"],
-  withCredentials: false,
+  withCredentials: true, // Send cookies (including session cookie) for authentication
   reconnection: true,
   reconnectionDelay: 1000,
   reconnectionAttempts: 10,
