@@ -110,10 +110,11 @@ export function UnifiedPlayerCard({
     return (
       <Card
         className={cn(
-          "border bg-card transition-all duration-200",
-          isActive && "ring-2 ring-primary shadow-lg",
-          onClick || onSelect ? "cursor-pointer hover:shadow-md" : "",
+          "border bg-card/90 backdrop-blur-sm transition-all duration-200",
+          isActive && "ring-2 ring-primary shadow-lg scale-105",
+          onClick || onSelect ? "cursor-pointer hover:shadow-md hover:scale-102" : "",
           sizeConfig.pad,
+          "min-w-[140px]",
           className
         )}
         onClick={onClick || onSelect}
@@ -180,6 +181,22 @@ export function UnifiedPlayerCard({
                 </Badge>
               )}
             </div>
+            {/* Micro progress grid for opponent card on mobile - always show */}
+            {showMicroGrid && (
+              <div className="mt-2 flex justify-center">
+                <MicroProgressGrid
+                  rows={3}
+                  cols={5}
+                  size={8}
+                  gap={1.5}
+                  radius={2}
+                  patterns={guesses && guesses.length > 0 ? guesses.map((g) => g.pattern || []) : null}
+                  fallbackFilled={guesses?.length || 0}
+                  showWrapper={false}
+                  showCellBorder={false}
+                />
+              </div>
+            )}
           </div>
           
           {/* Status dot */}
@@ -389,7 +406,7 @@ export function UnifiedPlayerCard({
           {/* Content */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center flex-wrap gap-2">
-              <h3 className={cn("font-semibold text-foreground truncate", sizeConfig.name)}>
+              <h3 className={cn("font-bold text-foreground truncate", sizeConfig.name, size === "md" && "text-xl")}>
                 {name}
               </h3>
               {/* Active state shown via visual highlighting only - no text badge */}
