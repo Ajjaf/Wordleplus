@@ -1,10 +1,12 @@
-﻿import React, { useEffect, useMemo, useState, useRef } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Trophy, Crown } from "lucide-react";
+import { UnifiedPlayerCard } from "../components/player/UnifiedPlayerCard";
 import SpectateCard from "../components/SpectateCard.jsx";
 import SecretWordInputRow from "../components/SecretWordInputRow.jsx";
 import GradientBackground from "../components/ui/GradientBackground";
 import GlowButton from "../components/ui/GlowButton";
+import Board from "../components/Board";
 
 function HostSpectateScreen({
   room,
@@ -21,12 +23,12 @@ function HostSpectateScreen({
   const [countdownRemaining, setCountdownRemaining] = useState(null);
   const isAiMode = room?.mode === "battle_ai";
 
-  // one-shot "reconnected" badge
   const [showReconnected, setShowReconnected] = useState(() => {
     const s = sessionStorage.getItem("wp.reconnected") === "1";
     const legacy = localStorage.getItem("wp.lastSocketId.wasHost") === "true";
     return s || legacy;
   });
+  
   useEffect(() => {
     if (!showReconnected) return;
     sessionStorage.removeItem("wp.reconnected");
@@ -141,10 +143,9 @@ function HostSpectateScreen({
     return () => clearInterval(interval);
   }, [isAiMode, room?.battle?.countdownEndsAt]);
 
-  // simple leaderboard data (exclude host)
   const leaderboard = useMemo(() => {
     return [...players]
-      .filter((p) => p && p.id && p.id !== room?.hostId) // Exclude host from leaderboard
+      .filter((p) => p && p.id && p.id !== room?.hostId)
       .map((p) => ({
         id: p.id,
         name: p.name || "Player",
@@ -158,7 +159,6 @@ function HostSpectateScreen({
       );
   }, [players, room?.hostId]);
 
-  // ---- UI ----
   return (
     <GradientBackground fullHeight className="flex h-full">
       <div className="flex flex-1 flex-col w-full min-h-0 overflow-hidden relative">
@@ -182,7 +182,6 @@ function HostSpectateScreen({
           </motion.div>
 
           <div className="flex items-center gap-2">
-            {/* Leaderboard button */}
             <GlowButton
               onClick={() => setShowLeaderboard(true)}
               variant="secondary"
@@ -331,7 +330,7 @@ function HostSpectateScreen({
           </section>
         )}
 
-        {/* Leaderboard modal (on demand) */}
+        {/* Leaderboard modal */}
         <AnimatePresence>
           {showLeaderboard && (
             <motion.div
@@ -413,16 +412,4 @@ function HostSpectateScreen({
 }
 
 export default HostSpectateScreen;
-
-
-
-
-
-
-
-
-
-
-
-
 

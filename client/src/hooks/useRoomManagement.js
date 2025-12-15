@@ -1,4 +1,5 @@
 import { socket } from "../socket";
+import { logger } from "../utils/logger";
 
 const LS_LAST_ROOM = "wp.lastRoomId";
 const LS_LAST_NAME = "wp.lastName";
@@ -78,7 +79,7 @@ export function useRoomManagement() {
         socket.emit("leaveRoom", roomId ? { roomId } : {});
       }
     } catch (error) {
-      console.error("[goHome] failed to emit leaveRoom", error);
+      logger.error("[goHome] failed to emit leaveRoom", error);
     }
     if (roomId && !clearRoom) {
       localStorage.setItem(LS_LAST_ROOM, roomId);

@@ -1,5 +1,5 @@
 // components/Keyboard.jsx
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, memo } from "react";
 import { cn } from "../lib/utils";
 
 // Exact palette to match Board.jsx
@@ -12,7 +12,7 @@ const BOARD_COLORS = {
   idleDark: { bg: "#565758", fg: "#fff", border: "#3a3a3c" },
 };
 
-export default function Keyboard({
+function Keyboard({
   onKeyPress,
   letterStates = {}, // { A: 'correct' | 'present' | 'absent' }
   sticky = true,
@@ -200,3 +200,17 @@ export default function Keyboard({
     </div>
   );
 }
+
+// Memoize Keyboard component to prevent unnecessary re-renders
+// Only re-render when onKeyPress, letterStates, disabled, or sticky change
+export default memo(Keyboard, (prevProps, nextProps) => {
+  // Compare letterStates by reference (should be stable from parent)
+  // Compare other primitive props
+  return (
+    prevProps.onKeyPress === nextProps.onKeyPress &&
+    prevProps.letterStates === nextProps.letterStates &&
+    prevProps.disabled === nextProps.disabled &&
+    prevProps.sticky === nextProps.sticky &&
+    prevProps.className === nextProps.className
+  );
+});

@@ -172,43 +172,16 @@ model DailyResult {
 
 ## Step 1: Anonymous User Tracking
 
-### Frontend: Generate and Store User ID
-
-```javascript
-// client/src/hooks/useAnonymousUser.js
-import { v4 as uuidv4 } from 'uuid';
-
-const STORAGE_KEY = 'wp.userId';
-
-export function getOrCreateUserId() {
-  // Check if user already has an ID
-  let userId = localStorage.getItem(STORAGE_KEY);
-  
-  if (!userId) {
-    // Generate a new UUID for this anonymous user
-    userId = uuidv4();
-    localStorage.setItem(STORAGE_KEY, userId);
-  }
-  
-  return userId;
-}
-```
-
-### Frontend: Send User ID with Every Request
+### Frontend: Always Send the Session Cookie
 
 ```javascript
 // client/src/api.js
-import { getOrCreateUserId } from './hooks/useAnonymousUser';
-
 export async function apiCall(endpoint, options = {}) {
-  const userId = getOrCreateUserId();
-  
   const response = await fetch(endpoint, {
     ...options,
-    credentials: 'include', // Include cookies
+    credentials: 'include', // Required so express-session cookies are included
     headers: {
       ...options.headers,
-      'X-User-Id': userId, // Custom header with user ID
     },
   });
   
@@ -217,9 +190,9 @@ export async function apiCall(endpoint, options = {}) {
 ```
 
 **Why This Works**:
-- UUID is generated client-side (no server round-trip needed)
-- Stored in localStorage (persists across sessions)
-- Sent via custom header (works even in iframe environments where cookies might fail)
+- Anonymous IDs are now minted server-side and stored in the session store.
+- Keeping identifiers server-side prevents tampering via dev tools.
+- The browser automatically carries the `connect.sid` cookie when `credentials: "include"` is set.
 
 ### Backend: Create or Retrieve Anonymous User
 
@@ -275,22 +248,13 @@ export function getUserIdFromRequest(req) {
     return req.session.anonymousUserId;
   }
   
-  // 3. Custom header (for iframe environments)
-  const headerUserId = req.headers['x-user-id'];
-  if (headerUserId) {
-    return headerUserId;
-  }
-  
-  // 4. Cookie fallback
-  return req.cookies?.dailyUserId || null;
+  return null;
 }
 ```
 
 **The Priority Ladder**:
 1. Authenticated user takes precedence (they signed in)
 2. Session ID from server-side session storage
-3. Header ID from client (works in iframes)
-4. Cookie as final fallback
 
 ---
 
@@ -846,11 +810,11 @@ if (existingResult.completed && result.completed) {
 ```
 User visits app
     ↓
-Generate UUID in browser → Store in localStorage
+Browser loads frontend
     ↓
-Send UUID to server via X-User-Id header
+`fetch` requests include `credentials: "include"`
     ↓
-Server creates User record (isAnonymous: true)
+Server creates User record (isAnonymous: true) + stores ID in session
     ↓
 User plays, data saved to database
     ↓

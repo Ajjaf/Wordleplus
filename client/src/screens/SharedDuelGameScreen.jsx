@@ -1,12 +1,15 @@
 import React, { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import Board from "../components/Board.jsx";
-import Keyboard from "../components/Keyboard.jsx";
-import PlayerCard from "../components/PlayerCard.jsx";
-import GradientBackground from "../components/ui/GradientBackground";
-import GlowButton from "../components/ui/GlowButton";
 import { useIsMobile } from "../hooks/useIsMobile";
-import MobileBoard from "../components/mobile/MobileBoard.jsx";
+import { GameLayout } from "../components/layout/GameLayout";
+import { UnifiedPlayerCard } from "../components/player/UnifiedPlayerCard";
+import { GameStatusBar } from "../components/features/GameStatusBar";
+import { IconStatusBadge } from "../components/ui/IconStatusBadge";
+import Board from "../components/Board";
+import MobileBoard from "../components/mobile/MobileBoard";
+import GlowButton from "../components/ui/GlowButton";
+import { logger } from "../utils/logger";
+import { getModeTheme } from "../config/mode-themes";
 
 export default function SharedDuelGameScreen({
   room,
@@ -16,7 +19,12 @@ export default function SharedDuelGameScreen({
   letterStates,
   onStartShared,
   onRematch,
+  submittingGuess = false,
 }) {
+  const mode = "shared";
+  const theme = getModeTheme(mode);
+  const isMobile = useIsMobile();
+  
   const opponentEntry = Object.entries(room.players || {}).find(
     ([id]) => id !== me?.id
   );
@@ -49,7 +57,6 @@ export default function SharedDuelGameScreen({
     if (!myTurn) return;
     onKeyPress(k);
   };
-  const isMobile = useIsMobile();
 
   // Get game status text
   const sharedGuesses = room.shared?.guesses || [];
@@ -74,276 +81,253 @@ export default function SharedDuelGameScreen({
     if (!room.shared?.started) {
       if (playerCount < 2) {
         return isHost
-          ? "Waiting for opponent to join..."
-          : "Waiting for host to start...";
+          ? "Waiting for player"
+          : "Waiting for host";
       }
       return isHost
-        ? "Click 'Start Round' to begin"
-        : "Waiting for host to start...";
+        ? null // Host sees button, no status needed
+        : "Waiting for host";
     }
-    if (myTurn) return "Your turn - make a guess!";
-    return `${opponent?.name}'s turn`;
+    // Turn indicators removed - handled visually via player card highlighting
+    return null;
   };
 
-  if (isMobile) {
-    return (
-      <GradientBackground fullHeight className="flex h-full">
-        <div className="flex flex-1 flex-col w-full min-h-0 px-3 pt-5 pb-1 gap-4">
-          <div className="rounded-3xl border border-white/15 bg-white/10 backdrop-blur-sm p-4 text-white space-y-3">
-            <div className="flex items-center justify-between text-sm text-white/80">
-              <span className="font-semibold truncate">
-                {me?.name || "You"}
-              </span>
-              <span className="text-[10px] uppercase tracking-[0.3em] text-white/50">
-                Shared Duel
-              </span>
-              <span className="font-semibold truncate text-right">
-                {opponent?.name || "Opponent"}
-              </span>
-            </div>
+  // Prepare players array
+  const players = [
+    {
+      id: me?.id,
+      name: me?.name || "You",
+      wins: me?.wins,
+      streak: me?.streak,
+      highlight: myTurn ? "active" : "none",
+      variant: isMobile ? "compact" : "detailed",
+      size: isMobile ? "sm" : "md",
+      theme,
+    },
+    {
+      id: opponent?.id,
+      name: opponent?.name || "Opponent",
+      wins: opponent?.wins,
+      streak: opponent?.streak,
+      highlight: !myTurn && canGuess ? "active" : "none",
+      variant: isMobile ? "compact" : "detailed",
+      size: isMobile ? "sm" : "md",
+      theme,
+    },
+  ];
 
-            {/* <div className="text-xs uppercase tracking-[0.35em] text-white/40">
-              Status
-            </div>
-            <div className="text-sm font-medium text-white/90">
-              {getGameStatus()}
-            </div> */}
-
-            {!room.shared?.started ? (
-              isHost ? (
-                <div className="space-y-2">
-                  <GlowButton
-                    onClick={async () => {
-                      if (starting || !canStart) return;
-                      try {
-                        setStarting(true);
-                        const result = await onStartShared();
-                        if (result?.error) {
-                          console.error("Start shared error:", result.error);
-                        }
-                      } finally {
-                        setStarting(false);
-                      }
-                    }}
-                    disabled={starting || !canStart}
-                    size="lg"
-                    className="w-full"
-                  >
-                    {starting ? "Starting..." : "Start Shared Round"}
-                  </GlowButton>
-                  {playerCount < 2 && (
-                    <div className="text-xs text-white/60 text-center">
-                      Waiting for another player to join…
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="text-xs text-white/60">
-                  Waiting for host to start…
-                </div>
-              )
-            ) : room.shared?.winner ? (
-              <div className="space-y-2 text-center">
-                <div className="text-sm text-white/80">
-                  {room.shared.winner === "draw"
-                    ? "The round ended in a draw."
-                    : room.shared.winner === me?.id
-                    ? "You won the round!"
-                    : `${
-                        room.players?.[room.shared.winner]?.name || "Opponent"
-                      } won the round.`}
-                </div>
-                <GlowButton onClick={onRematch} size="lg" className="w-full">
-                  Play Again
-                </GlowButton>
-              </div>
-            ) : (
-              <div className="text-xs text-white/60">
-                {myTurn
-                  ? "Your turn — make a guess!"
-                  : `${opponent?.name || "Opponent"} is guessing…`}
-              </div>
-            )}
-          </div>
-
-          <MobileBoard
-            guesses={room.shared?.guesses || []}
-            activeGuess={activeGuessForBoard}
-            isOwnBoard={true}
-            secretWord={
-              !room.shared?.started && room.shared?.lastRevealedWord
-                ? room.shared.lastRevealedWord
-                : null
-            }
-            secretWordState={
-              !room.shared?.started && room.shared?.lastRevealedWord
-                ? "set"
-                : "empty"
-            }
-            maxTile={88}
-            minTile={48}
-            players={room?.players || {}}
-            currentPlayerId={me?.id}
-            guessFlipKey={guessFlipKey}
-            reservedBottom={360}
-          />
-
-          <div className="px-1 pb-[env(safe-area-inset-bottom,0px)]">
-            <Keyboard
-              onKeyPress={handleKey}
-              letterStates={letterStates}
-              disabled={!myTurn || !canGuess}
-            />
+  // Custom render for player section with animations
+  const renderPlayerSection = () => {
+    if (isMobile) {
+      return (
+        <div className="rounded-3xl border border-white/15 bg-white/10 backdrop-blur-sm p-4 text-white space-y-3 flex-shrink-0">
+          <div className="flex items-center justify-between text-sm text-white/80">
+            <span className="font-semibold truncate">{me?.name || "You"}</span>
+            <span className="text-[10px] uppercase tracking-[0.3em] text-white/50">
+              Shared Duel
+            </span>
+            <span className="font-semibold truncate text-right">
+              {opponent?.name || "Opponent"}
+            </span>
           </div>
         </div>
-      </GradientBackground>
+      );
+    }
+    
+    return (
+      <div className="flex flex-col md:flex-row gap-3 md:gap-4 flex-shrink-0">
+        <motion.div
+          className="flex-1"
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.3 }}
+        >
+          <UnifiedPlayerCard {...players[0]} />
+        </motion.div>
+        <motion.div
+          className="flex-1"
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.3 }}
+        >
+          <UnifiedPlayerCard {...players[1]} />
+        </motion.div>
+      </div>
     );
+  };
+
+  // Custom board render with game controls
+  const renderBoard = () => {
+    return (
+      <div className="flex flex-col items-center flex-1 min-h-0">
+        {/* Shared board */}
+        <div className="flex-1 flex items-center justify-center min-h-0 w-full">
+          <div className="w-full max-w-[min(99.8vw,1200px)] max-h-[calc(100dvh-260px)] flex items-center justify-center">
+            {isMobile ? (
+              <MobileBoard
+                guesses={room.shared?.guesses || []}
+                activeGuess={activeGuessForBoard}
+                isOwnBoard={true}
+                secretWord={
+                  !room.shared?.started && room.shared?.lastRevealedWord
+                    ? room.shared.lastRevealedWord
+                    : null
+                }
+                secretWordState={
+                  !room.shared?.started && room.shared?.lastRevealedWord
+                    ? "set"
+                    : "empty"
+                }
+                maxTile={80}
+                minTile={44}
+                gap={6}
+                padding={10}
+                players={room?.players || {}}
+                currentPlayerId={me?.id}
+                guessFlipKey={guessFlipKey}
+                reservedBottom={360}
+              />
+            ) : (
+              <Board
+                guesses={room.shared?.guesses || []}
+                activeGuess={activeGuessForBoard}
+                isOwnBoard={true}
+                secretWord={
+                  !room.shared?.started && room.shared?.lastRevealedWord
+                    ? room.shared.lastRevealedWord
+                    : null
+                }
+                secretWordState={
+                  !room.shared?.started && room.shared?.lastRevealedWord
+                    ? "set"
+                    : "empty"
+                }
+                maxTile={112}
+                minTile={56}
+                gap={10}
+                padding={12}
+                players={room?.players || {}}
+                currentPlayerId={me?.id}
+                guessFlipKey={guessFlipKey}
+              />
+            )}
+          </div>
+        </div>
+
+        {/* Game controls */}
+        <div className="mt-2 flex justify-center flex-shrink-0">
+          {!room.shared?.started ? (
+            isHost ? (
+              <div className="text-center">
+                <GlowButton
+                  onClick={async () => {
+                    if (starting || !canStart) return;
+                    try {
+                      setStarting(true);
+                      const result = await onStartShared();
+                      if (result?.error) {
+                        logger.error("Start shared error:", result.error);
+                      }
+                    } finally {
+                      setStarting(false);
+                    }
+                  }}
+                  disabled={starting || !canStart}
+                  size="lg"
+                >
+                  {starting ? "Starting..." : "Start Shared Round"}
+                </GlowButton>
+                {playerCount < 2 && (
+                  <motion.div
+                    className="flex items-center gap-2 mt-3"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <IconStatusBadge type="waitingForPlayer" size="sm" animated={true} />
+                    <span className="text-xs text-white/60">Waiting for opponent</span>
+                  </motion.div>
+                )}
+              </div>
+            ) : (
+              <div className="text-center flex flex-col items-center gap-2">
+                <div className="flex items-center gap-2">
+                  <IconStatusBadge type="waiting" size="md" animated={true} />
+                  <span className="text-sm text-white/60">Waiting for host</span>
+                </div>
+              </div>
+            )
+          ) : room.shared?.winner ? (
+            <div className="text-center">
+              <GlowButton onClick={onRematch} size="lg">
+                Play Again
+              </GlowButton>
+            </div>
+          ) : (
+            // Turn state shown visually via player card highlighting - no text needed
+            null
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // Status badges
+  const statusBadges = [];
+  if (room.shared?.winner) {
+    if (room.shared.winner === "draw") {
+      statusBadges.push({
+        variant: "info",
+        label: "Draw",
+        value: null,
+      });
+    } else {
+      const winner = room.players?.[room.shared.winner];
+      statusBadges.push({
+        variant: "success",
+        label: "Winner",
+        value: winner?.id === me?.id ? "You" : winner?.name || "Opponent",
+      });
+    }
   }
 
   return (
-    <GradientBackground fullHeight className="flex h-full">
-      <div className="flex flex-1 flex-col w-full min-h-0 relative overflow-hidden">
-        <main className="flex-1 px-3 md:px-4 pt-4 pb-3 min-h-0">
-          <div className="max-w-4xl mx-auto h-full flex flex-col gap-4">
-            {/* Player cards */}
-            <div className="flex flex-col md:flex-row gap-3 md:gap-4">
-              <motion.div
-                className="flex-1"
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.3 }}
-              >
-                <PlayerCard
-                  name={me?.name || "You"}
-                  wins={me?.wins}
-                  streak={me?.streak}
-                  highlight={myTurn ? "active" : "none"}
-                />
-              </motion.div>
-              <motion.div
-                className="flex-1"
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.3 }}
-              >
-                <PlayerCard
-                  name={opponent?.name || "Opponent"}
-                  wins={opponent?.wins}
-                  streak={opponent?.streak}
-                  highlight={!myTurn && canGuess ? "active" : "none"}
-                />
-              </motion.div>
-            </div>
-
-            {/* Shared board */}
-            <div className="flex-1 flex items-center justify-center min-h-0">
-              <div className="w-full max-w-[min(99.8vw,1200px)] max-h-[calc(100dvh-260px)] flex items-center justify-center">
-                <Board
-                  guesses={room.shared?.guesses || []}
-                  activeGuess={activeGuessForBoard}
-                  isOwnBoard={true}
-                  // only reveal secret when round has ended
-                  secretWord={
-                    !room.shared?.started && room.shared?.lastRevealedWord
-                      ? room.shared.lastRevealedWord
-                      : null
-                  }
-                  secretWordState={
-                    !room.shared?.started && room.shared?.lastRevealedWord
-                      ? "set"
-                      : "empty"
-                  }
-                  maxTile={140}
-                  minTile={50}
-                  players={room?.players || {}}
-                  currentPlayerId={me?.id}
-                  guessFlipKey={guessFlipKey}
-                />
-              </div>
-            </div>
-
-            {/* Game controls */}
-            <div className="mt-2 flex justify-center">
-              {!room.shared?.started ? (
-                isHost ? (
-                  <div className="text-center">
-                    <GlowButton
-                      onClick={async () => {
-                        if (starting || !canStart) return;
-                        try {
-                          setStarting(true);
-                          const result = await onStartShared();
-                          if (result?.error) {
-                            console.error("Start shared error:", result.error);
-                          }
-                        } finally {
-                          setStarting(false);
-                        }
-                      }}
-                      disabled={starting || !canStart}
-                      size="lg"
-                    >
-                      {starting ? "Starting..." : "Start Shared Round"}
-                    </GlowButton>
-                    {playerCount < 2 && (
-                      <motion.div
-                        className="text-sm text-amber-300 mt-3"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ duration: 0.2 }}
-                      >
-                        ⚠️ Waiting for opponent to join...
-                      </motion.div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="text-center">
-                    <div className="text-lg font-medium text-white mb-2">
-                      Waiting for host to start...
-                    </div>
-                    <div className="text-sm text-white/60">
-                      Both players will compete to solve the same puzzle!
-                    </div>
-                  </div>
-                )
-              ) : room.shared?.winner ? (
-                <div className="text-center">
-                  <GlowButton onClick={onRematch} size="lg">
-                    Play Again
-                  </GlowButton>
-                </div>
-              ) : (
-                <div className="text-center">
-                  <motion.div
-                    className={`text-sm font-medium mb-2 ${
-                      myTurn ? "text-emerald-300" : "text-white/70"
-                    }`}
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    {myTurn ? "It's your turn!" : "Waiting for opponent..."}
-                  </motion.div>
-                  <div className="text-xs text-white/50">
-                    Take turns guessing the same word
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </main>
-
-        {/* Keyboard */}
-        <footer className="w-full px-2 sm:px-4 pb-2 flex-shrink-0">
-          <div className="max-w-[min(99.8vw,1200px)] mx-auto">
-            <Keyboard
-              onKeyPress={handleKey}
-              letterStates={letterStates}
-              disabled={!myTurn || !canGuess}
-            />
-          </div>
-        </footer>
-      </div>
-    </GradientBackground>
+    <GameLayout
+      mode={mode}
+      headerTitle={isMobile ? "Shared Duel" : null}
+      statusMessage={getGameStatus()}
+      statusBadges={statusBadges}
+      players={players}
+      playerLayout="flex-col md:flex-row"
+      showPlayerSection={!isMobile}
+      guesses={room.shared?.guesses || []}
+      activeGuess={activeGuessForBoard}
+      secretWord={
+        !room.shared?.started && room.shared?.lastRevealedWord
+          ? room.shared.lastRevealedWord
+          : null
+      }
+      secretWordState={
+        !room.shared?.started && room.shared?.lastRevealedWord
+          ? "set"
+          : "empty"
+      }
+      boardProps={{
+        isOwnBoard: true,
+        maxTile: isMobile ? 80 : 112,
+        minTile: isMobile ? 44 : 56,
+        gap: isMobile ? 6 : 10,
+        padding: isMobile ? 10 : 12,
+        players: room?.players || {},
+        currentPlayerId: me?.id,
+        guessFlipKey,
+      }}
+      letterStates={letterStates}
+      onKeyPress={handleKey}
+      keyboardDisabled={(!myTurn || !canGuess) && room.shared?.started || submittingGuess}
+      showKeyboard={true}
+      renderPlayerSection={renderPlayerSection}
+      renderBoard={renderBoard}
+    />
   );
 }

@@ -1,5 +1,6 @@
 import { validateWord } from "../../api";
 import { emitAsync } from "../utils.js";
+import { logger } from "../../utils/logger";
 
 export function createActions(socket) {
   const submitSecret = async (roomId, secret) => {
@@ -24,7 +25,7 @@ export function createActions(socket) {
     });
 
     if (response?.error) {
-      console.warn("[duel makeGuess] error", response.error);
+      logger.warn("[duel makeGuess] error", response.error);
       return { error: response.error };
     }
 

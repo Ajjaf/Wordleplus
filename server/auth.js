@@ -12,6 +12,9 @@ import {
 
 const prisma = new PrismaClient();
 
+// Store session store reference for socket authentication
+let sessionStoreRef = null;
+
 if (!process.env.REPLIT_DOMAINS) {
   console.warn("REPLIT_DOMAINS not set - auth may not work in deployment");
 }
@@ -40,9 +43,25 @@ export function getSession() {
     ttl: sessionTtl,
     tableName: "user_sessions", // Different from our Session model to avoid conflicts
   });
+  
+  // Store reference for socket authentication
+  sessionStoreRef = sessionStore;
+
+  const sessionSecret = process.env.SESSION_SECRET;
+  if (!sessionSecret) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        "SESSION_SECRET must be set in production. Refusing to start with an insecure default."
+      );
+    } else {
+      console.warn(
+        "[session] SESSION_SECRET not set. Falling back to insecure development secret."
+      );
+    }
+  }
 
   return session({
-    secret: process.env.SESSION_SECRET || "dev-secret-change-in-production",
+    secret: sessionSecret || "dev-secret-change-in-production",
     store: sessionStore,
     resave: false,
     saveUninitialized: false,
@@ -310,13 +329,95 @@ export function getUserIdFromRequest(req) {
   if (req.session?.anonymousUserId) {
     return req.session.anonymousUserId;
   }
+  return null;
+}
 
-  // Fallback to header (for iframe environments)
-  const headerUserId = req.headers["x-user-id"];
-  if (headerUserId) {
-    return headerUserId;
+// Get session store for socket authentication
+export function getSessionStore() {
+  return sessionStoreRef;
+}
+
+// Socket authentication - verify session from socket handshake
+export function authenticateSocket(socket, next) {
+  try {
+    const sessionStore = sessionStoreRef;
+    if (!sessionStore) {
+      // No session store available - allow anonymous connection
+      socket.userId = null;
+      socket.isAuthenticated = false;
+      return next();
+    }
+
+    const req = socket.request;
+    const cookies = req.headers.cookie;
+
+    if (!cookies) {
+      // No cookies - allow anonymous connection
+      socket.userId = null;
+      socket.isAuthenticated = false;
+      return next();
+    }
+
+    // Extract session ID from cookie
+    const sessionCookie = cookies
+      .split(";")
+      .find((c) => c.trim().startsWith("connect.sid="));
+
+    if (!sessionCookie) {
+      // No session cookie - allow anonymous connection
+      socket.userId = null;
+      socket.isAuthenticated = false;
+      return next();
+    }
+
+    // Parse session ID (format: connect.sid=s%3A<sessionId>.<signature>)
+    // Also handle unencoded format: connect.sid=<sessionId>.<signature>
+    let sessionId = null;
+    const encodedMatch = sessionCookie.match(/connect\.sid=s%3A([^.]+)/);
+    const unencodedMatch = sessionCookie.match(/connect\.sid=([^.]+)/);
+    
+    if (encodedMatch) {
+      sessionId = encodedMatch[1];
+    } else if (unencodedMatch) {
+      sessionId = unencodedMatch[1];
+    }
+
+    if (!sessionId) {
+      socket.userId = null;
+      socket.isAuthenticated = false;
+      return next();
+    }
+
+    // Get session from store
+    sessionStore.get(sessionId, async (err, sessionData) => {
+      if (err || !sessionData) {
+        // Invalid session - allow anonymous connection
+        socket.userId = null;
+        socket.isAuthenticated = false;
+        return next();
+      }
+
+      // Check for authenticated user (Passport stores user in session.passport.user)
+      if (sessionData.passport?.user?.dbUserId) {
+        socket.userId = sessionData.passport.user.dbUserId;
+        socket.isAuthenticated = true;
+        socket.user = sessionData.passport.user;
+      } else if (sessionData.anonymousUserId) {
+        // Anonymous user
+        socket.userId = sessionData.anonymousUserId;
+        socket.isAuthenticated = false;
+      } else {
+        // No user in session
+        socket.userId = null;
+        socket.isAuthenticated = false;
+      }
+
+      return next();
+    });
+  } catch (error) {
+    // On error, allow anonymous connection (fail open for better UX)
+    socket.userId = null;
+    socket.isAuthenticated = false;
+    return next();
   }
-
-  // Fallback to cookie
-  return req.cookies?.dailyUserId || null;
 }

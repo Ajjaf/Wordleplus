@@ -1,4 +1,4 @@
-import React from "react";
+import React, { memo } from "react";
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
  * Rich player summary card used across duel/shared/battle views.
  * Supports optional state chips, host flag, and winner/active accents.
  */
-export default function PlayerCard({
+function PlayerCard({
   name = "Player",
   wins = 0,
   streak = 0,
@@ -143,3 +143,6 @@ export default function PlayerCard({
     </Card>
   );
 }
+
+// Memoize PlayerCard component to prevent unnecessary re-renders
+export default memo(PlayerCard);

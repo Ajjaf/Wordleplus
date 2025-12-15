@@ -7,6 +7,7 @@ import React, {
   useRef,
 } from "react";
 import { buildApiUrl } from "../config";
+import { logger } from "../utils/logger";
 
 const AuthContext = createContext(null);
 
@@ -32,7 +33,7 @@ export function AuthProvider({ children }) {
         setUser(null);
       }
     } catch (error) {
-      console.error("Failed to load user:", error);
+      logger.error("Failed to load user:", error);
       setUser(null);
     } finally {
       setIsLoading(false);

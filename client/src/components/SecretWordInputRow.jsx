@@ -1,5 +1,7 @@
 import React, { useRef, useState, useEffect } from "react";
 import { validateWord, getRandomWord } from "../api";
+import { useIsMobile } from "../hooks/useIsMobile";
+import Keyboard from "./Keyboard";
 
 export default function SecretWordInputRow({
   onSubmit, // (word) => Promise|void
@@ -16,6 +18,7 @@ export default function SecretWordInputRow({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const inputRef = useRef(null);
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -46,6 +49,25 @@ export default function SecretWordInputRow({
       e.preventDefault();
       setError("");
       setValue((s) => (s.length < 5 ? s + k.toUpperCase() : s));
+    }
+  };
+
+  // Handle keyboard input from virtual keyboard
+  const handleKeyPress = (key) => {
+    if (disabled || busy) return;
+
+    if (key === "ENTER") {
+      submit();
+      return;
+    }
+    if (key === "BACKSPACE") {
+      setError("");
+      setValue((s) => s.slice(0, -1));
+      return;
+    }
+    if (/^[A-Z]$/.test(key)) {
+      setError("");
+      setValue((s) => (s.length < 5 ? s + key : s));
     }
   };
 
@@ -216,6 +238,17 @@ export default function SecretWordInputRow({
           </span>
         )}
       </div>
+
+      {/* Mobile keyboard */}
+      {isMobile && !disabled && (
+        <div className="mt-4 w-full max-w-5xl mx-auto">
+          <Keyboard
+            onKeyPress={handleKeyPress}
+            letterStates={{}}
+            disabled={busy}
+          />
+        </div>
+      )}
     </div>
   );
 }

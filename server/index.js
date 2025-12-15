@@ -14,11 +14,17 @@ import {
   getTodaysPuzzle,
   getUserDailyResult,
   createOrUpdateDailyResult,
-  getUserDailyStats
+  getUserDailyStats,
 } from "./daily-db.js";
-import { setupAuth, getUserIdFromRequest } from "./auth.js";
+import { setupAuth, getUserIdFromRequest, authenticateSocket } from "./auth.js";
 import { getFullUserProfile } from "./mergeService.js";
 import createAdminEventsRouter from "./admin/events.js";
+import {
+  sanitizePlayerName,
+  sanitizeRoomId,
+  sanitizeWord,
+  isSafeInput,
+} from "./utils/sanitize.js";
 
 // ---------- Word list loader (.txt) ----------
 const __filename = fileURLToPath(import.meta.url);
@@ -77,6 +83,21 @@ function loadWords() {
 }
 loadWords();
 
+async function ensureAnonymousSession(req, userId) {
+  if (!req || !req.session || !userId) return;
+  if (req.session.anonymousUserId === userId) return;
+  req.session.anonymousUserId = userId;
+  if (typeof req.session.save !== "function") return;
+  await new Promise((resolve) => {
+    req.session.save((err) => {
+      if (err) {
+        console.warn("[session] Failed to persist anonymous user id", err);
+      }
+      resolve();
+    });
+  });
+}
+
 // Helper to pick N random words from WORDS
 function pickRandomWords(n) {
   const out = [];
@@ -133,8 +154,7 @@ const allowedOrigins = (() => {
     origins.add(baseOrigin);
   }
 
-  const extraOrigins =
-    process.env.CORS_ALLOWED_ORIGINS?.split(",") ?? [];
+  const extraOrigins = process.env.CORS_ALLOWED_ORIGINS?.split(",") ?? [];
   for (const origin of extraOrigins) {
     const normalized = normalizeOrigin(origin.trim());
     if (normalized) {
@@ -195,7 +215,7 @@ const evaluateCorsOrigin = (origin, cb) => {
 const corsOptions = {
   origin: evaluateCorsOrigin,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "X-User-Id", "Authorization"],
+  allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true,
 };
 app.use(cors(corsOptions));
@@ -204,8 +224,7 @@ app.use(express.json());
 app.use(cookieParser());
 
 const shouldSetupAuth =
-  process.env.NODE_ENV !== "test" &&
-  process.env.SKIP_AUTH_SETUP !== "true";
+  process.env.NODE_ENV !== "test" && process.env.SKIP_AUTH_SETUP !== "true";
 
 if (shouldSetupAuth) {
   await setupAuth(app);
@@ -219,10 +238,10 @@ if (process.env.NODE_ENV === "production") {
   // In development, show helpful page with link to frontend
   app.get("/", (_req, res) => {
     const replitDomain = process.env.REPLIT_DEV_DOMAIN;
-    const frontendUrl = replitDomain 
+    const frontendUrl = replitDomain
       ? `https://5000--${replitDomain}`
       : "http://localhost:5000";
-    
+
     res.send(`
       <!DOCTYPE html>
       <html>
@@ -264,7 +283,7 @@ app.get("/api/validate", (req, res) => {
 app.get("/api/auth/user", async (req, res) => {
   try {
     let userId = getUserIdFromRequest(req);
-    
+
     // If no user session exists, create an anonymous one
     if (!userId) {
       const user = await getOrCreateAnonymousUser(null);
@@ -273,14 +292,14 @@ app.get("/api/auth/user", async (req, res) => {
       req.session.anonymousUserId = userId;
       await req.session.save();
     }
-    
+
     // Get full user profile
     const profile = await getFullUserProfile(userId);
-    
+
     if (!profile) {
       return res.status(404).json({ message: "User not found" });
     }
-    
+
     res.json(profile);
   } catch (error) {
     console.error("Error fetching user:", error);
@@ -292,17 +311,17 @@ app.get("/api/auth/user", async (req, res) => {
 app.get("/api/auth/stats", async (req, res) => {
   try {
     const userId = getUserIdFromRequest(req);
-    
+
     if (!userId) {
       return res.status(401).json({ message: "No user session" });
     }
-    
+
     const profile = await getFullUserProfile(userId);
-    
+
     if (!profile) {
       return res.status(404).json({ message: "User not found" });
     }
-    
+
     res.json(profile.stats);
   } catch (error) {
     console.error("Error fetching stats:", error);
@@ -343,21 +362,22 @@ const DAILY_WORD_LENGTH = 5;
 app.get("/api/daily", async (req, res) => {
   try {
     let userId = getUserIdFromRequest(req);
-    
+
     // If no userId from client, create one
     if (!userId) {
       const user = await getOrCreateAnonymousUser(null);
       userId = user.id;
     }
-    
+    await ensureAnonymousSession(req, userId);
+
     const puzzle = await getTodaysPuzzle();
     const existingResult = await getUserDailyResult(userId, puzzle.id);
-    
+
     const guesses = existingResult?.guesses || [];
     const patterns = existingResult?.patterns || [];
     const gameOver = existingResult?.completed || false;
     const won = existingResult?.won || false;
-    
+
     const responseData = {
       title: "Daily Challenge",
       subtitle: `Challenge for ${puzzle.date}`,
@@ -371,7 +391,13 @@ app.get("/api/daily", async (req, res) => {
       word: gameOver ? puzzle.word : undefined,
       userId, // Send back the userId for client to store
     };
-    console.log("[GET /api/daily] Response:", { userId, gameOver, won, word: responseData.word, guessCount: guesses.length });
+    console.log("[GET /api/daily] Response:", {
+      userId,
+      gameOver,
+      won,
+      word: responseData.word,
+      guessCount: guesses.length,
+    });
     res.json(responseData);
   } catch (error) {
     console.error("Error in GET /api/daily:", error);
@@ -382,38 +408,39 @@ app.get("/api/daily", async (req, res) => {
 // POST /api/daily/guess - Submit a guess
 app.post("/api/daily/guess", async (req, res) => {
   try {
-    const cookieUserId = getUserIdFromRequest(req);
+    const existingUserId = getUserIdFromRequest(req);
     const { guess } = req.body;
-    
-    if (!guess || typeof guess !== 'string') {
+
+    if (!guess || typeof guess !== "string") {
       return res.status(400).json({ error: "Invalid guess" });
     }
-    
+
     const guessUpper = guess.toUpperCase();
-    
+
     if (!isValidWordLocal(guessUpper)) {
       return res.status(400).json({ error: "Not a valid word" });
     }
-    
+
     // Always create or get user record to ensure userId exists in database
-    const user = await getOrCreateAnonymousUser(cookieUserId);
+    const user = await getOrCreateAnonymousUser(existingUserId);
     const userId = user.id;
-    
+    await ensureAnonymousSession(req, userId);
+
     const puzzle = await getTodaysPuzzle();
     const existingResult = await getUserDailyResult(userId, puzzle.id);
-    
+
     const guesses = existingResult?.guesses || [];
     const patterns = existingResult?.patterns || [];
     const gameOver = existingResult?.completed || false;
-    
+
     console.log("[Daily Guess - Load Existing]", {
       userId,
       puzzleId: puzzle.id,
       hasExistingResult: !!existingResult,
       existingGuessCount: guesses.length,
-      existingGuesses: guesses
+      existingGuesses: guesses,
     });
-    
+
     if (gameOver) {
       return res.json({
         error: "Challenge already completed",
@@ -421,60 +448,66 @@ app.post("/api/daily/guess", async (req, res) => {
         won: existingResult.won,
       });
     }
-    
+
     if (guesses.includes(guessUpper)) {
       return res.status(400).json({ error: "Already guessed that word" });
     }
-    
+
     if (guesses.length >= MAX_DAILY_GUESSES) {
       return res.status(400).json({ error: "No more guesses left" });
     }
-    
+
     const pattern = scoreGuess(puzzle.word, guessUpper);
-    
+
     const newGuesses = [...guesses, guessUpper];
     const newPatterns = [...patterns, pattern];
-    
-    const won = pattern.every(state => state === 'green' || state === 'correct');
+
+    const won = pattern.every(
+      (state) => state === "green" || state === "correct"
+    );
     const outOfGuesses = newGuesses.length >= MAX_DAILY_GUESSES;
     const completed = won || outOfGuesses;
-    
+
     console.log("[Daily Guess Logic]", {
       guessCount: newGuesses.length,
       maxGuesses: MAX_DAILY_GUESSES,
       outOfGuesses,
       won,
       completed,
-      puzzleWord: puzzle.word
+      puzzleWord: puzzle.word,
     });
-    
+
     const savedResult = await createOrUpdateDailyResult(userId, puzzle.id, {
       guesses: newGuesses,
       patterns: newPatterns,
       won,
-      completed
+      completed,
     });
-    
+
     console.log("[Daily Result Saved]", {
       userId,
       puzzleId: puzzle.id,
       savedGuessCount: savedResult.guesses.length,
-      savedGuesses: savedResult.guesses
+      savedGuesses: savedResult.guesses,
     });
-    
+
     const guessResponse = {
       pattern,
       correct: won,
       gameOver: completed,
       won,
       word: completed ? puzzle.word : undefined,
-      message: won 
-        ? "🎉 Congratulations! You solved today's puzzle!" 
-        : outOfGuesses 
-        ? `Game over! The word was ${puzzle.word}` 
+      message: won
+        ? "🎉 Congratulations! You solved today's puzzle!"
+        : outOfGuesses
+        ? `Game over! The word was ${puzzle.word}`
         : "",
     };
-    console.log("[POST /api/daily/guess] Response:", { completed, won, word: guessResponse.word });
+    console.log("[POST /api/daily/guess] Response:", {
+      completed,
+      won,
+      word: guessResponse.word,
+    });
     res.json(guessResponse);
   } catch (error) {
     console.error("Error in POST /api/daily/guess:", error);
@@ -486,7 +519,7 @@ app.post("/api/daily/guess", async (req, res) => {
 app.get("/api/daily/stats", async (req, res) => {
   try {
     const cookieUserId = getUserIdFromRequest(req);
-    
+
     if (!cookieUserId) {
       return res.json({
         totalPlayed: 0,
@@ -494,10 +527,11 @@ app.get("/api/daily/stats", async (req, res) => {
         winRate: 0,
         currentStreak: 0,
         maxStreak: 0,
-        recentResults: []
+        recentResults: [],
       });
     }
-    
+    await ensureAnonymousSession(req, cookieUserId);
+
     const stats = await getUserDailyStats(cookieUserId);
     res.json(stats);
   } catch (error) {
@@ -533,8 +567,7 @@ const HOST_DISCONNECT_GRACE_MS = 2 * 60 * 1000; // 2 minutes
 const AI_BATTLE_EVENT_BASE_KEY = "ai_battle_hour";
 let aiBattleEventActive =
   String(process.env.AI_BATTLE_EVENT_ACTIVE || "").toLowerCase() === "true";
-const AI_BATTLE_EVENT_SLOT =
-  process.env.AI_BATTLE_EVENT_SLOT || "20:00-21:00";
+const AI_BATTLE_EVENT_SLOT = process.env.AI_BATTLE_EVENT_SLOT || "20:00-21:00";
 const AI_BATTLE_EVENT_INTERVAL_MS = 30 * 1000;
 let ioRef = null;
 
@@ -757,10 +790,10 @@ function summarizeJoinableRoom(room) {
   let capacity = null;
 
   if (room.mode === "duel") {
-    joinable = !(duelMode.canJoinDuel(room)?.error);
+    joinable = !duelMode.canJoinDuel(room)?.error;
     capacity = 2;
   } else if (room.mode === "shared") {
-    joinable = !(sharedMode.canJoinShared(room)?.error);
+    joinable = !sharedMode.canJoinShared(room)?.error;
     capacity = 2;
   } else if (room.mode === "battle" || room.mode === "battle_ai") {
     joinable = room.mode === "battle_ai" ? true : !room.battle?.started;
@@ -779,7 +812,7 @@ function summarizeJoinableRoom(room) {
   const createdAt = Number(room.createdAt || updatedAt);
 
   const isInProgress =
-      (room.mode === "battle" || room.mode === "battle_ai")
+    room.mode === "battle" || room.mode === "battle_ai"
       ? Boolean(room.battle?.started)
       : room.mode === "shared"
       ? Boolean(room.shared?.started)
@@ -1041,6 +1074,9 @@ const io = new Server(httpServer, {
 });
 ioRef = io;
 
+// ---------- Socket authentication middleware ----------
+io.use(authenticateSocket);
+
 // ---------- Socket handlers ----------
 
 // ---------- Socket handlers ----------
@@ -1053,6 +1089,12 @@ io.on("connection", (socket) => {
   });
 
   socket.on("createRoom", ({ name, mode = "duel" }, cb) => {
+    // Sanitize and validate inputs
+    const sanitizedName = sanitizePlayerName(name);
+    if (!sanitizedName || !isSafeInput(sanitizedName)) {
+      return cb?.({ error: "Invalid name" });
+    }
+
     const id = Math.random().toString(36).slice(2, 8).toUpperCase();
     const normalizedMode = normalizeMode(mode);
     const initialHostId = normalizedMode === "battle_ai" ? null : socket.id;
@@ -1085,7 +1127,7 @@ io.on("connection", (socket) => {
     }
 
     room.players[socket.id] = {
-      name,
+      name: sanitizedName, // Use sanitized name
       ready: false,
       secret: null,
       guesses: [],
@@ -1107,11 +1149,24 @@ io.on("connection", (socket) => {
   });
 
   socket.on("joinRoom", ({ name, roomId }, cb) => {
-    const room = rooms.get(roomId);
+    // Sanitize and validate inputs
+    const sanitizedRoomId = sanitizeRoomId(roomId);
+    const sanitizedName = sanitizePlayerName(name);
+
+    if (!sanitizedRoomId) {
+      return cb?.({ error: "Invalid room ID" });
+    }
+    if (!sanitizedName || !isSafeInput(sanitizedName)) {
+      return cb?.({ error: "Invalid name" });
+    }
+
+    const room = rooms.get(sanitizedRoomId);
     if (!room) return cb?.({ error: "Room not found" });
 
-    const oldId = Object.keys(room.players).find((pid) =>
-      (room.players[pid].name || "").trim().toLowerCase() === (name || "").trim().toLowerCase() && room.players[pid].disconnected
+    const oldId = Object.keys(room.players).find(
+      (pid) =>
+        (room.players[pid].name || "").trim().toLowerCase() ===
+          sanitizedName.trim().toLowerCase() && room.players[pid].disconnected
     );
 
     if (oldId) {
@@ -1134,10 +1189,10 @@ io.on("connection", (socket) => {
       delete room.players[oldId];
       room.updatedAt = Date.now();
 
-      socket.join(roomId);
-      io.to(roomId).emit("roomState", sanitizeRoom(room));
+      socket.join(sanitizedRoomId);
+      io.to(sanitizedRoomId).emit("roomState", sanitizeRoom(room));
       if (room.mode === "battle_ai") {
-        maybeEnsureAiBattleRound(roomId);
+        maybeEnsureAiBattleRound(sanitizedRoomId);
         if (room.meta?.isEvent && isAiBattleEventActive()) {
           ensureAiBattleEventRoom();
         }
@@ -1155,7 +1210,7 @@ io.on("connection", (socket) => {
     }
 
     room.players[socket.id] = {
-      name,
+      name: sanitizedName, // Use sanitized name
       ready: false,
       secret: null,
       guesses: [],
@@ -1168,11 +1223,11 @@ io.on("connection", (socket) => {
     };
     room.updatedAt = Date.now();
 
-    socket.join(roomId);
+    socket.join(sanitizedRoomId);
     cb?.({ ok: true, resumed: false, mode: room.mode });
-    io.to(roomId).emit("roomState", sanitizeRoom(room));
+    io.to(sanitizedRoomId).emit("roomState", sanitizeRoom(room));
     if (room.mode === "battle_ai") {
-      maybeEnsureAiBattleRound(roomId);
+      maybeEnsureAiBattleRound(sanitizedRoomId);
       if (room.meta?.isEvent && isAiBattleEventActive()) {
         ensureAiBattleEventRoom();
       }
@@ -1180,14 +1235,25 @@ io.on("connection", (socket) => {
   });
 
   socket.on("setSecret", ({ roomId, secret }, cb) => {
-    const room = rooms.get(roomId);
+    // Sanitize inputs
+    const sanitizedRoomId = sanitizeRoomId(roomId);
+    const sanitizedSecret = sanitizeWord(secret);
+
+    if (!sanitizedRoomId) {
+      return cb?.({ error: "Invalid room ID" });
+    }
+    if (!sanitizedSecret || sanitizedSecret.length !== 5) {
+      return cb?.({ error: "Invalid secret word" });
+    }
+
+    const room = rooms.get(sanitizedRoomId);
     if (!room) return cb?.({ error: "Room not found" });
     if (room.mode !== "duel") return cb?.({ error: "Wrong mode" });
 
     const result = duelMode.handleSetSecret({
       room,
       socketId: socket.id,
-      secret,
+      secret: sanitizedSecret, // Use sanitized secret
       isValidWord: isValidWordLocal,
     });
     if (result?.error) return cb?.(result);
@@ -1196,7 +1262,8 @@ io.on("connection", (socket) => {
       const startResult = duelMode.startDuelRound({
         room,
         roundMs: ROUND_MS,
-        scheduleTimeout: () => setTimeout(() => handleDuelTimeout(roomId), ROUND_MS),
+        scheduleTimeout: () =>
+          setTimeout(() => handleDuelTimeout(roomId), ROUND_MS),
       });
       if (startResult?.error) return cb?.(startResult);
     }
@@ -1206,14 +1273,21 @@ io.on("connection", (socket) => {
   });
 
   socket.on("makeGuess", ({ roomId, guess }, cb) => {
-    const room = rooms.get(roomId);
+    // Sanitize inputs
+    const sanitizedRoomId = sanitizeRoomId(roomId);
+    const sanitizedGuess = sanitizeWord(guess);
+
+    if (!sanitizedRoomId) {
+      return cb?.({ error: "Invalid room ID" });
+    }
+    if (!sanitizedGuess || sanitizedGuess.length !== 5) {
+      return cb?.({ error: "Invalid guess" });
+    }
+
+    const room = rooms.get(sanitizedRoomId);
     if (!room) return cb?.({ error: "Room not found" });
 
-    const raw = String(guess || "");
-    const up = raw.toUpperCase();
-
-    if (!isValidWordLocal(raw)) {
-      console.log("[makeGuess] invalid word", { roomId, player: socket.id, raw, up });
+    if (!isValidWordLocal(sanitizedGuess)) {
       return cb?.({ error: "Invalid word" });
     }
 
@@ -1221,14 +1295,14 @@ io.on("connection", (socket) => {
       const result = duelMode.handleDuelGuess({
         room,
         socketId: socket.id,
-        guess: up,
+        guess: sanitizedGuess, // Use sanitized guess
         scoreGuess,
         updateStatsOnWin,
         getOpponent,
       });
       if (result?.error) return cb?.(result);
       if (result?.roundEnded) duelMode.clearDuelTimer(room);
-      io.to(roomId).emit("roomState", sanitizeRoom(room));
+      io.to(sanitizedRoomId).emit("roomState", sanitizeRoom(room));
       return cb?.({ ok: true, pattern: result?.pattern });
     }
 
@@ -1236,13 +1310,13 @@ io.on("connection", (socket) => {
       const result = sharedMode.handleSharedGuess({
         room,
         socketId: socket.id,
-        guess: up,
+        guess: sanitizedGuess, // Use sanitized guess
         scoreGuess,
         updateStatsOnWin,
         getOpponent,
       });
       if (result?.error) return cb?.(result);
-      io.to(roomId).emit("roomState", sanitizeRoom(room));
+      io.to(sanitizedRoomId).emit("roomState", sanitizeRoom(room));
       return cb?.({ ok: true, pattern: result?.pattern });
     }
 
@@ -1250,7 +1324,7 @@ io.on("connection", (socket) => {
       const result = battleMode.handleBattleGuess({
         room,
         socketId: socket.id,
-        guess: up,
+        guess: sanitizedGuess, // Use sanitized guess
         scoreGuess,
         updateStatsOnWin,
       });
@@ -1262,12 +1336,12 @@ io.on("connection", (socket) => {
         }
         room.battle.deadline = null;
         if (room.battle.aiHost?.mode === "auto") {
-          scheduleAiBattleCountdown(roomId);
+          scheduleAiBattleCountdown(sanitizedRoomId);
         } else {
           room.battle.countdownEndsAt = null;
         }
       }
-      io.to(roomId).emit("roomState", sanitizeRoom(room));
+      io.to(sanitizedRoomId).emit("roomState", sanitizeRoom(room));
       return cb?.({ ok: true, pattern: result?.pattern });
     }
 
@@ -1277,14 +1351,17 @@ io.on("connection", (socket) => {
   socket.on("duelPlayAgain", ({ roomId }, cb) => {
     const room = rooms.get(roomId);
     if (!room) return cb?.({ error: "Room not found" });
-    if (room.mode !== "duel" && room.mode !== "shared") return cb?.({ error: "Wrong mode" });
+    if (room.mode !== "duel" && room.mode !== "shared")
+      return cb?.({ error: "Wrong mode" });
 
     if (room.players[socket.id]) {
       room.players[socket.id].rematchRequested = true;
     }
 
     const playerIds = Object.keys(room.players);
-    const bothRequested = playerIds.length > 0 && playerIds.every((pid) => room.players[pid].rematchRequested);
+    const bothRequested =
+      playerIds.length > 0 &&
+      playerIds.every((pid) => room.players[pid].rematchRequested);
 
     if (bothRequested) {
       Object.values(room.players).forEach((p) => {
@@ -1319,9 +1396,14 @@ io.on("connection", (socket) => {
   socket.on("startShared", ({ roomId }, cb) => {
     const room = rooms.get(roomId);
     if (!room) return cb?.({ error: "Room not found" });
-    if (room.mode !== "shared") return cb?.({ error: "Room not found or wrong mode" });
+    if (room.mode !== "shared")
+      return cb?.({ error: "Room not found or wrong mode" });
 
-    const result = sharedMode.startSharedRound({ room, socketId: socket.id, pickRandomWords });
+    const result = sharedMode.startSharedRound({
+      room,
+      socketId: socket.id,
+      pickRandomWords,
+    });
     if (result?.error) return cb?.(result);
 
     io.to(roomId).emit("roomState", sanitizeRoom(room));
@@ -1329,7 +1411,18 @@ io.on("connection", (socket) => {
   });
 
   socket.on("setHostWord", ({ roomId, secret }, cb) => {
-    const room = rooms.get(roomId);
+    // Sanitize inputs
+    const sanitizedRoomId = sanitizeRoomId(roomId);
+    const sanitizedSecret = sanitizeWord(secret);
+
+    if (!sanitizedRoomId) {
+      return cb?.({ error: "Invalid room ID" });
+    }
+    if (!sanitizedSecret || sanitizedSecret.length !== 5) {
+      return cb?.({ error: "Invalid word" });
+    }
+
+    const room = rooms.get(sanitizedRoomId);
     if (!room) return cb?.({ error: "Room not found" });
     if (room.mode !== "battle" && room.mode !== "battle_ai") {
       return cb?.({ error: "Wrong mode" });
@@ -1339,9 +1432,14 @@ io.on("connection", (socket) => {
         return cb?.({ error: "AI host is active" });
       }
     }
-    if (socket.id !== room.hostId) return cb?.({ error: "Only host can set word" });
+    if (socket.id !== room.hostId)
+      return cb?.({ error: "Only host can set word" });
 
-    const result = battleMode.setHostWord({ room, secret, validateWord: isValidWordLocal });
+    const result = battleMode.setHostWord({
+      room,
+      secret: sanitizedSecret,
+      validateWord: isValidWordLocal,
+    });
     if (result?.error) return cb?.(result);
 
     if (room.mode === "battle_ai") {
@@ -1349,7 +1447,7 @@ io.on("connection", (socket) => {
       room.battle.countdownEndsAt = null;
     }
 
-    io.to(roomId).emit("roomState", sanitizeRoom(room));
+    io.to(sanitizedRoomId).emit("roomState", sanitizeRoom(room));
     cb?.({ ok: true });
   });
 
@@ -1362,7 +1460,8 @@ io.on("connection", (socket) => {
     if (room.mode === "battle_ai" && room.battle?.aiHost?.mode !== "player") {
       return cb?.({ error: "AI host is active" });
     }
-    if (socket.id !== room.hostId) return cb?.({ error: "Only host can start" });
+    if (socket.id !== room.hostId)
+      return cb?.({ error: "Only host can start" });
 
     const result = battleMode.startBattleRound({ room });
     if (result?.error) return cb?.(result);
@@ -1402,7 +1501,11 @@ io.on("connection", (socket) => {
     battleMode.resetBattleRound(room);
     room.battle.secret = null;
     room.battle.lastRevealedWord = null;
-    room.battle.aiHost = { mode: "player", claimedBy: socket.id, pendingStart: false };
+    room.battle.aiHost = {
+      mode: "player",
+      claimedBy: socket.id,
+      pendingStart: false,
+    };
     room.hostId = socket.id;
     room.battle.countdownEndsAt = null;
     room.battle.deadline = null;
@@ -1456,7 +1559,8 @@ io.on("connection", (socket) => {
     if (room.mode === "battle_ai" && room.battle?.aiHost?.mode !== "player") {
       return cb?.({ error: "AI host is active" });
     }
-    if (socket.id !== room.hostId) return cb?.({ error: "Only host can reset" });
+    if (socket.id !== room.hostId)
+      return cb?.({ error: "Only host can reset" });
 
     battleMode.resetBattleRound(room);
     if (room.mode === "battle_ai") {
@@ -1503,7 +1607,8 @@ io.on("connection", (socket) => {
 
     const isSameSocket = oldId === socket.id;
 
-    if (!isSameSocket && room.players[socket.id]) delete room.players[socket.id];
+    if (!isSameSocket && room.players[socket.id])
+      delete room.players[socket.id];
 
     const resumedPlayer = {
       ...oldPlayer,
@@ -1726,12 +1831,14 @@ const startRoomCleanupInterval = () =>
           room.battle.lastRevealedWord = null;
           room.battle.deadline = null;
           room.battle.countdownEndsAt = null;
+        } else if (room.mode === "duel" || room.mode === "shared") {
+          // Clean up duel timers before deleting room
+          duelMode.clearDuelTimer(room);
         }
         const oldestDisconnect = Math.min(
-          ...Object.values(room.players)
-            .map((p) =>
-              typeof p.disconnectedAt === "number" ? p.disconnectedAt : Infinity
-            )
+          ...Object.values(room.players).map((p) =>
+            typeof p.disconnectedAt === "number" ? p.disconnectedAt : Infinity
+          )
         );
         if (
           !hostPlayer ||
@@ -1780,7 +1887,6 @@ if (isAiBattleEventActive()) {
 function getOpponent(room, socketId) {
   return Object.keys(room.players).find((id) => id !== socketId);
 }
-
 
 function sanitizeRoom(room) {
   const players = Object.fromEntries(
@@ -1857,4 +1963,3 @@ if (process.env.NODE_ENV !== "test") {
 }
 
 export { httpServer };
-

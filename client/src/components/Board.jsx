@@ -1,7 +1,7 @@
 // Board.jsx
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState, memo } from "react";
 
-export default function Board({
+function Board({
   guesses = [],
   activeGuess = "",
   // secret word (optional)
@@ -149,14 +149,27 @@ export default function Board({
           }
            @keyframes shakeX {
      0%,100% { transform: translateX(0) }
-     20% { transform: translateX(-4px) }
-     40% { transform: translateX(4px) }
-     60% { transform: translateX(-3px) }
-     80% { transform: translateX(3px) }
+     10% { transform: translateX(-6px) }
+     20% { transform: translateX(6px) }
+     30% { transform: translateX(-5px) }
+     40% { transform: translateX(5px) }
+     50% { transform: translateX(-3px) }
+     60% { transform: translateX(3px) }
+     70% { transform: translateX(-2px) }
+     80% { transform: translateX(2px) }
+   }
+   @keyframes flashRed {
+     0%,100% { background-color: transparent; }
+     50% { background-color: rgba(239, 68, 68, 0.3); }
    }
    /* Apply shake to tiles in the active row */
-   .shake-hard > div { animation: shakeX 250ms ease-in-out; }
-   .tile-error { box-shadow: inset 0 0 0 2px #ef4444; }
+   .shake-hard > div { 
+     animation: shakeX 400ms ease-in-out;
+   }
+   .tile-error { 
+     box-shadow: inset 0 0 0 2px #ef4444;
+     animation: flashRed 300ms ease-in-out;
+   }
         `}
       </style>
       <div
@@ -417,3 +430,32 @@ export default function Board({
     </>
   );
 }
+
+// Memoize Board component to prevent unnecessary re-renders
+// Only re-render when props actually change
+export default memo(Board, (prevProps, nextProps) => {
+  // Custom comparison function for better performance
+  // Compare primitive values and reference equality for objects/arrays
+  return (
+    prevProps.guesses === nextProps.guesses &&
+    prevProps.activeGuess === nextProps.activeGuess &&
+    prevProps.secretWord === nextProps.secretWord &&
+    prevProps.secretWordState === nextProps.secretWordState &&
+    prevProps.isOwnBoard === nextProps.isOwnBoard &&
+    prevProps.gap === nextProps.gap &&
+    prevProps.tile === nextProps.tile &&
+    prevProps.padding === nextProps.padding &&
+    prevProps.autoFit === nextProps.autoFit &&
+    prevProps.minTile === nextProps.minTile &&
+    prevProps.maxTile === nextProps.maxTile &&
+    prevProps.showGuessesLabel === nextProps.showGuessesLabel &&
+    prevProps.players === nextProps.players &&
+    prevProps.currentPlayerId === nextProps.currentPlayerId &&
+    prevProps.errorShakeKey === nextProps.errorShakeKey &&
+    prevProps.errorActiveRow === nextProps.errorActiveRow &&
+    prevProps.secretErrorKey === nextProps.secretErrorKey &&
+    prevProps.secretErrorActive === nextProps.secretErrorActive &&
+    prevProps.secretWordReveal === nextProps.secretWordReveal &&
+    prevProps.guessFlipKey === nextProps.guessFlipKey
+  );
+});

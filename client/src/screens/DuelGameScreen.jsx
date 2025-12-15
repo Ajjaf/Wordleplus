@@ -1,17 +1,22 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import Board from "../components/Board.jsx";
-import Keyboard from "../components/Keyboard.jsx";
-import { DuelPlayerCard } from "../components/DuelPlayerCard.jsx";
-import ParticleEffect from "../components/ParticleEffect.jsx";
-import ConfettiEffect from "../components/ConfettiEffect.jsx";
-import { getRandomWord } from "../api";
 import { useRef } from "react";
-import { motion } from "framer-motion";
-import GradientBackground from "../components/ui/GradientBackground";
-import GlowButton from "../components/ui/GlowButton";
-import MobilePlayerProgressCard from "../components/mobile/MobilePlayerProgressCard.jsx";
-import { COLORS, GRADIENTS, SHADOWS } from "../design-system";
+import { motion, AnimatePresence } from "framer-motion";
+import { getRandomWord } from "../api";
 import { useIsMobile } from "../hooks/useIsMobile";
+import { useSwipeGestures } from "../hooks/useSwipeGestures";
+import GradientBackground from "../components/ui/GradientBackground";
+import { UnifiedPlayerCard } from "../components/player/UnifiedPlayerCard";
+import { GameEffects } from "../components/features/GameEffects";
+import { GameTimer } from "../components/features/GameTimer";
+import Board from "../components/Board.jsx";
+import Keyboard from "../components/Keyboard";
+import GlowButton from "../components/ui/GlowButton";
+import { SmartHint } from "../components/ui/SmartHint";
+import { IconStatusBadge } from "../components/ui/IconStatusBadge";
+import MicroProgressGrid from "../components/mobile/MicroProgressGrid";
+import { getModeTheme } from "../config/mode-themes";
+import { cn } from "../lib/utils";
+import { GameLayout } from "../components/layout/GameLayout";
 
 function DuelGameScreen({
   room,
@@ -24,13 +29,18 @@ function DuelGameScreen({
   onKeyPress,
   onSubmitSecret,
   onRematch,
+  submittingGuess = false,
 }) {
-  // Local input for MY secret only (we never edit opponent secret locally)
+  const mode = "duel";
+  const theme = getModeTheme(mode);
+  const isMobile = useIsMobile();
+  
+  // Local input for MY secret only
   const [secretWordInput, setSecretWordInput] = useState("");
-  const [secretLocked, setSecretLocked] = useState(false); // lock immediately on submit
-  const [mySubmittedSecret, setMySubmittedSecret] = useState(""); // for reveal
+  const [secretLocked, setSecretLocked] = useState(false);
+  const [mySubmittedSecret, setMySubmittedSecret] = useState("");
 
-  // Small delights
+  // Effects state
   const [showParticles, setShowParticles] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
   const [showCorrectParticles, setShowCorrectParticles] = useState(false);
@@ -40,9 +50,21 @@ function DuelGameScreen({
   const [guessFlipKey, setGuessFlipKey] = useState(0);
   const [lastStreak, setLastStreak] = useState(0);
 
-  // Mobile UX
+  // Mobile UX - which board to show
   const [mobileView, setMobileView] = useState("me");
-  const isMobile = useIsMobile();
+  
+  // Swipe gestures for mobile with right-edge detection
+  const swipeHandlers = useSwipeGestures(
+    () => setMobileView("opponent"), // Swipe left from right edge to see opponent
+    () => setMobileView("me"), // Swipe right to see own board
+    null,
+    null,
+    {
+      requireRightEdge: true, // Only trigger left swipe from right edge
+      edgeThreshold: 50, // 50px from right edge
+      minSwipeDistance: 50,
+    }
+  );
 
   // Generate random word
   const [genBusy, setGenBusy] = useState(false);
@@ -72,20 +94,20 @@ function DuelGameScreen({
       : "";
 
   const revealNow = isGameEnded || !!room?.duelReveal;
-  // Ready should be server-driven
   const myReady = !!me?.ready;
   const oppReady = !!opponent?.ready;
   const bothReady = myReady && oppReady;
   const canSetSecret = !myReady && !isGameEnded;
   const freshRound = !isGameStarted && !isGameEnded && !myReady && !oppReady;
-  const rematchStatus = bothRequestedRematch
-    ? "\u{1F680} Both players ready! Starting rematch..."
-    : "\u{23F3} Waiting for opponent...";
+  const deadline = room?.duelDeadline ?? null;
+
+  // Board metrics
   const secretTileSize = boardMetrics?.tile ?? 48;
   const secretGap = boardMetrics?.gap ?? 8;
   const secretRowWidth = secretTileSize * 5 + secretGap * 4;
   const diceSize = Math.max(36, Math.min(48, secretTileSize));
   const secretFontSize = Math.max(18, secretTileSize * 0.55);
+  
   const getInitial = (value, fallback) => {
     if (typeof value !== "string") return fallback;
     const trimmed = value.trim();
@@ -93,6 +115,7 @@ function DuelGameScreen({
   };
   const myAvatarInitial = getInitial(me?.name, "Y");
   const opponentAvatarInitial = getInitial(opponent?.name, "?");
+
   const handleBoardMeasure = useCallback((metrics) => {
     setBoardMetrics((prev) => {
       if (
@@ -106,6 +129,7 @@ function DuelGameScreen({
       return prev;
     });
   }, []);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     const vv = window.visualViewport;
@@ -127,34 +151,20 @@ function DuelGameScreen({
       window.removeEventListener("resize", handleViewportChange);
     };
   }, []);
+
   const boardTileBounds = useMemo(() => {
     const defaults = {
-      min: isMobile ? 34 : 36,
-      max: isMobile ? 56 : 72,
+      min: isMobile ? 44 : 56,
+      max: isMobile ? 80 : 112,
     };
-
-    if (!viewportHeight) {
-      return defaults;
-    }
-
-    if (viewportHeight < 480) {
-      return { min: 26, max: 34 };
-    }
-
-    if (viewportHeight < 560) {
-      return { min: 28, max: 38 };
-    }
-
-    if (viewportHeight < 650) {
-      return { min: 30, max: 44 };
-    }
-
-    if (viewportHeight < 740) {
-      return { min: 32, max: isMobile ? 50 : 58 };
-    }
-
+    if (!viewportHeight) return defaults;
+    if (viewportHeight < 480) return { min: 26, max: 34 };
+    if (viewportHeight < 560) return { min: 28, max: 38 };
+    if (viewportHeight < 650) return { min: 30, max: 44 };
+    if (viewportHeight < 740) return { min: 32, max: isMobile ? 50 : 58 };
     return defaults;
   }, [viewportHeight, isMobile]);
+
   const boardPadding = !isMobile
     ? 12
     : !viewportHeight
@@ -167,11 +177,6 @@ function DuelGameScreen({
 
   const [secretErrorActive, setSecretErrorActive] = useState(false);
   const [secretErrorKey, setSecretErrorKey] = useState(0);
-  //timer
-  const deadline = room?.duelDeadline ?? null;
-  const { remaining, label: timerLabel, pct } = useCountdown(deadline);
-  const low = remaining <= 10_000; // <= 10s
-  const warn = remaining <= 20_000; // <= 20s
 
   // Clear all local secret-related state at the start of a fresh round
   useEffect(() => {
@@ -181,17 +186,17 @@ function DuelGameScreen({
       setMySubmittedSecret("");
     }
   }, [freshRound]);
-  // normalize to exactly 5 uppercase letters (pad if needed)
+
   const clamp5 = (w) =>
     (w || "").toString().toUpperCase().slice(0, 5).padEnd(5, " ");
 
-  // What to show for ME
   const myId = me?.id;
   const oppId = opponent?.id;
   const revealMine = clamp5(
     (myId && room?.duelReveal?.[myId]) || mySubmittedSecret
   );
   const revealOpp = clamp5((oppId && room?.duelReveal?.[oppId]) || "");
+
   // Effects
   useEffect(() => {
     if (bothRequestedRematch) {
@@ -201,10 +206,8 @@ function DuelGameScreen({
     }
   }, [bothRequestedRematch]);
 
-  // Trigger secret word reveal animation when game ends
   useEffect(() => {
     if (isGameEnded && revealNow) {
-      // Small delay to let the game end state settle
       const timer = setTimeout(() => {
         setShowSecretReveal(true);
       }, 500);
@@ -214,10 +217,8 @@ function DuelGameScreen({
     }
   }, [isGameEnded, revealNow]);
 
-  // Trigger guess flip animation when a new guess is added
   useEffect(() => {
     if (me?.guesses && me.guesses.length > 0) {
-      // Small delay to let the guess state update
       const timer = setTimeout(() => {
         setGuessFlipKey((prev) => prev + 1);
       }, 100);
@@ -225,16 +226,14 @@ function DuelGameScreen({
     }
   }, [me?.guesses?.length]);
 
-  // Trigger particles for correct guesses
   useEffect(() => {
     if (me?.guesses && me.guesses.length > 0) {
       const lastGuess = me.guesses[me.guesses.length - 1];
       if (lastGuess && lastGuess.pattern) {
         const hasCorrect = lastGuess.pattern.some((state) => state === "green");
         if (hasCorrect) {
-          // Position particles at the center of my board
           setParticlePosition({
-            x: window.innerWidth / 4, // Left side for my board
+            x: window.innerWidth / 4,
             y: window.innerHeight / 2 - 100,
           });
           setShowCorrectParticles(true);
@@ -245,28 +244,23 @@ function DuelGameScreen({
     }
   }, [me?.guesses?.length]);
 
-  // Trigger streak celebration particles
   useEffect(() => {
     if (me?.streak && me.streak > lastStreak && me.streak > 0) {
       setLastStreak(me.streak);
-
-      // Celebrate significant streak milestones
       const shouldCelebrate =
-        me.streak === 3 || // First milestone
-        me.streak === 5 || // Second milestone
-        me.streak === 10 || // Major milestone
-        me.streak === 15 || // Epic milestone
-        me.streak === 20 || // Legendary milestone
-        (me.streak > 20 && me.streak % 5 === 0); // Every 5 after 20
+        me.streak === 3 ||
+        me.streak === 5 ||
+        me.streak === 10 ||
+        me.streak === 15 ||
+        me.streak === 20 ||
+        (me.streak > 20 && me.streak % 5 === 0);
 
       if (shouldCelebrate) {
         setParticlePosition({
-          x: window.innerWidth / 4, // Left side for my board
+          x: window.innerWidth / 4,
           y: window.innerHeight / 2 - 150,
         });
         setShowStreakParticles(true);
-
-        // Longer celebration for higher streaks
         const duration = me.streak >= 10 ? 3000 : 2000;
         const timer = setTimeout(() => setShowStreakParticles(false), duration);
         return () => clearTimeout(timer);
@@ -274,7 +268,6 @@ function DuelGameScreen({
     }
   }, [me?.streak, lastStreak]);
 
-  // Fun particle when both secrets are set and game not yet started
   useEffect(() => {
     if (bothReady && !isGameStarted) {
       setParticlePosition({
@@ -289,14 +282,12 @@ function DuelGameScreen({
 
   const handleSecretSubmit = async (word) => {
     if (word.length !== 5) return;
-    const res = await onSubmitSecret(word); // { ok } or { error }
+    const res = await onSubmitSecret(word);
     if (res?.ok) {
-      setSecretLocked(true); // prevent local edits
-      setMySubmittedSecret(word.toUpperCase()); // local copy for reveal
+      setSecretLocked(true);
+      setMySubmittedSecret(word.toUpperCase());
     } else {
       bumpSecretError();
-      // optional: show a small inline error or shake your "Secret Word" label
-      // e.g. set a local error message or bump a "shake" state
     }
   };
 
@@ -306,8 +297,7 @@ function DuelGameScreen({
       setGenBusy(true);
       const w = await getRandomWord();
       if (w && w.length === 5) {
-        setSecretWordInput(w); // fill the tiles
-        // NOTE: still requires Enter to lock in (per your flow)
+        setSecretWordInput(w);
       }
     } catch (e) {
       // Error occurred
@@ -316,7 +306,6 @@ function DuelGameScreen({
     }
   }
 
-  // On-screen keyboard while setting MY secret
   const handleSecretKeyPress = (key) => {
     if (!canSetSecret) return;
     if (key === "ENTER") {
@@ -324,7 +313,6 @@ function DuelGameScreen({
     } else if (key === "BACKSPACE") {
       setSecretWordInput((prev) => prev.slice(0, -1));
     } else if (/^[A-Z]$/.test(key)) {
-      // cap at 5; do NOT auto-submit
       setSecretWordInput((prev) => (prev.length < 5 ? prev + key : prev));
     }
   };
@@ -334,13 +322,9 @@ function DuelGameScreen({
     setMySubmittedSecret("");
   };
 
-  // Physical keyboard routing
   useEffect(() => {
     const handler = (event) => {
-      // Always stop so App-level listeners don't double-handle
       event.stopPropagation();
-
-      // If I'm setting my secret, edit local input only
       if (canSetSecret) {
         const up = event.key.toUpperCase();
         if (up === "ENTER") {
@@ -358,13 +342,9 @@ function DuelGameScreen({
           event.preventDefault();
           return;
         }
-        // Ignore other keys while setting secret
         event.preventDefault();
         return;
       }
-
-      // If BOTH secrets are set (mine locally locked or server-provided, AND opponent's server-provided),
-      // route physical keys to game input
       const mySecretReady = secretLocked || !!me?.secret;
       const oppSecretReady = !!opponent?.secret;
       if (canGuess) {
@@ -375,16 +355,12 @@ function DuelGameScreen({
         event.preventDefault();
         return;
       }
-
-      // Otherwise block typing
       event.preventDefault();
     };
-
     window.addEventListener("keydown", handler, true);
     return () => window.removeEventListener("keydown", handler, true);
   }, [canSetSecret, secretWordInput, isGameEnded, onKeyPress, canGuess]);
 
-  // On-screen keyboard router
   const handleKeyPress = (key) => {
     if (canSetSecret) {
       handleSecretKeyPress(key);
@@ -395,415 +371,537 @@ function DuelGameScreen({
     }
   };
 
-  //functions
   function bumpSecretError() {
     setSecretErrorActive(true);
     setSecretErrorKey((k) => k + 1);
     setTimeout(() => setSecretErrorActive(false), 300);
   }
 
-  // Simple countdown from a deadline (ms since epoch).
-  function useCountdown(deadline) {
-    const [remaining, setRemaining] = useState(() =>
-      deadline ? Math.max(0, deadline - Date.now()) : 0
-    );
-
-    // Capture the initial total so we can draw a progress bar %
-    const [initialTotal, setInitialTotal] = useState(null);
-    useEffect(() => {
-      if (!deadline) {
-        setRemaining(0);
-        setInitialTotal(null);
-        return;
-      }
-      const first = Math.max(0, deadline - Date.now());
-      setRemaining(first);
-      // keep the first seen total for this round
-      setInitialTotal((t) => (t == null ? first : t));
-
-      const id = setInterval(() => {
-        setRemaining(Math.max(0, deadline - Date.now()));
-      }, 250);
-      return () => clearInterval(id);
-    }, [deadline]);
-
-    const secs = Math.ceil(remaining / 1000);
-    const mm = String(Math.floor(secs / 60)).padStart(2, "0");
-    const ss = String(secs % 60).padStart(2, "0");
-    const label = `${mm}:${ss}`;
-
-    const pct =
-      initialTotal && initialTotal > 0
-        ? Math.max(0, Math.min(100, (remaining / initialTotal) * 100))
-        : null;
-
-    return { remaining, label, pct };
-  }
-
-  // What to show in the secret row for ME
-  // While setting, show what you're typing; after submit, mask it.
   const mySecretWord = canSetSecret
     ? secretWordInput.padEnd(5, " ")
     : revealNow
-    ? revealMine // <- reveal after game ends
+    ? revealMine
     : "?????";
   const mySecretState = canSetSecret
     ? secretWordInput.length
       ? "typing"
       : "empty"
     : "set";
-  // Opponent secret row (always masked once present)
-  const oppSecretWord = revealNow
-    ? revealOpp.trim()
-      ? revealOpp
-      : "?????"
-    : oppReady || isGameStarted
-    ? "?????"
-    : "";
-  const oppSecretState = revealNow
-    ? "set"
-    : oppReady || isGameStarted
-    ? "set"
-    : "empty";
-  return (
-    <GradientBackground fullHeight className="flex h-full">
-      <div className="flex flex-1 flex-col w-full min-h-0 relative overflow-hidden">
-        <ParticleEffect
-          trigger={showParticles}
-          type="wordComplete"
-          position={particlePosition}
-        />
-        <ParticleEffect
-          trigger={showCorrectParticles}
-          type="correctGuess"
-          position={particlePosition}
-          intensity={1.2}
-        />
-        <ParticleEffect
-          trigger={showStreakParticles}
-          type="streak"
-          position={particlePosition}
-          intensity={me?.streak >= 10 ? 2.5 : me?.streak >= 5 ? 2.0 : 1.5}
-        />
-        <ConfettiEffect trigger={showConfetti} />
 
-        {/* Game Status */}
-        <div className={`px-3 ${isMobile ? "pt-1.5 pb-1" : "pt-3 pb-3"}`}>
-          <div
-            className={`flex items-center justify-between gap-4 ${
-              isMobile ? "mb-1.5" : "mb-3"
-            }`}
+  // Opponent's active guess (if any)
+  const opponentActiveGuess = opponent?.currentGuess || "";
+  const opponentGuesses = opponent?.guesses || [];
+  
+  // Prepare players array for UnifiedPlayerCard
+  const myPlayerData = {
+    id: me?.id,
+    name: me?.name || "You",
+    wins: me?.wins,
+    streak: me?.streak,
+    avatar: myAvatarInitial,
+    host: room?.hostId === me?.id,
+    isTyping: canSetSecret && !!secretWordInput,
+    hasSecret: myReady,
+    disconnected: !!me?.disconnected,
+    highlight: isGameEnded && room?.winner === me?.id ? "winner" : mobileView === "me" ? "active" : "none",
+    size: isMobile ? "sm" : "md",
+    active: mobileView === "me",
+    guesses: me?.guesses || [],
+    maxGuesses: 6,
+    variant: isMobile ? "compact" : "detailed",
+    onSelect: isMobile ? () => setMobileView("me") : undefined,
+  };
+  
+  const opponentPlayerData = {
+    id: opponent?.id,
+    name: opponent?.name || "?",
+    wins: opponent?.wins,
+    streak: opponent?.streak,
+    avatar: opponentAvatarInitial,
+    host: room?.hostId === opponent?.id,
+    isTyping: false,
+    hasSecret: oppReady || isGameStarted,
+    disconnected: !!opponent?.disconnected,
+    highlight:
+      isGameEnded && room?.winner === opponent?.id ? "winner" : mobileView === "opponent" ? "active" : "none",
+    size: isMobile ? "sm" : "md",
+    active: mobileView === "opponent",
+    guesses: opponentGuesses,
+    maxGuesses: 6,
+    variant: isMobile ? "compact" : "detailed",
+    onSelect: isMobile ? () => setMobileView("opponent") : undefined,
+    // Add micro progress grid for mobile
+    showMicroGrid: isMobile,
+  };
+
+  // Header title
+  const headerTitle = isGameEnded
+    ? bothRequestedRematch
+      ? "Rematch starting..."
+      : "Game ended - ready for rematch?"
+    : null;
+
+  // Status message - using visual indicators instead of text
+  const statusMessage = isGameEnded
+    ? bothRequestedRematch
+      ? null // Both ready - no status needed, rematch will start
+      : null // Visual indicators in footer handle status
+    : null;
+
+  // Rematch status for footer (visual indicator)
+  const rematchStatus = isGameEnded
+    ? bothRequestedRematch
+      ? null // Both ready - rematch starting
+      : opponentRequestedRematch
+      ? "Opponent ready" // Opponent has requested
+      : hasRequestedRematch
+      ? "Waiting for opponent" // You requested, waiting
+      : null // No requests yet
+    : null;
+
+  // Footer content (rematch button) - returns content only, not footer wrapper
+  const renderFooter = () => {
+    if (isGameEnded) {
+      return (
+        <div className={cn(
+          "text-center",
+          isMobile ? "pb-4" : "mb-2"
+        )}>
+          <GlowButton
+            onClick={handleRematch}
+            disabled={hasRequestedRematch}
+            size="lg"
+            variant={hasRequestedRematch ? "secondary" : "primary"}
+            className={cn(
+              isMobile && "w-full max-w-sm mx-auto"
+            )}
           >
-            <div className="flex-1 text-center">
-              <h2
-                className={`font-semibold text-white ${
-                  isMobile
-                    ? "text-[10px] uppercase tracking-[0.35em] leading-4"
-                    : "text-base md:text-lg"
-                }`}
-              >
-                {isGameEnded ? (
-                  bothRequestedRematch ? (
-                    "Rematch starting..."
-                  ) : (
-                    "Game ended - ready for rematch?"
-                  )
-                ) : deadline ? (
-                  <span
-                    className={`flex items-center justify-center ${
-                      isMobile ? "gap-1" : "gap-2"
-                    }`}
-                  >
-                    <span
-                      className={`text-white/60 ${
-                        isMobile
-                          ? "text-[10px] uppercase tracking-[0.4em]"
-                          : "text-sm"
-                      }`}
-                    >
-                      Time Remaining:
-                    </span>
-                    <span
-                      className={`font-mono rounded-xl ${
-                        low
-                          ? "bg-red-500/20 text-red-300 border border-red-500/30"
-                          : warn
-                          ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
-                          : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
-                      } ${isMobile ? "px-1.5 py-0.5 text-xs" : "px-3 py-1"}`}
-                    >
-                      {timerLabel}
-                    </span>
-                  </span>
-                ) : null}
-              </h2>
-            </div>
-          </div>
-
-          {/* Modern gradient progress bar when round is live */}
-          {!isGameEnded && deadline && (
-            <div
-              className={`mx-auto w-full overflow-hidden rounded-full bg-white/10 ${
-                isMobile ? "mt-1 max-w-[120px]" : "mt-2 max-w-xl"
-              }`}
-              style={{ height: isMobile ? 3 : 8 }}
-            >
-              <motion.div
-                className={`h-full rounded-full ${
-                  low
-                    ? "bg-gradient-to-r from-red-500 to-red-600"
-                    : warn
-                    ? "bg-gradient-to-r from-amber-500 to-amber-600"
-                    : "bg-gradient-to-r from-emerald-500 to-cyan-500"
-                }`}
-                style={{ width: `${pct ?? 100}%` }}
-                initial={{ width: "100%" }}
-                animate={{ width: `${pct ?? 100}%` }}
-                transition={{ duration: 0.3 }}
-              />
-            </div>
-          )}
-
-          {isGameEnded && (
-            <div className="text-center mt-3">
-              <div className="text-sm text-white/80">
-                {bothRequestedRematch
-                  ? "\u{1F680} Both players ready! Starting rematch..."
-                  : hasRequestedRematch
-                  ? "\u{1F525} Opponent requested rematch"
-                  : "\u{23F3} Waiting for opponent"}
-              </div>
+            {hasRequestedRematch
+              ? "✅ Rematch Requested"
+              : "🚀 Request Rematch"}
+          </GlowButton>
+          {rematchStatus && (
+            <div className="flex items-center justify-center gap-2 mt-2">
+              {opponentRequestedRematch ? (
+                <IconStatusBadge type="ready" size="sm" animated={true} />
+              ) : hasRequestedRematch ? (
+                <IconStatusBadge type="waitingForPlayer" size="sm" animated={true} />
+              ) : null}
+              <p className="text-xs text-white/60">{rematchStatus}</p>
             </div>
           )}
         </div>
+      );
+    }
+    if (!canSetSecret && !canGuess) {
+      return (
+        <div className="text-center py-4 flex flex-col items-center gap-2">
+          {!myReady ? (
+            <div className="flex items-center gap-2">
+              <IconStatusBadge type="ready" size="md" animated={true} />
+              <span className="text-sm text-white/60">Set your secret word</span>
+            </div>
+          ) : !oppReady ? (
+            <div className="flex items-center gap-2">
+              <IconStatusBadge type="waitingForPlayer" size="md" animated={true} />
+              <span className="text-sm text-white/60">Waiting for opponent</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <IconStatusBadge type="ready" size="md" animated={true} />
+              <span className="text-sm text-white/60">Starting...</span>
+            </div>
+          )}
+        </div>
+      );
+    }
+    return null;
+  };
 
-        {/* Main */}
-        <main
-          className={`flex-1 px-3 md:px-4 ${
-            isMobile ? "pt-1.5 pb-2" : "pt-2 pb-3"
-          } min-h-0 flex flex-col`}
-        >
-          <div
-            className={`w-full max-w-4xl mx-auto flex flex-col flex-1 min-h-0 ${
-              isMobile ? "gap-3" : "gap-4"
-            }`}
-          >
-            {/* Player Cards Row */}
-            {isMobile ? (
-              <div className="-mx-1 flex gap-2 overflow-x-auto px-1 py-1">
-                <MobilePlayerProgressCard
-                  name={me?.name || "You"}
-                  wins={me?.wins || 0}
-                  streak={me?.streak || 0}
-                  guesses={me?.guesses || []}
-                  maxGuesses={6}
-                  isActive={mobileView === "me"}
-                  onSelect={() => setMobileView("me")}
-                  compact
-                />
-                <MobilePlayerProgressCard
-                  name={opponent?.name || "Opponent"}
-                  wins={opponent?.wins || 0}
-                  streak={opponent?.streak || 0}
-                  guesses={opponent?.guesses || []}
-                  maxGuesses={6}
-                  isActive={mobileView === "opponent"}
-                  onSelect={() => setMobileView("opponent")}
-                  compact
-                />
+  // Custom board section with secret word entry
+  const renderBoard = () => {
+    // Desktop: Show both boards side by side
+    if (!isMobile && showBoardArea) {
+      return (
+        <div className="flex flex-col items-center flex-1 min-h-0 gap-4 w-full">
+          {/* Secret Word Entry Section - only for player */}
+          {showSecretEntry && (
+            <div className="flex flex-col items-center gap-2 flex-shrink-0 w-full">
+              <div className="text-[10px] uppercase tracking-[0.35em] text-white/50 text-center">
+                Choose your secret word
               </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-3">
-                <DuelPlayerCard
-                  name={me?.name || "You"}
-                  wins={me?.wins}
-                  streak={me?.streak}
-                  avatar={myAvatarInitial}
-                  host={room?.hostId === me?.id}
-                  isTyping={canSetSecret && !!secretWordInput}
-                  hasSecret={myReady}
-                  disconnected={!!me?.disconnected}
-                  highlight={
-                    isGameEnded && room?.winner === me?.id ? "winner" : "none"
-                  }
-                  size="sm"
-                  active={true}
-                />
 
-                <DuelPlayerCard
-                  name={opponent?.name || "?"}
-                  wins={opponent?.wins}
-                  streak={opponent?.streak}
-                  avatar={opponentAvatarInitial}
-                  host={room?.hostId === opponent?.id}
-                  isTyping={false}
-                  hasSecret={oppReady || isGameStarted}
-                  disconnected={!!opponent?.disconnected}
-                  highlight={
-                    isGameEnded && room?.winner === opponent?.id
-                      ? "winner"
-                      : "none"
-                  }
-                  size="sm"
-                />
-              </div>
-            )}
+              <div
+                className="relative flex justify-center"
+                style={{
+                  width:
+                    secretRowWidth +
+                    (canSetSecret ? diceSize + secretGap : 0),
+                  minHeight: secretTileSize,
+                  paddingRight: canSetSecret ? diceSize + secretGap : 0,
+                }}
+              >
+                {/* Secret Word Tiles */}
+                <div className="flex relative" style={{ gap: secretGap }}>
+                  {Array.from({ length: 5 }).map((_, i) => {
+                    const typingLen = secretWordInput.length;
+                    const show =
+                      mySecretState === "typing"
+                        ? secretWordInput.padEnd(5, " ")
+                        : mySecretWord || "";
+                    const letter = show[i] || "";
+                    const isEmpty = letter === "" || letter === " ";
+                    const isActive =
+                      mySecretState === "typing" &&
+                      isEmpty &&
+                      i === typingLen;
 
-            {/* Secret Word Entry Section */}
-            {showSecretEntry && (
-              <div className="flex flex-col items-center gap-2">
-                <div className="text-[10px] uppercase tracking-[0.35em] text-white/50 text-center">
-                  Choose your secret word
+                    let bg = "var(--tile-empty-bg)",
+                      color = "var(--tile-text)",
+                      border = "1px solid var(--tile-empty-border)";
+
+                    const isReadyToSubmit = canSetSecret && secretWordInput.length === 5 && !isEmpty;
+                    
+                    if (mySecretState === "set" && !isEmpty) {
+                      bg = "#e3f2fd";
+                      color = "#1976d2";
+                      border = "1px solid #1976d2";
+                    } else if (isReadyToSubmit) {
+                      bg = "var(--tile-typed-bg)";
+                      border = "2px solid #10b981";
+                    } else if (isActive) {
+                      bg = "var(--tile-typed-bg)";
+                      border = "1px solid #999";
+                    }
+
+                    if (secretErrorActive) {
+                      bg = "#fee2e2";
+                      color = "#991b1b";
+                      border = "1px solid #ef4444";
+                    }
+
+                    return (
+                      <div
+                        key={`secret-${i}`}
+                        className={secretErrorActive ? "tile-error" : ""}
+                        style={{
+                          width: secretTileSize,
+                          height: secretTileSize,
+                          display: "grid",
+                          placeItems: "center",
+                          background: bg,
+                          color,
+                          fontWeight: "bold",
+                          fontSize: secretFontSize,
+                          lineHeight: 1,
+                          textTransform: "uppercase",
+                          border,
+                          borderRadius: 6,
+                          overflow: "hidden",
+                          transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                          transform:
+                            mySecretState === "typing" && isEmpty
+                              ? "scale(1.05)"
+                              : "scale(1)",
+                          boxShadow:
+                            isReadyToSubmit
+                              ? "0 0 12px rgba(16, 185, 129, 0.6), 0 4px 12px rgba(16, 185, 129, 0.3)"
+                              : mySecretState === "set" && !isEmpty
+                              ? "0 4px 12px rgba(25, 118, 210, 0.3)"
+                              : mySecretState === "typing" && isEmpty
+                              ? "0 2px 8px rgba(0, 0, 0, 0.2)"
+                              : "0 1px 3px rgba(0, 0, 0, 0.1)",
+                          animation:
+                            isReadyToSubmit
+                              ? "pulse 2s ease-in-out infinite"
+                              : mySecretState === "typing" && isEmpty
+                              ? "pulse 1.5s ease-in-out infinite"
+                              : "none",
+                        }}
+                      >
+                        {mySecretState === "typing"
+                          ? letter.trim()
+                          : letter || ""}
+                      </div>
+                    );
+                  })}
                 </div>
 
                 {canSetSecret && secretWordInput.length === 5 && (
-                  <div className="text-center text-xs text-white/70">
-                    Press{" "}
-                    <span className="font-semibold text-white">Enter</span> to
-                    lock your word
-                  </div>
+                  <SmartHint
+                    show={true}
+                    message="Press Enter"
+                    position="below"
+                    autoHide={4000}
+                    storageKey="duel_secret_word_hint_seen"
+                  />
                 )}
 
-                <div
-                  className="relative flex justify-center"
-                  style={{
-                    width:
-                      secretRowWidth +
-                      (canSetSecret ? diceSize + secretGap : 0),
-                    minHeight: secretTileSize,
-                    paddingRight: canSetSecret ? diceSize + secretGap : 0,
-                  }}
-                >
-                  {/* Secret Word Tiles */}
-                  <div
-                    className="flex"
+                {canSetSecret && (
+                  <motion.button
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={handleGenerateSecret}
+                    disabled={genBusy}
+                    title="Generate a random word"
+                    aria-label="Generate a random word"
+                    className="w-12 h-12 rounded-full border border-white/20 bg-white/10 backdrop-blur-sm shadow-lg grid place-items-center text-xl"
+                    whileHover={{
+                      scale: 1.1,
+                      backgroundColor: "rgba(255, 255, 255, 0.15)",
+                    }}
+                    whileTap={{ scale: 0.95 }}
                     style={{
-                      gap: secretGap,
+                      position: "absolute",
+                      right: 0,
+                      top: "50%",
+                      marginTop: -(diceSize / 2),
+                      width: diceSize,
+                      height: diceSize,
+                      fontSize: Math.round(diceSize * 0.45),
+                      transformOrigin: "center",
                     }}
                   >
-                    {Array.from({ length: 5 }).map((_, i) => {
-                      const typingLen = secretWordInput.length;
-                      const show =
-                        mySecretState === "typing"
-                          ? secretWordInput.padEnd(5, " ")
-                          : mySecretWord || "";
-                      const letter = show[i] || "";
-                      const isEmpty = letter === "" || letter === " ";
-                      const isActive =
-                        mySecretState === "typing" &&
-                        isEmpty &&
-                        i === typingLen;
+                    🎲
+                  </motion.button>
+                )}
+              </div>
+            </div>
+          )}
 
-                      let bg = "var(--tile-empty-bg)",
-                        color = "var(--tile-text)",
-                        border = "1px solid var(--tile-empty-border)";
-
-                      if (mySecretState === "set" && !isEmpty) {
-                        bg = "#e3f2fd";
-                        color = "#1976d2";
-                        border = "1px solid #1976d2";
-                      } else if (isActive) {
-                        bg = "var(--tile-typed-bg)";
-                        border = "1px solid #999";
-                      }
-
-                      if (secretErrorActive) {
-                        bg = "#fee2e2";
-                        color = "#991b1b";
-                        border = "1px solid #ef4444";
-                      }
-
-                      return (
-                        <div
-                          key={`secret-${i}`}
-                          className={secretErrorActive ? "tile-error" : ""}
-                          style={{
-                            width: secretTileSize,
-                            height: secretTileSize,
-                            display: "grid",
-                            placeItems: "center",
-                            background: bg,
-                            color,
-                            fontWeight: "bold",
-                            fontSize: secretFontSize,
-                            lineHeight: 1,
-                            textTransform: "uppercase",
-                            border,
-                            borderRadius: 6,
-                            overflow: "hidden",
-                            transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-                            transform:
-                              mySecretState === "typing" && isEmpty
-                                ? "scale(1.05)"
-                                : "scale(1)",
-                            boxShadow:
-                              mySecretState === "set" && !isEmpty
-                                ? "0 4px 12px rgba(25, 118, 210, 0.3)"
-                                : mySecretState === "typing" && isEmpty
-                                ? "0 2px 8px rgba(0, 0, 0, 0.2)"
-                                : "0 1px 3px rgba(0, 0, 0, 0.1)",
-                            animation:
-                              mySecretState === "typing" && isEmpty
-                                ? "pulse 1.5s ease-in-out infinite"
-                                : "none",
-                          }}
-                        >
-                          {mySecretState === "typing"
-                            ? letter.trim()
-                            : letter || ""}
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Generate Button */}
-                  {canSetSecret && (
-                    <motion.button
-                      type="button"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={handleGenerateSecret}
-                      disabled={genBusy}
-                      title="Generate a random word"
-                      aria-label="Generate a random word"
-                      className="w-12 h-12 rounded-full border border-white/20 bg-white/10 backdrop-blur-sm shadow-lg grid place-items-center text-xl"
-                      whileHover={{
-                        scale: 1.1,
-                        backgroundColor: "rgba(255, 255, 255, 0.15)",
-                      }}
-                      whileTap={{ scale: 0.95 }}
-                      style={{
-                        position: "absolute",
-                        right: 0,
-                        top: "50%",
-                        marginTop: -(diceSize / 2),
-                        width: diceSize,
-                        height: diceSize,
-                        fontSize: Math.round(diceSize * 0.45),
-                        transformOrigin: "center",
-                      }}
-                    >
-                      {"\u{1F3B2}"}
-                    </motion.button>
-                  )}
+          {/* Desktop: Side-by-side boards */}
+          <div className="flex flex-1 min-h-0 gap-4 w-full max-w-7xl">
+            {/* Player Board */}
+            <div className="flex-1 flex flex-col items-center min-h-0 gap-2">
+              <div className="text-base font-semibold text-white text-center flex-shrink-0">
+                {me?.name || "You"}
+              </div>
+              <div className="w-full flex-1 flex justify-center items-start min-h-0">
+                <div className="w-full h-full">
+                  <Board
+                    guesses={me?.guesses || []}
+                    activeGuess={activeGuessForMe}
+                    errorShakeKey={shakeKey}
+                    errorActiveRow={showActiveError}
+                    secretWord={null}
+                    isOwnBoard={true}
+                    autoFit={true}
+                    showGuessesLabel={false}
+                    secretWordReveal={showSecretReveal}
+                    guessFlipKey={guessFlipKey}
+                    onMeasure={handleBoardMeasure}
+                    padding={boardPadding}
+                    gap={10}
+                    minTile={boardTileBounds.min}
+                    maxTile={boardTileBounds.max}
+                    verticalAlign="start"
+                    horizontalAlign="center"
+                  />
                 </div>
               </div>
-            )}
-            {/* Guesses Board Section */}
-            {showBoardArea ? (
-              <div
-                className={`flex flex-col items-center flex-1 min-h-0 ${
-                  isMobile ? "gap-1" : "gap-2"
-                }`}
-              >
-                <div className="text-[10px] uppercase tracking-[0.35em] text-white/50 text-center flex-shrink-0">
-                  Guesses
-                </div>
+            </div>
 
-                <div className="w-full flex-1 flex justify-center items-start min-h-0">
-                  <div
-                    className={`w-full h-full mx-auto ${
-                      isMobile ? "max-w-[20rem]" : "max-w-md"
-                    }`}
+            {/* Opponent Board */}
+            <div className="flex-1 flex flex-col items-center min-h-0 gap-2">
+              <div className="text-base font-semibold text-white text-center flex-shrink-0">
+                {opponent?.name || "Opponent"}
+              </div>
+              <div className="w-full flex-1 flex justify-center items-start min-h-0">
+                <div className="w-full h-full">
+                  <Board
+                    guesses={opponentGuesses}
+                    activeGuess={opponentActiveGuess}
+                    errorShakeKey={0}
+                    errorActiveRow={false}
+                    secretWord={null}
+                    isOwnBoard={false}
+                    autoFit={true}
+                    showGuessesLabel={false}
+                    secretWordReveal={false}
+                    guessFlipKey={0}
+                    padding={boardPadding}
+                    gap={10}
+                    minTile={boardTileBounds.min}
+                    maxTile={boardTileBounds.max}
+                    verticalAlign="start"
+                    horizontalAlign="center"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Mobile: Single board view with switching
+    return (
+      <div className="flex flex-col items-center flex-1 min-h-0 gap-4">
+        {/* Secret Word Entry Section */}
+        {showSecretEntry && (
+          <div className="flex flex-col items-center gap-2 flex-shrink-0">
+            <div className="text-[10px] uppercase tracking-[0.35em] text-white/50 text-center">
+              Choose your secret word
+            </div>
+
+            <div
+              className="relative flex justify-center"
+              style={{
+                width:
+                  secretRowWidth +
+                  (canSetSecret ? diceSize + secretGap : 0),
+                minHeight: secretTileSize,
+                paddingRight: canSetSecret ? diceSize + secretGap : 0,
+              }}
+            >
+              {/* Secret Word Tiles */}
+              <div className="flex relative" style={{ gap: secretGap }}>
+                {Array.from({ length: 5 }).map((_, i) => {
+                  const typingLen = secretWordInput.length;
+                  const show =
+                    mySecretState === "typing"
+                      ? secretWordInput.padEnd(5, " ")
+                      : mySecretWord || "";
+                  const letter = show[i] || "";
+                  const isEmpty = letter === "" || letter === " ";
+                  const isActive =
+                    mySecretState === "typing" &&
+                    isEmpty &&
+                    i === typingLen;
+
+                  let bg = "var(--tile-empty-bg)",
+                    color = "var(--tile-text)",
+                    border = "1px solid var(--tile-empty-border)";
+
+                  const isReadyToSubmit = canSetSecret && secretWordInput.length === 5 && !isEmpty;
+                  
+                  if (mySecretState === "set" && !isEmpty) {
+                    bg = "#e3f2fd";
+                    color = "#1976d2";
+                    border = "1px solid #1976d2";
+                  } else if (isReadyToSubmit) {
+                    bg = "var(--tile-typed-bg)";
+                    border = "2px solid #10b981";
+                  } else if (isActive) {
+                    bg = "var(--tile-typed-bg)";
+                    border = "1px solid #999";
+                  }
+
+                  if (secretErrorActive) {
+                    bg = "#fee2e2";
+                    color = "#991b1b";
+                    border = "1px solid #ef4444";
+                  }
+
+                  return (
+                    <div
+                      key={`secret-${i}`}
+                      className={secretErrorActive ? "tile-error" : ""}
+                      style={{
+                        width: secretTileSize,
+                        height: secretTileSize,
+                        display: "grid",
+                        placeItems: "center",
+                        background: bg,
+                        color,
+                        fontWeight: "bold",
+                        fontSize: secretFontSize,
+                        lineHeight: 1,
+                        textTransform: "uppercase",
+                        border,
+                        borderRadius: 6,
+                        overflow: "hidden",
+                        transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                        transform:
+                          mySecretState === "typing" && isEmpty
+                            ? "scale(1.05)"
+                            : "scale(1)",
+                        boxShadow:
+                          isReadyToSubmit
+                            ? "0 0 12px rgba(16, 185, 129, 0.6), 0 4px 12px rgba(16, 185, 129, 0.3)"
+                            : mySecretState === "set" && !isEmpty
+                            ? "0 4px 12px rgba(25, 118, 210, 0.3)"
+                            : mySecretState === "typing" && isEmpty
+                            ? "0 2px 8px rgba(0, 0, 0, 0.2)"
+                            : "0 1px 3px rgba(0, 0, 0, 0.1)",
+                        animation:
+                          isReadyToSubmit
+                            ? "pulse 2s ease-in-out infinite"
+                            : mySecretState === "typing" && isEmpty
+                            ? "pulse 1.5s ease-in-out infinite"
+                            : "none",
+                      }}
+                    >
+                      {mySecretState === "typing"
+                        ? letter.trim()
+                        : letter || ""}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {canSetSecret && secretWordInput.length === 5 && (
+                <SmartHint
+                  show={true}
+                  message="Press Enter"
+                  position="below"
+                  autoHide={4000}
+                  storageKey="duel_secret_word_hint_seen"
+                />
+              )}
+
+              {canSetSecret && (
+                <motion.button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={handleGenerateSecret}
+                  disabled={genBusy}
+                  title="Generate a random word"
+                  aria-label="Generate a random word"
+                  className="w-12 h-12 rounded-full border border-white/20 bg-white/10 backdrop-blur-sm shadow-lg grid place-items-center text-xl"
+                  whileHover={{
+                    scale: 1.1,
+                    backgroundColor: "rgba(255, 255, 255, 0.15)",
+                  }}
+                  whileTap={{ scale: 0.95 }}
+                  style={{
+                    position: "absolute",
+                    right: 0,
+                    top: "50%",
+                    marginTop: -(diceSize / 2),
+                    width: diceSize,
+                    height: diceSize,
+                    fontSize: Math.round(diceSize * 0.45),
+                    transformOrigin: "center",
+                  }}
+                >
+                  🎲
+                </motion.button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Mobile: Single board view with switching */}
+        {showBoardArea ? (
+          <div className="flex flex-col items-center flex-1 min-h-0 gap-2 w-full">
+            <div className="text-[10px] uppercase tracking-[0.35em] text-white/50 text-center flex-shrink-0">
+              Guesses
+            </div>
+
+            <div 
+              className="w-full flex-1 flex justify-center items-start min-h-0 relative"
+              {...(isMobile ? swipeHandlers : {})}
+            >
+              <AnimatePresence mode="wait">
+                {mobileView === "me" ? (
+                  <motion.div
+                    key="player-board"
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
+                    transition={{ duration: 0.3 }}
+                    className={`w-full h-full mx-auto max-w-[20rem] absolute inset-0`}
                   >
                     <Board
                       guesses={me?.guesses || []}
@@ -818,89 +916,139 @@ function DuelGameScreen({
                       guessFlipKey={guessFlipKey}
                       onMeasure={handleBoardMeasure}
                       padding={boardPadding}
+                      gap={6}
                       minTile={boardTileBounds.min}
                       maxTile={boardTileBounds.max}
                       verticalAlign="start"
                       horizontalAlign="center"
                     />
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center gap-3 flex-1 min-h-0 justify-center text-center px-6">
-                <div className="text-[10px] uppercase tracking-[0.35em] text-white/50">
-                  Guesses
-                </div>
-                <p className="text-sm text-white/60">
-                  The board appears once both players lock in their secret words
-                  and the round begins.
-                </p>
-              </div>
-            )}
-          </div>
-        </main>
-
-        {/* Footer */}
-        <footer
-          className={`w-full px-2 sm:px-4 flex-shrink-0 ${
-            isMobile ? "py-1.5" : "py-2"
-          }`}
-          style={{
-            paddingBottom: isMobile
-              ? "calc(env(safe-area-inset-bottom) + 0.25rem)"
-              : undefined,
-          }}
-        >
-          <div className="mx-auto w-full max-w-5xl">
-            {isGameEnded ? (
-              <div className="text-center">
-                <GlowButton
-                  onClick={handleRematch}
-                  disabled={hasRequestedRematch}
-                  size="lg"
-                  variant={hasRequestedRematch ? "secondary" : "primary"}
-                >
-                  {hasRequestedRematch
-                    ? "\u2705 Rematch Requested"
-                    : "\u{1F680} Request Rematch"}
-                </GlowButton>
-                <p className="text-sm text-white/60 mt-2">{rematchStatus}</p>
-              </div>
-            ) : !canSetSecret && !canGuess ? (
-              <div className="text-center py-4">
-                <p className="text-lg font-medium text-white/80">
-                  {!myReady
-                    ? "Set your secret word to continue..."
-                    : !oppReady
-                    ? "Waiting for opponent to set their secret word..."
-                    : "Both players ready! Starting..."}
-                </p>
-              </div>
-            ) : null}
-          </div>
-        </footer>
-
-        {/* Keyboard - Now in its own grid row */}
-        {(canSetSecret || canGuess) && (
-          <div
-            className="w-full px-2 sm:px-4 pb-2 flex-shrink-0"
-            style={{
-              paddingBottom: isMobile
-                ? "calc(env(safe-area-inset-bottom) + 0.25rem)"
-                : undefined,
-            }}
-          >
-            <div className="mx-auto w-full max-w-5xl">
-              <Keyboard
-                onKeyPress={handleKeyPress}
-                letterStates={letterStates}
-              />
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="opponent-board"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    transition={{ duration: 0.3 }}
+                    className={`w-full h-full mx-auto max-w-[20rem] absolute inset-0`}
+                  >
+                    <Board
+                      guesses={opponentGuesses}
+                      activeGuess={opponentActiveGuess}
+                      errorShakeKey={0}
+                      errorActiveRow={false}
+                      secretWord={null}
+                      isOwnBoard={false}
+                      autoFit={true}
+                      showGuessesLabel={false}
+                      secretWordReveal={false}
+                      guessFlipKey={0}
+                      padding={boardPadding}
+                      gap={6}
+                      minTile={boardTileBounds.min}
+                      maxTile={boardTileBounds.max}
+                      verticalAlign="start"
+                      horizontalAlign="center"
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-3 flex-1 min-h-0 justify-center text-center px-6">
+            <div className="text-[10px] uppercase tracking-[0.35em] text-white/50">
+              Guesses
+            </div>
+            <p className="text-sm text-white/60">
+              The board appears once both players lock in their secret words
+              and the round begins.
+            </p>
           </div>
         )}
       </div>
-    </GradientBackground>
+    );
+  };
+
+  // Custom player section rendering for duel mode
+  const renderPlayerSection = () => {
+    if (isMobile) {
+      // Mobile: Minimalized cards with micro grid in opponent card
+      return (
+        <section className="flex-shrink-0 px-2 py-2">
+          <div className="flex gap-2 justify-center items-stretch">
+            <UnifiedPlayerCard
+              {...myPlayerData}
+              variant="compact"
+              size="sm"
+              isMobile={true}
+              onSelect={() => setMobileView("me")}
+              guesses={me?.guesses || []}
+            />
+            <UnifiedPlayerCard
+              {...opponentPlayerData}
+              variant="compact"
+              size="sm"
+              isMobile={true}
+              onSelect={() => setMobileView("opponent")}
+              showMicroGrid={true}
+              guesses={opponentGuesses}
+            />
+          </div>
+        </section>
+      );
+    } else {
+      // Desktop: Side-by-side cards
+      return (
+        <section className="flex-shrink-0">
+          <div className="grid grid-cols-2 gap-3">
+            <UnifiedPlayerCard
+              {...myPlayerData}
+              variant="detailed"
+              size="md"
+            />
+            <UnifiedPlayerCard
+              {...opponentPlayerData}
+              variant="detailed"
+              size="md"
+            />
+          </div>
+        </section>
+      );
+    }
+  };
+
+  return (
+    <GameLayout
+      mode={mode}
+      headerTitle={headerTitle}
+      timerDeadline={deadline}
+      timerLabel="Time Remaining:"
+      showTimer={!!deadline && !isGameEnded}
+      statusMessage={statusMessage}
+      players={[]}
+      playerLayout="grid-cols-2"
+      showPlayerSection={true}
+      guesses={me?.guesses || []}
+      activeGuess={activeGuessForMe}
+      letterStates={letterStates}
+      onKeyPress={handleKeyPress}
+      keyboardDisabled={submittingGuess || isGameEnded}
+      showKeyboard={!isGameEnded && (isMobile ? mobileView === "me" : true)}
+      effects={{
+        showParticles,
+        showConfetti,
+        showCorrectParticles,
+        showStreakParticles,
+        particlePosition,
+        streak: me?.streak || 0,
+      }}
+      renderPlayerSection={renderPlayerSection}
+      renderBoard={renderBoard}
+      renderFooter={renderFooter}
+    />
   );
 }
 
 export default DuelGameScreen;
+
