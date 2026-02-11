@@ -1,11 +1,12 @@
 import React from "react";
 import ParticleEffect from "../ParticleEffect";
 import ConfettiEffect from "../ConfettiEffect";
+import AudioFeedback from "./AudioFeedback";
 
 /**
- * GameEffects - Unified wrapper for particle and confetti effects
+ * GameEffects - Unified wrapper for particle, confetti, and audio effects
  * 
- * Consolidates particle and confetti effects that were scattered across different game screens
+ * Consolidates all game effects that were scattered across different game screens
  */
 export function GameEffects({
   // Particle effects
@@ -20,12 +21,20 @@ export function GameEffects({
   // Confetti effects
   showConfetti = false,
   
+  // Audio effects
+  lastGuess = null,
+  lastPattern = null,
+  hasError = false,
+  isVictory = false,
+  isDefeat = false,
+  isTyping = false,
+  onGuessSubmit = false,
+  
   // Feature flags (can be controlled by mode theme)
   enableParticles = true,
   enableConfetti = true,
+  enableAudio = true,
 }) {
-  if (!enableParticles && !enableConfetti) return null;
-  
   return (
     <>
       {enableParticles && (
@@ -61,9 +70,20 @@ export function GameEffects({
       {enableConfetti && (
         <ConfettiEffect trigger={showConfetti} />
       )}
+      {enableAudio && (
+        <AudioFeedback
+          lastGuess={lastGuess}
+          lastPattern={lastPattern}
+          hasError={hasError}
+          isVictory={isVictory}
+          isDefeat={isDefeat}
+          isTyping={isTyping}
+          onGuessSubmit={onGuessSubmit}
+          enabled={enableAudio}
+        />
+      )}
     </>
   );
 }
 
 export default GameEffects;
-
