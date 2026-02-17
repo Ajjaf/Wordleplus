@@ -299,8 +299,8 @@ function DuelGameScreen({
       if (w && w.length === 5) {
         setSecretWordInput(w);
       }
-    } catch (e) {
-      // Error occurred
+    } catch (error) {
+      console.error("Failed to generate random word:", error);
     } finally {
       setGenBusy(false);
     }

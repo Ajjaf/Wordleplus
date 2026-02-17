@@ -53,8 +53,8 @@ export default function SecretWordInput({
         setWord(w);
         inputRef.current?.focus();
       }
-    } catch (e) {
-      // Failed to generate word
+    } catch (error) {
+      console.error("Failed to generate word:", error);
     }
   }
 

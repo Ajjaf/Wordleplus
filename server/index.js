@@ -25,25 +25,50 @@ import {
   sanitizeWord,
   isSafeInput,
 } from "./utils/sanitize.js";
+import * as Sentry from "@sentry/node";
+import { PrismaClient } from "@prisma/client";
+import { config, validateConfig } from "./config/env.js";
+import {
+  apiLimiter,
+  authLimiter,
+  checkSocketRateLimit,
+  clearSocketRateLimits,
+} from "./middleware/rateLimiter.js";
+
+const prisma = new PrismaClient();
+
+// ---------- Sentry error tracking (optional) ----------
+if (config.sentryDsn) {
+  Sentry.init({
+    dsn: config.sentryDsn,
+    environment: config.sentryEnvironment,
+    tracesSampleRate: 1.0,
+  });
+}
+
+// ---------- Validate environment before proceeding ----------
+if (!config.isTest) {
+  try {
+    validateConfig();
+  } catch (error) {
+    console.error("❌ Configuration Error:", error.message);
+    process.exit(1);
+  }
+}
 
 // ---------- Word list loader (.txt) ----------
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const WORDLIST_PATH =
-  process.env.WORDLIST_PATH || path.join(__dirname, "words.txt");
+  config.wordlistPath || path.join(__dirname, "words.txt");
 const GUESSES_PATH =
-  process.env.GUESSES_PATH || path.join(__dirname, "allowed_guesses.txt");
+  config.guessesPath || path.join(__dirname, "allowed_guesses.txt");
 
 let WORDS = [];
 let WORDSET = new Set();
 let GUESSES = [];
 let GUESSSET = new Set();
-const DEFAULT_ROUND_MS = 6 * 60 * 1000; // 6 minutes
-const envRoundMs = Number(process.env.DUEL_ROUND_MS);
-const ROUND_MS =
-  Number.isFinite(envRoundMs) && envRoundMs > 0
-    ? Math.min(envRoundMs, DEFAULT_ROUND_MS)
-    : DEFAULT_ROUND_MS;
+const ROUND_MS = config.duelRoundMs;
 const AI_BATTLE_COUNTDOWN_MS = 12 * 1000; // 12 seconds between AI-hosted rounds
 
 function loadWordFile(filePath) {
@@ -119,12 +144,16 @@ function isValidWordLocal(word) {
 const app = express();
 export { app };
 
-const DEFAULT_ALLOWED_ORIGINS = [
-  "http://localhost:5000",
-  "http://127.0.0.1:5000",
-  "http://localhost:5173",
-  "http://127.0.0.1:5173",
-];
+// In development, allow common local origins so things work out of the box.
+// In production, CORS is driven entirely by BASE_URL + CORS_ALLOWED_ORIGINS.
+const DEV_ORIGINS = config.isProduction
+  ? []
+  : [
+      "http://localhost:5000",
+      "http://127.0.0.1:5000",
+      "http://localhost:5173",
+      "http://127.0.0.1:5173",
+    ];
 
 const normalizeOrigin = (value) => {
   if (!value) return null;
@@ -146,15 +175,15 @@ const getHostname = (value) => {
 
 const allowedOrigins = (() => {
   const origins = new Set(
-    DEFAULT_ALLOWED_ORIGINS.map(normalizeOrigin).filter(Boolean)
+    DEV_ORIGINS.map(normalizeOrigin).filter(Boolean)
   );
 
-  const baseOrigin = normalizeOrigin(process.env.BASE_URL);
+  const baseOrigin = normalizeOrigin(config.baseUrl);
   if (baseOrigin) {
     origins.add(baseOrigin);
   }
 
-  const extraOrigins = process.env.CORS_ALLOWED_ORIGINS?.split(",") ?? [];
+  const extraOrigins = config.corsAllowedOrigins;
   for (const origin of extraOrigins) {
     const normalized = normalizeOrigin(origin.trim());
     if (normalized) {
@@ -166,10 +195,7 @@ const allowedOrigins = (() => {
 })();
 
 const allowedOriginSet = new Set(allowedOrigins);
-const allowedOriginSuffixes =
-  process.env.CORS_ALLOWED_ORIGIN_SUFFIXES?.split(",")
-    .map((suffix) => suffix.trim())
-    .filter(Boolean) ?? [];
+const allowedOriginSuffixes = config.corsAllowedOriginSuffixes;
 
 const hostnameMatchesSuffix = (hostname, suffix) => {
   if (!hostname || !suffix) return false;
@@ -223,24 +249,27 @@ app.options("*", cors(corsOptions));
 app.use(express.json());
 app.use(cookieParser());
 
-const shouldSetupAuth =
-  process.env.NODE_ENV !== "test" && process.env.SKIP_AUTH_SETUP !== "true";
+// ---------- Rate limiting ----------
+app.use("/api/", apiLimiter);
+app.use("/api/login", authLimiter);
+app.use("/api/callback", authLimiter);
+
+const shouldSetupAuth = !config.isTest && !config.skipAuthSetup;
 
 if (shouldSetupAuth) {
   await setupAuth(app);
 }
 
 // Serve static files from client build in production
-if (process.env.NODE_ENV === "production") {
+if (config.isProduction) {
   const clientDistPath = path.join(__dirname, "..", "client", "dist");
   app.use(express.static(clientDistPath));
 } else {
   // In development, show helpful page with link to frontend
   app.get("/", (_req, res) => {
-    const replitDomain = process.env.REPLIT_DEV_DOMAIN;
-    const frontendUrl = replitDomain
-      ? `https://5000--${replitDomain}`
-      : "http://localhost:5000";
+    const frontendUrl = config.replitDevDomain
+      ? `https://5000--${config.replitDevDomain}`
+      : config.baseUrl;
 
     res.send(`
       <!DOCTYPE html>
@@ -270,8 +299,46 @@ if (process.env.NODE_ENV === "production") {
   });
 }
 
-// Health + validate
-app.get("/health", (_req, res) => res.json({ ok: true }));
+// ---------- Health / readiness / liveness ----------
+app.get("/health", async (_req, res) => {
+  const health = {
+    status: "ok",
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: config.nodeEnv,
+  };
+
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    health.database = "connected";
+  } catch {
+    health.database = "disconnected";
+    health.status = "degraded";
+  }
+
+  health.wordLists = {
+    words: WORDSET.size,
+    guesses: GUESSSET.size,
+  };
+
+  health.activeRooms = rooms.size;
+
+  const statusCode = health.status === "ok" ? 200 : 503;
+  res.status(statusCode).json(health);
+});
+
+app.get("/ready", (_req, res) => {
+  const isReady = WORDSET.size > 0 && GUESSSET.size > 0;
+  if (isReady) {
+    res.status(200).json({ ready: true });
+  } else {
+    res.status(503).json({ ready: false, reason: "Word lists not loaded" });
+  }
+});
+
+app.get("/alive", (_req, res) => {
+  res.status(200).json({ alive: true });
+});
 app.get("/api/validate", (req, res) => {
   const word = (req.query.word || "").toString();
   res.json({ valid: isValidWordLocal(word) });
@@ -565,9 +632,8 @@ const VALID_MODES = new Set(["duel", "shared", "battle", "battle_ai"]);
 const HOST_DISCONNECT_GRACE_MS = 2 * 60 * 1000; // 2 minutes
 
 const AI_BATTLE_EVENT_BASE_KEY = "ai_battle_hour";
-let aiBattleEventActive =
-  String(process.env.AI_BATTLE_EVENT_ACTIVE || "").toLowerCase() === "true";
-const AI_BATTLE_EVENT_SLOT = process.env.AI_BATTLE_EVENT_SLOT || "20:00-21:00";
+let aiBattleEventActive = config.aiBattleEventActive;
+const AI_BATTLE_EVENT_SLOT = config.aiBattleEventSlot;
 const AI_BATTLE_EVENT_INTERVAL_MS = 30 * 1000;
 let ioRef = null;
 
@@ -860,6 +926,47 @@ app.get("/api/events/status", (_req, res) => {
   res.json(getAiBattleEventStatus());
 });
 
+// ---------- Leaderboard API ----------
+app.get("/api/leaderboard/top-players", async (_req, res) => {
+  try {
+    const topPlayers = await prisma.user.findMany({
+      where: { isAnonymous: false, totalWins: { gt: 0 } },
+      orderBy: { totalWins: "desc" },
+      take: 10,
+      select: {
+        displayName: true,
+        username: true,
+        totalWins: true,
+        totalGames: true,
+      },
+    });
+    res.json(topPlayers);
+  } catch (error) {
+    console.error("Leaderboard error:", error);
+    res.status(500).json({ error: "Failed to fetch leaderboard" });
+  }
+});
+
+app.get("/api/leaderboard/streaks", async (_req, res) => {
+  try {
+    const topStreaks = await prisma.user.findMany({
+      where: { isAnonymous: false, longestStreak: { gt: 0 } },
+      orderBy: { longestStreak: "desc" },
+      take: 10,
+      select: {
+        displayName: true,
+        username: true,
+        streak: true,
+        longestStreak: true,
+      },
+    });
+    res.json(topStreaks);
+  } catch (error) {
+    console.error("Streaks error:", error);
+    res.status(500).json({ error: "Failed to fetch streaks" });
+  }
+});
+
 function normalizeMode(mode) {
   const candidate = (mode || "").toString().toLowerCase();
   return VALID_MODES.has(candidate) ? candidate : "duel";
@@ -1089,6 +1196,9 @@ io.on("connection", (socket) => {
   });
 
   socket.on("createRoom", ({ name, mode = "duel" }, cb) => {
+    if (!checkSocketRateLimit(socket.id, "createRoom", 5)) {
+      return cb?.({ error: "Too many rooms created. Slow down!" });
+    }
     // Sanitize and validate inputs
     const sanitizedName = sanitizePlayerName(name);
     if (!sanitizedName || !isSafeInput(sanitizedName)) {
@@ -1149,6 +1259,9 @@ io.on("connection", (socket) => {
   });
 
   socket.on("joinRoom", ({ name, roomId }, cb) => {
+    if (!checkSocketRateLimit(socket.id, "joinRoom", 10)) {
+      return cb?.({ error: "Too many join attempts. Slow down!" });
+    }
     // Sanitize and validate inputs
     const sanitizedRoomId = sanitizeRoomId(roomId);
     const sanitizedName = sanitizePlayerName(name);
@@ -1273,6 +1386,9 @@ io.on("connection", (socket) => {
   });
 
   socket.on("makeGuess", ({ roomId, guess }, cb) => {
+    if (!checkSocketRateLimit(socket.id, "makeGuess", 10)) {
+      return cb?.({ error: "Too many guesses. Slow down!" });
+    }
     // Sanitize inputs
     const sanitizedRoomId = sanitizeRoomId(roomId);
     const sanitizedGuess = sanitizeWord(guess);
@@ -1713,6 +1829,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
+    clearSocketRateLimits(socket.id);
     const now = Date.now();
     for (const [id, room] of rooms) {
       const player = room.players[socket.id];
@@ -1873,10 +1990,10 @@ const startRoomCleanupInterval = () =>
   }, 5 * 60 * 1000);
 
 const roomCleanupInterval =
-  process.env.NODE_ENV !== "test" ? startRoomCleanupInterval() : null;
+  !config.isTest ? startRoomCleanupInterval() : null;
 
 const aiBattleEventInterval =
-  isAiBattleEventActive() && process.env.NODE_ENV !== "test"
+  isAiBattleEventActive() && !config.isTest
     ? setInterval(() => ensureAiBattleEventRoom(), AI_BATTLE_EVENT_INTERVAL_MS)
     : null;
 
@@ -1945,8 +2062,13 @@ function sanitizeRoom(room) {
   };
 }
 
+// ---------- Sentry error handler (must be before other error handlers) ----------
+if (config.sentryDsn) {
+  Sentry.setupExpressErrorHandler(app);
+}
+
 // ---------- Catch-all route for client-side routing (production only) ----------
-if (process.env.NODE_ENV === "production") {
+if (config.isProduction) {
   app.get("*", (req, res) => {
     const clientDistPath = path.join(__dirname, "..", "client", "dist");
     res.sendFile(path.join(clientDistPath, "index.html"));
@@ -1954,9 +2076,9 @@ if (process.env.NODE_ENV === "production") {
 }
 
 // ---------- Start server ----------
-const PORT = process.env.PORT || 8080;
+const PORT = config.port;
 
-if (process.env.NODE_ENV !== "test") {
+if (!config.isTest) {
   httpServer.listen(PORT, "0.0.0.0", () =>
     console.log("Server listening on", PORT)
   );

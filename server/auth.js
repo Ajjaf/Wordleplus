@@ -9,26 +9,25 @@ import {
   mergeAnonymousUser,
   mergeAnonymousUserIntoExisting,
 } from "./mergeService.js";
+import { config as envConfig } from "./config/env.js";
 
 const prisma = new PrismaClient();
 
 // Store session store reference for socket authentication
 let sessionStoreRef = null;
 
-if (!process.env.REPLIT_DOMAINS) {
+if (!envConfig.replitDomains) {
   console.warn("REPLIT_DOMAINS not set - auth may not work in deployment");
 }
 
-const DEFAULT_FRONTEND_URL =
-  (process.env.BASE_URL && process.env.BASE_URL.replace(/\/$/, "")) ||
-  "http://localhost:5000";
+const DEFAULT_FRONTEND_URL = envConfig.baseUrl;
 
 const getOidcConfig = memoize(
   async () => {
     return await client.discovery(
-      new URL(process.env.ISSUER_URL ?? "https://replit.com/oidc"),
-      process.env.REPL_ID,
-      { client_secret: process.env.GOOGLE_CLIENT_SECRET }
+      new URL(envConfig.issuerUrl),
+      envConfig.replId,
+      { client_secret: envConfig.googleClientSecret }
     );
   },
   { maxAge: 3600 * 1000 }
@@ -38,7 +37,7 @@ export function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
   const pgStore = connectPg(session);
   const sessionStore = new pgStore({
-    conString: process.env.DATABASE_URL,
+    conString: envConfig.databaseUrl,
     createTableIfMissing: true,
     ttl: sessionTtl,
     tableName: "user_sessions", // Different from our Session model to avoid conflicts
@@ -47,9 +46,9 @@ export function getSession() {
   // Store reference for socket authentication
   sessionStoreRef = sessionStore;
 
-  const sessionSecret = process.env.SESSION_SECRET;
+  const sessionSecret = envConfig.sessionSecret;
   if (!sessionSecret) {
-    if (process.env.NODE_ENV === "production") {
+    if (envConfig.isProduction) {
       throw new Error(
         "SESSION_SECRET must be set in production. Refusing to start with an insecure default."
       );
@@ -67,11 +66,11 @@ export function getSession() {
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: envConfig.isProduction,
       sameSite:
-        process.env.SESSION_COOKIE_SAME_SITE ||
-        (process.env.NODE_ENV === "production" ? "none" : "lax"),
-      domain: process.env.SESSION_COOKIE_DOMAIN || undefined,
+        envConfig.sessionCookieSameSite ||
+        (envConfig.isProduction ? "none" : "lax"),
+      domain: envConfig.sessionCookieDomain,
       maxAge: sessionTtl,
     },
   });
@@ -215,7 +214,7 @@ export async function setupAuth(app) {
   };
 
   // Setup passport strategies for each domain
-  const domains = process.env.REPLIT_DOMAINS?.split(",") || ["localhost"];
+  const domains = envConfig.replitDomains?.split(",") || ["localhost"];
   for (const domain of domains) {
     const hostOnly = domain.split(":")[0]; // <- ensures name matches req.hostname
 
@@ -278,7 +277,7 @@ export async function setupAuth(app) {
 
       if (endSession) {
         const url = client.buildEndSessionUrl(config, {
-          client_id: process.env.REPL_ID,
+          client_id: envConfig.replId,
           post_logout_redirect_uri: redirectTarget,
         });
         return res.redirect(url.href);

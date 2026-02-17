@@ -110,8 +110,8 @@ export default function SecretWordInputRow({
       setValue(w); // fill tiles…
       inputRef.current?.focus();
       // …but DO NOT auto-submit. User presses Enter to accept.
-    } catch (e) {
-      // Error occurred
+    } catch (error) {
+      console.error("Failed to generate word:", error);
       setError("Failed to generate word");
     }
   }

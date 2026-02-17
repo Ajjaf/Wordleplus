@@ -18,12 +18,34 @@ afterAll(async () => {
 });
 
 describe("Health endpoint", () => {
-  it("returns ok:true", async () => {
+  it("returns health info with expected fields", async () => {
     const response = await request(app).get("/health");
 
-    expect(response.status).toBe(200);
     expect(response.headers["content-type"]).toMatch(/application\/json/);
-    expect(response.body).toEqual({ ok: true });
+    expect(response.body).toHaveProperty("status");
+    expect(["ok", "degraded"]).toContain(response.body.status);
+    expect(response.body).toHaveProperty("timestamp");
+    expect(response.body).toHaveProperty("uptime");
+    expect(response.body).toHaveProperty("wordLists");
+    expect(response.body.wordLists.words).toBeGreaterThan(0);
+    expect(response.body.wordLists.guesses).toBeGreaterThan(0);
+    expect(response.body).toHaveProperty("activeRooms");
+  });
+});
+
+describe("Readiness and liveness endpoints", () => {
+  it("/ready returns ready:true when word lists are loaded", async () => {
+    const response = await request(app).get("/ready");
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ ready: true });
+  });
+
+  it("/alive returns alive:true", async () => {
+    const response = await request(app).get("/alive");
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ alive: true });
   });
 });
 

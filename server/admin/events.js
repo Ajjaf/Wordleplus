@@ -1,4 +1,5 @@
 import express from "express";
+import { config } from "../config/env.js";
 
 const DEFAULT_ERROR = { error: "Unauthorized" };
 
@@ -14,7 +15,7 @@ export default function createAdminEventsRouter({
   }
 
   const router = express.Router();
-  const adminToken = process.env.EVENT_ADMIN_TOKEN || "";
+  const adminToken = config.eventAdminToken;
 
   function requireAdmin(req, res, next) {
     if (!adminToken) {

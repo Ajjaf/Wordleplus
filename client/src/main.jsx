@@ -1,6 +1,7 @@
 
 import React, { Suspense } from "react";
 import { createRoot } from "react-dom/client";
+import * as Sentry from "@sentry/react";
 import "./index.css";
 import { ErrorNotificationProvider } from "./contexts/ErrorNotificationContext.jsx";
 import { AuthProvider } from "./contexts/AuthContext.jsx";
@@ -8,6 +9,21 @@ import { GameProvider } from "./contexts/GameContext.jsx";
 import { logger } from "./utils/logger";
 
 import App from "./App.jsx";
+
+// ---------- Sentry error tracking (optional) ----------
+if (import.meta.env.VITE_SENTRY_DSN) {
+  Sentry.init({
+    dsn: import.meta.env.VITE_SENTRY_DSN,
+    environment: import.meta.env.MODE,
+    integrations: [
+      Sentry.browserTracingIntegration(),
+      Sentry.replayIntegration(),
+    ],
+    tracesSampleRate: 1.0,
+    replaysSessionSampleRate: 0.1,
+    replaysOnErrorSampleRate: 1.0,
+  });
+}
 
 // Ensure React is available globally
 window.React = React;
