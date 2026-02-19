@@ -1,6 +1,6 @@
 
 import React, { Suspense } from "react";
-import { createRoot } from "react-dom/client";
+import ReactDOM from "react-dom/client";
 import * as Sentry from "@sentry/react";
 import "./index.css";
 import { ErrorNotificationProvider } from "./contexts/ErrorNotificationContext.jsx";
@@ -22,6 +22,13 @@ if (import.meta.env.VITE_SENTRY_DSN) {
     tracesSampleRate: 1.0,
     replaysSessionSampleRate: 0.1,
     replaysOnErrorSampleRate: 1.0,
+  });
+}
+
+// ---------- Accessibility audit in development (axe-core) ----------
+if (import.meta.env.DEV) {
+  import("@axe-core/react").then((axe) => {
+    axe.default(React, ReactDOM, 1000);
   });
 }
 
@@ -83,7 +90,7 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-createRoot(document.getElementById("root")).render(
+ReactDOM.createRoot(document.getElementById("root")).render(
   <ErrorBoundary>
     <Suspense
       fallback={

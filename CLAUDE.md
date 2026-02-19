@@ -223,6 +223,22 @@ duelMode.events.makeGuess(mockSocket, { guess: 'HOUSE' }, { io: mockIo, ... })
 - Verify `withCredentials: true` in client socket config for cookie auth
 - Use browser DevTools Network tab to inspect Socket.IO frames
 
+## Session Architecture
+
+WordlePlus uses two session tables:
+
+1. **express-session** (`user_sessions` table via connect-pg-simple)
+   - Used for: HTTP cookie-based authentication
+   - Stores: Express session data, Passport user ID
+   - Cleanup: Automatic via connect-pg-simple TTL
+
+2. **Prisma Session** (`Session` table)
+   - Used for: Device tracking, anonymous users
+   - Stores: Device ID, session tokens, metadata
+   - Cleanup: Automatic hourly via `server/jobs/cleanupSessions.js`
+
+This is intentional — express-session handles auth, Prisma Session handles device/analytics tracking.
+
 ## Important Constraints
 
 - **Word validation**: Server is source of truth; never trust client input

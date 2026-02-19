@@ -187,11 +187,12 @@ function Board({
           ...style,
         }}
       >
-        <div style={gridStyle}>
-          {/* Secret Word Row (if provided) */}
+        <div style={gridStyle} role="grid" aria-label="Wordle game board">
           {/* Secret Word Row (if provided) */}
           {secretWord !== null && (
             <div
+              role="row"
+              aria-label="Secret word"
               style={{ display: "contents" }}
               className={secretErrorActive ? "shake-hard" : ""}
               key={
@@ -246,6 +247,8 @@ function Board({
                 return (
                   <div
                     key={`secret-${i}`}
+                    role="gridcell"
+                    aria-label={isEmpty ? "Empty" : letter}
                     data-secret-word="true"
                     className={secretErrorActive ? "tile-error" : ""}
                     style={{
@@ -281,13 +284,7 @@ function Board({
                           ? `tileFlip 0.6s ease-in-out ${flipDelay}ms both`
                           : "none",
                     }}
-                    onClick={
-                      onSecretWordSubmit
-                        ? () => {
-                            // Handle secret word tile click if needed
-                          }
-                        : undefined
-                    }
+                    
                   >
                     {
                       // What to show in the tile:
@@ -337,6 +334,8 @@ function Board({
             return (
               <div
                 key={rowKey}
+                role="row"
+                aria-label={`Guess ${rowIdx + 1}`}
                 className={isActive && errorActiveRow ? "shake-hard" : ""}
                 style={{
                   display: "contents", // render tiles directly into the grid
@@ -397,9 +396,23 @@ function Board({
                   const tileClass =
                     isActive && errorActiveRow ? "tile-error" : "";
 
+                  const ariaState =
+                    state === "green"
+                      ? "correct"
+                      : state === "yellow"
+                      ? "present"
+                      : state === "gray"
+                      ? "absent"
+                      : "";
+                  const cellLabel = ch.trim()
+                    ? `${ch.trim()}${ariaState ? `, ${ariaState}` : ""}`
+                    : "Empty";
+
                   return (
                     <div
                       key={i}
+                      role="gridcell"
+                      aria-label={cellLabel}
                       className={tileClass}
                       style={{
                         width: computedTile,

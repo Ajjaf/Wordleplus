@@ -178,11 +178,13 @@ function Keyboard({
             : ""
         )}
       >
-        <div className="px-1 pt-1 pb-2 md:px-2 md:p-0">
+        <div className="px-1 pt-1 pb-2 md:px-2 md:p-0" role="group" aria-label="Game keyboard">
           <div className="flex flex-col gap-2 md:gap-1 items-center justify-center">
             {rows.map((row, idx) => (
               <div
                 key={idx}
+                role="group"
+                aria-label={`Keyboard row ${idx + 1}`}
                 className={cn(
                   "w-full flex items-center justify-center gap-2 md:gap-1",
                   idx === 1 && "px-2 md:px-3",

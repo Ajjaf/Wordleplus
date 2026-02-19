@@ -25,9 +25,11 @@ import {
   sanitizeWord,
   isSafeInput,
 } from "./utils/sanitize.js";
+import helmet from "helmet";
 import * as Sentry from "@sentry/node";
 import { PrismaClient } from "@prisma/client";
 import { config, validateConfig } from "./config/env.js";
+import { startSessionCleanup } from "./jobs/cleanupSessions.js";
 import {
   apiLimiter,
   authLimiter,
@@ -71,8 +73,11 @@ let GUESSSET = new Set();
 const ROUND_MS = config.duelRoundMs;
 const AI_BATTLE_COUNTDOWN_MS = 12 * 1000; // 12 seconds between AI-hosted rounds
 
-function loadWordFile(filePath) {
-  const raw = fs.readFileSync(filePath, "utf8");
+async function loadWordFile(filePath) {
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Word list file not found: ${filePath}`);
+  }
+  const raw = await fs.promises.readFile(filePath, "utf8");
   return raw
     .split(/\r?\n/)
     .map((w) => w.trim())
@@ -81,32 +86,47 @@ function loadWordFile(filePath) {
     .filter((w) => /^[A-Z]{5}$/.test(w));
 }
 
-function loadWords() {
-  if (!fs.existsSync(WORDLIST_PATH)) {
-    throw new Error(`Word list file not found at ${WORDLIST_PATH}`);
+async function loadWords() {
+  const words = await loadWordFile(WORDLIST_PATH);
+  if (words.length === 0) {
+    throw new Error(
+      `Word list is empty or contains no valid 5-letter words: ${WORDLIST_PATH}`,
+    );
   }
 
-  WORDS = Array.from(new Set(loadWordFile(WORDLIST_PATH)));
+  WORDS = Array.from(new Set(words));
   WORDSET = new Set(WORDS);
+  console.log(`[words] Loaded ${WORDS.length} solutions from ${WORDLIST_PATH}`);
 
-  const hasGuessFile = fs.existsSync(GUESSES_PATH);
-  const guessWords = hasGuessFile ? loadWordFile(GUESSES_PATH) : WORDS;
+  let guessWords = WORDS;
+  if (fs.existsSync(GUESSES_PATH)) {
+    guessWords = await loadWordFile(GUESSES_PATH);
+    if (guessWords.length === 0) {
+      console.warn(
+        `[words] Guess list at ${GUESSES_PATH} is empty; using solution list for validation`,
+      );
+      guessWords = WORDS;
+    } else {
+      console.log(
+        `[words] Loaded ${guessWords.length} allowed guesses from ${GUESSES_PATH}`,
+      );
+    }
+  } else {
+    console.warn(
+      `[words] Guess list not found at ${GUESSES_PATH}; using solution list for validation`,
+    );
+  }
 
   GUESSES = Array.from(new Set([...guessWords, ...WORDS]));
   GUESSSET = new Set(GUESSES);
-
-  console.log(`[words] Loaded ${WORDS.length} solutions from ${WORDLIST_PATH}`);
-  if (hasGuessFile) {
-    console.log(
-      `[words] Loaded ${guessWords.length} allowed guesses from ${GUESSES_PATH}`
-    );
-  } else {
-    console.warn(
-      `[words] Guess list not found at ${GUESSES_PATH}; using solution list for validation`
-    );
-  }
 }
-loadWords();
+try {
+  await loadWords();
+} catch (error) {
+  console.error("Failed to load word lists:", error.message);
+  if (!config.isTest) process.exit(1);
+  else throw error;
+}
 
 async function ensureAnonymousSession(req, userId) {
   if (!req || !req.session || !userId) return;
@@ -144,99 +164,55 @@ function isValidWordLocal(word) {
 const app = express();
 export { app };
 
-// In development, allow common local origins so things work out of the box.
-// In production, CORS is driven entirely by BASE_URL + CORS_ALLOWED_ORIGINS.
-const DEV_ORIGINS = config.isProduction
-  ? []
-  : [
-      "http://localhost:5000",
-      "http://127.0.0.1:5000",
-      "http://localhost:5173",
-      "http://127.0.0.1:5173",
-    ];
+// ---------- CORS ----------
+// Build a set of allowed origins from config + dev defaults.
+const allowedOrigins = new Set(
+  [
+    ...(config.isProduction
+      ? []
+      : [
+          "http://localhost:5000",
+          "http://127.0.0.1:5000",
+          "http://localhost:5173",
+          "http://127.0.0.1:5173",
+        ]),
+    config.baseUrl,
+    ...config.corsAllowedOrigins,
+  ]
+    .map((v) => {
+      try {
+        return v ? new URL(v).origin : null;
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean),
+);
 
-const normalizeOrigin = (value) => {
-  if (!value) return null;
+const allowedSuffixes = config.corsAllowedOriginSuffixes.map((s) =>
+  s.toLowerCase().replace(/^\*\./, "").replace(/^\./, ""),
+);
+
+function evaluateCorsOrigin(origin, cb) {
+  if (!origin) return cb(null, true);
+
+  if (allowedOrigins.has(origin)) return cb(null, true);
+
   try {
-    return new URL(value).origin;
-  } catch {
-    return null;
-  }
-};
-
-const getHostname = (value) => {
-  if (!value) return null;
-  try {
-    return new URL(value).hostname;
-  } catch {
-    return null;
-  }
-};
-
-const allowedOrigins = (() => {
-  const origins = new Set(
-    DEV_ORIGINS.map(normalizeOrigin).filter(Boolean)
-  );
-
-  const baseOrigin = normalizeOrigin(config.baseUrl);
-  if (baseOrigin) {
-    origins.add(baseOrigin);
-  }
-
-  const extraOrigins = config.corsAllowedOrigins;
-  for (const origin of extraOrigins) {
-    const normalized = normalizeOrigin(origin.trim());
-    if (normalized) {
-      origins.add(normalized);
+    const hostname = new URL(origin).hostname.toLowerCase();
+    if (
+      allowedSuffixes.some(
+        (sfx) => hostname === sfx || hostname.endsWith(`.${sfx}`),
+      )
+    ) {
+      return cb(null, true);
     }
+  } catch {
+    /* malformed origin — fall through to reject */
   }
 
-  return Array.from(origins);
-})();
-
-const allowedOriginSet = new Set(allowedOrigins);
-const allowedOriginSuffixes = config.corsAllowedOriginSuffixes;
-
-const hostnameMatchesSuffix = (hostname, suffix) => {
-  if (!hostname || !suffix) return false;
-  const normalizedHostname = hostname.toLowerCase();
-  const cleanedSuffix = suffix
-    .toLowerCase()
-    .replace(/^\*\./, "")
-    .replace(/^https?:\/\//, "")
-    .replace(/\/$/, "")
-    .replace(/^\./, "");
-
-  return (
-    normalizedHostname === cleanedSuffix ||
-    normalizedHostname.endsWith(`.${cleanedSuffix}`)
-  );
-};
-
-const isOriginAllowed = (origin) => {
-  if (!origin) return false;
-  if (allowedOriginSet.has(origin)) {
-    return true;
-  }
-
-  const hostname = getHostname(origin);
-  return allowedOriginSuffixes.some((suffix) =>
-    hostnameMatchesSuffix(hostname, suffix)
-  );
-};
-
-const evaluateCorsOrigin = (origin, cb) => {
-  if (!origin) {
-    return cb(null, true);
-  }
-
-  const normalizedOrigin = normalizeOrigin(origin);
-  if (normalizedOrigin && isOriginAllowed(normalizedOrigin)) {
-    return cb(null, true);
-  }
-
-  return cb(new Error(`Origin ${origin} not allowed by CORS`));
-};
+  cb(new Error(`CORS: Origin ${origin} not allowed`));
+}
 
 const corsOptions = {
   origin: evaluateCorsOrigin,
@@ -246,6 +222,23 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
+
+// ---------- Security headers ----------
+app.use(
+  helmet({
+    contentSecurityPolicy: config.isProduction
+      ? {
+          directives: {
+            defaultSrc: ["'self'"],
+            connectSrc: ["'self'", ...allowedOrigins],
+            scriptSrc: ["'self'"],
+          },
+        }
+      : false,
+    crossOriginEmbedderPolicy: false,
+  }),
+);
+
 app.use(express.json());
 app.use(cookieParser());
 
@@ -2062,6 +2055,22 @@ function sanitizeRoom(room) {
   };
 }
 
+// ---------- CORS rejection handler ----------
+app.use((err, req, res, next) => {
+  if (err.message && err.message.startsWith("CORS:")) {
+    console.warn(`CORS rejected: ${req.headers.origin}`);
+    if (Sentry.isInitialized()) {
+      Sentry.captureMessage(err.message, {
+        level: "warning",
+        extra: { origin: req.headers.origin, url: req.url },
+      });
+    }
+    res.status(403).json({ error: "Origin not allowed" });
+    return;
+  }
+  next(err);
+});
+
 // ---------- Sentry error handler (must be before other error handlers) ----------
 if (config.sentryDsn) {
   Sentry.setupExpressErrorHandler(app);
@@ -2079,9 +2088,16 @@ if (config.isProduction) {
 const PORT = config.port;
 
 if (!config.isTest) {
-  httpServer.listen(PORT, "0.0.0.0", () =>
-    console.log("Server listening on", PORT)
-  );
+  try {
+    httpServer.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server listening on ${PORT}`);
+      console.log(`Word lists loaded: ${WORDSET.size} solutions, ${GUESSSET.size} total guesses`);
+      startSessionCleanup();
+    });
+  } catch (error) {
+    console.error("Server startup failed:", error.message);
+    process.exit(1);
+  }
 }
 
 export { httpServer };
