@@ -49,6 +49,14 @@ function DuelGameScreen({
   const [showSecretReveal, setShowSecretReveal] = useState(false);
   const [guessFlipKey, setGuessFlipKey] = useState(0);
   const [lastStreak, setLastStreak] = useState(0);
+  const secretErrorTimeoutRef = useRef(null);
+
+  // Clean up secret error timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (secretErrorTimeoutRef.current) clearTimeout(secretErrorTimeoutRef.current);
+    };
+  }, []);
 
   // Mobile UX - which board to show
   const [mobileView, setMobileView] = useState("me");
@@ -374,7 +382,8 @@ function DuelGameScreen({
   function bumpSecretError() {
     setSecretErrorActive(true);
     setSecretErrorKey((k) => k + 1);
-    setTimeout(() => setSecretErrorActive(false), 300);
+    if (secretErrorTimeoutRef.current) clearTimeout(secretErrorTimeoutRef.current);
+    secretErrorTimeoutRef.current = setTimeout(() => setSecretErrorActive(false), 300);
   }
 
   const mySecretWord = canSetSecret

@@ -33,6 +33,7 @@ import { startSessionCleanup } from "./jobs/cleanupSessions.js";
 import {
   apiLimiter,
   authLimiter,
+  pollingLimiter,
   checkSocketRateLimit,
   clearSocketRateLimits,
 } from "./middleware/rateLimiter.js";
@@ -143,15 +144,17 @@ async function ensureAnonymousSession(req, userId) {
   });
 }
 
-// Helper to pick N random words from WORDS
+// Helper to pick N unique random words from WORDS.
+// Uses a Fisher-Yates partial shuffle so each swap is O(1) rather than
+// the O(remaining) element-shift caused by splice().
 function pickRandomWords(n) {
-  const out = [];
   const pool = [...WORDS];
-  for (let i = 0; i < n && pool.length > 0; i++) {
-    const idx = Math.floor(Math.random() * pool.length);
-    out.push(pool.splice(idx, 1)[0]);
+  const limit = Math.min(n, pool.length);
+  for (let i = 0; i < limit; i++) {
+    const j = i + Math.floor(Math.random() * (pool.length - i));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
   }
-  return out;
+  return pool.slice(0, limit);
 }
 
 function isValidWordLocal(word) {
@@ -481,25 +484,18 @@ app.post("/api/daily/guess", async (req, res) => {
       return res.status(400).json({ error: "Not a valid word" });
     }
 
-    // Always create or get user record to ensure userId exists in database
-    const user = await getOrCreateAnonymousUser(existingUserId);
+    // Fetch user and today's puzzle in parallel — they are independent
+    const [user, puzzle] = await Promise.all([
+      getOrCreateAnonymousUser(existingUserId),
+      getTodaysPuzzle(),
+    ]);
     const userId = user.id;
-    await ensureAnonymousSession(req, userId);
 
-    const puzzle = await getTodaysPuzzle();
     const existingResult = await getUserDailyResult(userId, puzzle.id);
 
     const guesses = existingResult?.guesses || [];
     const patterns = existingResult?.patterns || [];
     const gameOver = existingResult?.completed || false;
-
-    console.log("[Daily Guess - Load Existing]", {
-      userId,
-      puzzleId: puzzle.id,
-      hasExistingResult: !!existingResult,
-      existingGuessCount: guesses.length,
-      existingGuesses: guesses,
-    });
 
     if (gameOver) {
       return res.json({
@@ -528,27 +524,11 @@ app.post("/api/daily/guess", async (req, res) => {
     const outOfGuesses = newGuesses.length >= MAX_DAILY_GUESSES;
     const completed = won || outOfGuesses;
 
-    console.log("[Daily Guess Logic]", {
-      guessCount: newGuesses.length,
-      maxGuesses: MAX_DAILY_GUESSES,
-      outOfGuesses,
-      won,
-      completed,
-      puzzleWord: puzzle.word,
-    });
-
-    const savedResult = await createOrUpdateDailyResult(userId, puzzle.id, {
+    await createOrUpdateDailyResult(userId, puzzle.id, {
       guesses: newGuesses,
       patterns: newPatterns,
       won,
       completed,
-    });
-
-    console.log("[Daily Result Saved]", {
-      userId,
-      puzzleId: puzzle.id,
-      savedGuessCount: savedResult.guesses.length,
-      savedGuesses: savedResult.guesses,
     });
 
     const guessResponse = {
@@ -563,11 +543,6 @@ app.post("/api/daily/guess", async (req, res) => {
         ? `Game over! The word was ${puzzle.word}`
         : "",
     };
-    console.log("[POST /api/daily/guess] Response:", {
-      completed,
-      won,
-      word: guessResponse.word,
-    });
     res.json(guessResponse);
   } catch (error) {
     console.error("Error in POST /api/daily/guess:", error);
@@ -899,7 +874,7 @@ function summarizeJoinableRoom(room) {
   };
 }
 
-app.get("/api/rooms/open", (_req, res) => {
+app.get("/api/rooms/open", pollingLimiter, (_req, res) => {
   const summaries = [];
 
   for (const room of rooms.values()) {
@@ -915,7 +890,7 @@ app.get("/api/rooms/open", (_req, res) => {
   res.json({ rooms: summaries.slice(0, 20) });
 });
 
-app.get("/api/events/status", (_req, res) => {
+app.get("/api/events/status", pollingLimiter, (_req, res) => {
   res.json(getAiBattleEventStatus());
 });
 

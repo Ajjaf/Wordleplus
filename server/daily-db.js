@@ -152,11 +152,19 @@ export async function getOrCreateAnonymousUser(cookieUserId) {
     });
     if (existing) return existing;
     
-    // Create user with the provided cookieUserId
-    const user = await prisma.user.create({
-      data: { id: cookieUserId }
-    });
-    return user;
+    // Create user with the provided cookieUserId.
+    // Guard against P2002 (unique constraint) from concurrent first-time requests.
+    try {
+      const user = await prisma.user.create({
+        data: { id: cookieUserId }
+      });
+      return user;
+    } catch (error) {
+      if (error.code === "P2002") {
+        return await prisma.user.findUnique({ where: { id: cookieUserId } });
+      }
+      throw error;
+    }
   }
 
   // No userId provided, create a new one (should rarely happen now)
@@ -167,27 +175,57 @@ export async function getOrCreateAnonymousUser(cookieUserId) {
   return user;
 }
 
+// In-memory cache for today's puzzle — keyed by ISO date string.
+// Avoids repeated DB lookups on every guess submission.
+let _puzzleCache = { date: null, puzzle: null };
+// In-flight promise guard — prevents cache stampede when multiple requests
+// arrive simultaneously during a cache miss.
+let _puzzleFetchInFlight = null;
+
 export async function getTodaysPuzzle(date = new Date()) {
-  await pruneFutureDailyPuzzles();
-
   const dateStr = DateTime.fromJSDate(date).toISODate();
-  
-  let puzzle = await prisma.dailyPuzzle.findUnique({
-    where: { date: dateStr }
-  });
 
-  if (!puzzle) {
-    const word = await getDeterministicWordForDate(dateStr);
-    puzzle = await prisma.dailyPuzzle.create({
-      data: {
-        date: dateStr,
-        word: word,
-        difficulty: "medium"
-      }
-    });
+  // Fast path: cached puzzle still valid for today
+  if (_puzzleCache.date === dateStr && _puzzleCache.puzzle) {
+    return _puzzleCache.puzzle;
   }
 
-  return puzzle;
+  // If a DB fetch is already running, piggyback on it instead of firing another
+  if (_puzzleFetchInFlight) {
+    return _puzzleFetchInFlight;
+  }
+
+  // Cache miss — fetch (or create) from DB.
+  // Prune only runs here (server start / day rollover), not on every request.
+  _puzzleFetchInFlight = (async () => {
+    try {
+      await pruneFutureDailyPuzzles();
+
+      let puzzle = await prisma.dailyPuzzle.findUnique({
+        where: { date: dateStr }
+      });
+
+      if (!puzzle) {
+        const word = await getDeterministicWordForDate(dateStr);
+        puzzle = await prisma.dailyPuzzle.create({
+          data: { date: dateStr, word, difficulty: "medium" }
+        });
+      }
+
+      _puzzleCache = { date: dateStr, puzzle };
+      return puzzle;
+    } finally {
+      _puzzleFetchInFlight = null;
+    }
+  })();
+
+  return _puzzleFetchInFlight;
+}
+
+/** Invalidate the puzzle cache (e.g. after the word is locked or changed). */
+export function invalidatePuzzleCache() {
+  _puzzleCache = { date: null, puzzle: null };
+  _puzzleFetchInFlight = null;
 }
 
 async function getDeterministicWordForDate(dateStr) {

@@ -2,10 +2,26 @@ import rateLimit from "express-rate-limit";
 
 // ---------- HTTP rate limiters (express-rate-limit, in-memory store) ----------
 
-/** General API rate limiter — 100 requests per 15 minutes per IP. */
+// High-frequency read-only endpoints that the HomeScreen polls every 15 s.
+// These must be excluded from the general apiLimiter to avoid false 429s.
+const POLLING_PATHS = ["/api/rooms/open", "/api/events/status"];
+
+/** General API rate limiter — 100 requests per 15 minutes per IP.
+ *  Polling endpoints are skipped here and handled by pollingLimiter instead. */
 export const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
+  message: { error: "Too many requests, please try again later." },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => POLLING_PATHS.includes(req.originalUrl.split("?")[0]),
+});
+
+/** Permissive limiter for polling endpoints — 600 requests per 15 minutes per IP.
+ *  Covers two endpoints × 60 polls = 120 req / 15 min with plenty of headroom. */
+export const pollingLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 600,
   message: { error: "Too many requests, please try again later." },
   standardHeaders: true,
   legacyHeaders: false,

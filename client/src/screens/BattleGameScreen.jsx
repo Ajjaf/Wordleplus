@@ -1,14 +1,10 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { motion } from "framer-motion";
 import { useIsMobile } from "../hooks/useIsMobile";
 import { GameLayout } from "../components/layout/GameLayout";
-import { UnifiedPlayerCard } from "../components/player/UnifiedPlayerCard";
-import { GameEffects } from "../components/features/GameEffects";
-import { GameTimer } from "../components/features/GameTimer";
-import { GameStatusBar } from "../components/features/GameStatusBar";
 import GameResults from "../components/GameResults";
 import Board from "../components/Board";
 import MobileBoard from "../components/mobile/MobileBoard";
+import BattleProgressStrip from "../components/BattleProgressStrip";
 import GlowButton from "../components/ui/GlowButton";
 import { getModeTheme } from "../config/mode-themes";
 import { logger } from "../utils/logger";
@@ -245,138 +241,112 @@ function BattleGameScreen({
     return winner?.name || "Unknown";
   };
 
-  // Prepare status badges
-  const statusBadges = [];
-  if (isAiMode) {
-    statusBadges.push({
-      variant: "info",
-      label: aiHostMode === "auto" ? "AI host is running this lobby" : hostedByName ? `Hosted by ${hostedByName}` : "Hosted by player",
-    });
-  }
-  if (roundActive && roundTimerLabel) {
-    statusBadges.push({
-      variant: "info",
-      label: "Round ends in",
-      value: roundTimerLabel,
-    });
-  }
-  if (!roundActive && !pendingStart && countdownLabel) {
-    statusBadges.push({
-      variant: "warning",
-      label: "Next round in",
-      value: countdownLabel,
-    });
-  }
-  if (roundActive && !roundFinished) {
-    statusBadges.push({
-      variant: "success",
-      label: "Game in progress — good luck!",
-    });
-  }
-  if (room?.battle?.winner) {
-    statusBadges.push({
-      variant: "success",
-      label: "Winner",
-      value: getWinnerName(),
-    });
-  }
-
-  // Custom header with start button
+  // Compact status header — single row, no redundant title (nav already shows mode)
   const renderHeader = () => {
+    // Pick one status indicator to show, in priority order
+    const showLive = roundActive && !roundFinished;
+    const showCountdown = !roundActive && !pendingStart && !!countdownLabel;
+    const showWinner = Boolean(room?.battle?.winner);
+    const showWaiting = !showLive && !showCountdown && !showWinner;
+
+    // Timer color based on remaining ms
+    const timerColor =
+      roundTimeRemaining !== null && roundTimeRemaining <= 10000
+        ? "text-red-300 bg-red-500/10"
+        : roundTimeRemaining !== null && roundTimeRemaining <= 20000
+        ? "text-amber-300 bg-amber-500/10"
+        : "text-emerald-300 bg-emerald-500/10";
+
     return (
-      <div className="px-3 pt-4 pb-3">
-        <div className="max-w-7xl mx-auto">
-          {!isMobile && (
-            <>
-              <motion.h2
-                className="text-2xl md:text-3xl font-bold text-white text-center mb-2"
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3 }}
-              >
-                {bannerTitle}
-              </motion.h2>
-
-              {showStartButton && (
-                <div className="flex flex-col items-center mt-2 gap-1">
-                  <GlowButton
-                    onClick={handleStartRound}
-                    size="sm"
-                    disabled={startingRound}
-                  >
-                    {startingRound ? "Starting..." : startButtonLabel}
-                  </GlowButton>
-                  {startError && (
-                    <span className="text-xs text-red-300 text-center">
-                      {startError}
-                    </span>
-                  )}
-                </div>
+      <div className={isMobile ? "px-4 pt-1.5 pb-1" : "px-4 pt-2 pb-2"}>
+        <div className="max-w-7xl mx-auto flex items-center justify-center gap-3 flex-wrap min-h-[28px]">
+          {/* Live indicator + timer */}
+          {showLive && (
+            <span className="inline-flex items-center gap-2 select-none">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
+              <span className="text-[10px] uppercase tracking-[0.25em] text-white/40 font-medium">
+                Live
+              </span>
+              {roundTimerLabel && (
+                <span
+                  className={`font-mono text-xs font-bold tabular-nums px-1.5 py-0.5 rounded-md ${timerColor}`}
+                >
+                  {roundTimerLabel}
+                </span>
               )}
-              {!showStartButton && startError && (
-                <div className="mt-2 text-xs text-red-300 text-center">
-                  {startError}
-                </div>
-              )}
-            </>
+            </span>
           )}
 
-          {isMobile && (
-            <div className="flex flex-col items-center gap-2 text-center">
-              <div className="text-base font-semibold text-white">
-                {bannerTitle}
-              </div>
-              {showStartButton && (
-                <div className="flex flex-col items-center gap-1">
-                  <GlowButton
-                    onClick={handleStartRound}
-                    size="sm"
-                    disabled={startingRound}
-                  >
-                    {startingRound ? "Starting..." : startButtonLabel}
-                  </GlowButton>
-                  {startError && (
-                    <span className="text-xs text-red-300">{startError}</span>
-                  )}
-                </div>
-              )}
-              {!showStartButton && startError && (
-                <span className="text-xs text-red-300">{startError}</span>
-              )}
-            </div>
+          {/* Countdown to next round */}
+          {showCountdown && (
+            <span className="inline-flex items-center gap-2 select-none">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse flex-shrink-0" />
+              <span className="text-[10px] uppercase tracking-[0.25em] text-amber-400/60 font-medium">
+                Next
+              </span>
+              <span className="font-mono text-xs font-bold tabular-nums text-amber-300 bg-amber-500/10 px-1.5 py-0.5 rounded-md">
+                {countdownLabel}
+              </span>
+            </span>
           )}
 
-          {!isHost && statusBadges.length > 0 && (
-            <div className="mt-2">
-              <GameStatusBar
-                mode={mode}
-                badges={statusBadges}
-                isMobile={isMobile}
-              />
-            </div>
+          {/* Winner */}
+          {showWinner && (
+            <span className="text-[10px] uppercase tracking-[0.25em] text-emerald-400/80 font-semibold select-none">
+              ✓ {getWinnerName()}
+            </span>
           )}
 
+          {/* Idle / waiting */}
+          {showWaiting && standbyMessage && (
+            <span className="text-[10px] uppercase tracking-[0.25em] text-white/20 font-medium select-none">
+              Waiting
+            </span>
+          )}
+
+          {/* Action buttons */}
+          {showStartButton && (
+            <GlowButton
+              onClick={handleStartRound}
+              size="sm"
+              disabled={startingRound}
+              className="!py-1 !min-h-[30px] !text-xs !px-3"
+            >
+              {startingRound ? "Starting…" : startButtonLabel}
+            </GlowButton>
+          )}
+          {startError && (
+            <span className="text-[10px] text-red-300">{startError}</span>
+          )}
           {showClaimHostButton && (
-            <div className="mt-2 flex justify-center">
-              <GlowButton
-                onClick={handleClaimHost}
-                size="sm"
-                disabled={claimingHost}
-              >
-                {claimingHost ? "Claiming..." : "Claim Host"}
-              </GlowButton>
-            </div>
+            <GlowButton
+              onClick={handleClaimHost}
+              size="sm"
+              disabled={claimingHost}
+              className="!py-1 !min-h-[30px] !text-xs !px-3"
+            >
+              {claimingHost ? "Claiming…" : "Claim Host"}
+            </GlowButton>
           )}
         </div>
       </div>
     );
   };
 
-  // Custom board render with right rail for other players
+  // Strip of opponent progress cards shown above the board
+  const hasOtherPlayers = roundActive && otherPlayers && otherPlayers.length > 0;
+
   const renderBoard = () => {
     if (isMobile) {
       return (
-        <div className="flex-1 flex flex-col items-center min-h-0">
+        <div className="flex-1 flex flex-col min-h-0 w-full">
+          {hasOtherPlayers && (
+            <BattleProgressStrip
+              players={otherPlayers}
+              isMobile={true}
+              maxGuesses={6}
+            />
+          )}
           {roundActive ? (
             <MobileBoard
               guesses={me?.guesses || []}
@@ -384,7 +354,7 @@ function BattleGameScreen({
               errorShakeKey={shakeKey}
               errorActiveRow={showActiveError}
               guessFlipKey={guessFlipKey}
-              reservedBottom={360}
+              reservedBottom={hasOtherPlayers ? 420 : 360}
               maxWidth="min(440px, 96vw)"
               maxTile={80}
               minTile={44}
@@ -405,10 +375,19 @@ function BattleGameScreen({
     }
 
     return (
-      <div className="flex-1 flex flex-col items-center min-h-0 relative gap-3">
-        {/* Center board */}
+      <div className="flex-1 flex flex-col min-h-0 gap-2">
+        {/* Opponent progress strip — above the board */}
+        {hasOtherPlayers && (
+          <BattleProgressStrip
+            players={otherPlayers}
+            isMobile={false}
+            maxGuesses={6}
+          />
+        )}
+
+        {/* Board — flex-1 + min-h-0 constrains height so Board.autoFit measures correctly */}
         {roundActive ? (
-          <div className="flex-1 w-full max-w-[min(1100px,95vw)] max-h-[calc(100dvh-260px)] flex items-center justify-center min-h-0">
+          <div className="flex-1 w-full max-w-[min(1100px,95vw)] mx-auto flex items-center justify-center min-h-0">
             <Board
               guesses={me?.guesses || []}
               activeGuess={activeGuessForBattle}
@@ -416,9 +395,9 @@ function BattleGameScreen({
               errorActiveRow={showActiveError}
               guessFlipKey={guessFlipKey}
               maxTile={112}
-              minTile={56}
-              gap={10}
-              padding={12}
+              minTile={44}
+              gap={8}
+              padding={8}
             />
           </div>
         ) : (
@@ -428,33 +407,6 @@ function BattleGameScreen({
               players={allPlayers}
               correctWord={correctWord}
             />
-          </div>
-        )}
-
-        {/* Right rail: other players */}
-        {roundActive && otherPlayers && otherPlayers.length > 0 && (
-          <div className="absolute right-4 top-1/2 -translate-y-1/2 space-y-3 max-h-[80vh] overflow-y-auto pr-1">
-            {otherPlayers.map((player, index) => (
-              <motion.div
-                key={player.id}
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: index * 0.05, duration: 0.2 }}
-              >
-                <UnifiedPlayerCard
-                  variant="progress"
-                  size="sm"
-                  name={player.name}
-                  wins={player.wins}
-                  streak={player.streak}
-                  guesses={player.guesses || []}
-                  maxGuesses={6}
-                  done={player.done}
-                  showProgressTiles={true}
-                />
-              </motion.div>
-            ))}
-            <div className="pointer-events-none sticky bottom-0 h-6 bg-gradient-to-t from-gray-900/0 to-transparent" />
           </div>
         )}
       </div>
