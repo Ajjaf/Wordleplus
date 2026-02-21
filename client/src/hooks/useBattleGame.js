@@ -72,7 +72,7 @@ export function useBattleGame(room, canGuessBattle, isHost, wasHost, battleActio
       // If I'm the host in Battle and the round hasn't started yet,
       // we're on the "type secret" screen — don't handle keys globally.
       const hostTyping =
-        room?.mode === "battle" ||
+        (room?.mode === "battle" && isHost && !room?.battle?.started) ||
         (room?.mode === "battle_ai" &&
           (isHost || wasHost) &&
           !room?.battle?.started);
