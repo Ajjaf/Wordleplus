@@ -18,18 +18,24 @@ export function ErrorNotificationProvider({ children }) {
     if (!message) return null;
     const { duration } = options;
     const id = crypto.randomUUID();
-    setNotifications((prev) => [
-      ...prev,
-      {
-        id,
-        message,
-        severity,
-        duration:
-          typeof duration === "number" && duration > 0
-            ? duration
-            : NOTIFICATION_DURATION,
-      },
-    ]);
+    setNotifications((prev) => {
+      // Replace any existing notification with the same message so duplicates never stack
+      const deduped = prev.filter((n) => n.message !== message);
+      // Also cap total visible notifications at 3
+      const capped = deduped.slice(-2);
+      return [
+        ...capped,
+        {
+          id,
+          message,
+          severity,
+          duration:
+            typeof duration === "number" && duration > 0
+              ? duration
+              : NOTIFICATION_DURATION,
+        },
+      ];
+    });
     return id;
   }, []);
 

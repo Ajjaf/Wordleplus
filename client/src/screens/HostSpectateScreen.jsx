@@ -22,6 +22,8 @@ function HostSpectateScreen({
   const [startError, setStartError] = useState("");
   const [countdownRemaining, setCountdownRemaining] = useState(null);
   const isAiMode = room?.mode === "battle_ai";
+  // true only when the AI is actually in control (auto mode), not when a player has claimed host
+  const aiIsInControl = isAiMode && room?.battle?.aiHost?.mode !== "player";
 
   const [showReconnected, setShowReconnected] = useState(() => {
     const s = sessionStorage.getItem("wp.reconnected") === "1";
@@ -240,7 +242,7 @@ function HostSpectateScreen({
             </motion.div>
           ) : (
             <>
-              {isAiMode ? (
+              {aiIsInControl ? (
                 <motion.div
                   className="mx-auto max-w-xl mb-3 bg-white/10 border border-white/20 rounded-2xl p-4 backdrop-blur-sm"
                   initial={{ opacity: 0, scale: 0.95 }}

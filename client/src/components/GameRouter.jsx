@@ -133,7 +133,10 @@ export default function GameRouter({
                       setShowVictory(false);
                       try {
                         await duelActions.playAgain(roomId);
-                      } catch (e) {}
+                      } catch (error) {
+                        console.error("Failed to start rematch:", error);
+                        if (setMsg) setMsg("Failed to start rematch. Please try again.");
+                      }
                     }
                   : () => setShowVictory(false)
               }
@@ -164,8 +167,9 @@ export default function GameRouter({
               onRematch={async () => {
                 try {
                   await duelActions.playAgain(roomId);
-                } catch (e) {
-                  // no-op; UI will still update via roomState events
+                } catch (error) {
+                  console.error("Failed to start duel rematch:", error);
+                  if (setMsg) setMsg("Failed to start rematch. Please try again.");
                 }
               }}
             />
@@ -194,8 +198,9 @@ export default function GameRouter({
               onRematch={async () => {
                 try {
                   await sharedActions.playAgain(roomId);
-                } catch (e) {
-                  // no-op
+                } catch (error) {
+                  console.error("Failed to start shared rematch:", error);
+                  if (setMsg) setMsg("Failed to start rematch. Please try again.");
                 }
               }}
             />
@@ -209,7 +214,7 @@ export default function GameRouter({
             <ErrorBoundary componentName="HostSpectateScreen">
               <Suspense fallback={<ScreenLoadingFallback />}>
                 <HostSpectateScreen
-                key="host"
+                key={`host-${room?.hostId ?? "none"}`}
                 room={room}
                 players={players}
                 onWordSubmit={async (word) => {

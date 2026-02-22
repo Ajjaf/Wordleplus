@@ -7,8 +7,8 @@
     "node": ">=20"
   },
   "scripts": {
-    "start": "node index.js",
-    "dev": "node index.js",
+    "start": "node --env-file=.env index.js",
+    "dev": "node --env-file=.env index.js",
     "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --runInBand",
     "prisma:generate": "prisma generate",
     "prisma:migrate:dev": "prisma migrate dev",
@@ -16,15 +16,22 @@
     "postinstall": "prisma generate",
     "prisma:db:push": "prisma db push",
     "prisma:seed": "tsx prisma/seed.ts",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "predeploy": "bash scripts/pre-deploy.sh",
+    "deploy": "bash scripts/pre-deploy.sh && prisma migrate deploy && node index.js",
+    "postdeploy:verify": "bash scripts/post-deploy-verify.sh"
   },
   "dependencies": {
     "@prisma/client": "^6.18.0",
+    "@sentry/node": "^10.39.0",
+    "@sentry/profiling-node": "^10.39.0",
     "connect-pg-simple": "^10.0.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "express": "^4.19.2",
+    "express-rate-limit": "^8.2.1",
     "express-session": "^1.18.2",
+    "helmet": "^8.1.0",
     "luxon": "^3.7.2",
     "memoizee": "^0.4.17",
     "openid-client": "^6.8.1",
@@ -37,6 +44,7 @@
     "@types/node": "^24.10.0",
     "jest": "^30.2.0",
     "prisma": "^6.18.0",
+    "socket.io-client": "^4.8.3",
     "supertest": "^7.1.4",
     "tsx": "^4.19.2"
   },

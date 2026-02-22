@@ -51,7 +51,7 @@ export function useGameState(room) {
         .map(([id, p]) => ({ id, ...p }));
     } else if (room.mode === "battle_ai") {
       otherPlayersValue = Object.entries(room.players)
-        .filter(([id]) => id !== socketId)
+        .filter(([id]) => id !== socketId && id !== room.hostId)
         .map(([id, p]) => ({ id, ...p }));
     }
 

@@ -25,29 +25,60 @@ import {
   sanitizeWord,
   isSafeInput,
 } from "./utils/sanitize.js";
+import helmet from "helmet";
+import * as Sentry from "@sentry/node";
+import { PrismaClient } from "@prisma/client";
+import { config, validateConfig } from "./config/env.js";
+import { startSessionCleanup } from "./jobs/cleanupSessions.js";
+import {
+  apiLimiter,
+  authLimiter,
+  pollingLimiter,
+  checkSocketRateLimit,
+  clearSocketRateLimits,
+} from "./middleware/rateLimiter.js";
+
+const prisma = new PrismaClient();
+
+// ---------- Sentry error tracking (optional) ----------
+if (config.sentryDsn) {
+  Sentry.init({
+    dsn: config.sentryDsn,
+    environment: config.sentryEnvironment,
+    tracesSampleRate: 1.0,
+  });
+}
+
+// ---------- Validate environment before proceeding ----------
+if (!config.isTest) {
+  try {
+    validateConfig();
+  } catch (error) {
+    console.error("❌ Configuration Error:", error.message);
+    process.exit(1);
+  }
+}
 
 // ---------- Word list loader (.txt) ----------
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const WORDLIST_PATH =
-  process.env.WORDLIST_PATH || path.join(__dirname, "words.txt");
+  config.wordlistPath || path.join(__dirname, "words.txt");
 const GUESSES_PATH =
-  process.env.GUESSES_PATH || path.join(__dirname, "allowed_guesses.txt");
+  config.guessesPath || path.join(__dirname, "allowed_guesses.txt");
 
 let WORDS = [];
 let WORDSET = new Set();
 let GUESSES = [];
 let GUESSSET = new Set();
-const DEFAULT_ROUND_MS = 6 * 60 * 1000; // 6 minutes
-const envRoundMs = Number(process.env.DUEL_ROUND_MS);
-const ROUND_MS =
-  Number.isFinite(envRoundMs) && envRoundMs > 0
-    ? Math.min(envRoundMs, DEFAULT_ROUND_MS)
-    : DEFAULT_ROUND_MS;
+const ROUND_MS = config.duelRoundMs;
 const AI_BATTLE_COUNTDOWN_MS = 12 * 1000; // 12 seconds between AI-hosted rounds
 
-function loadWordFile(filePath) {
-  const raw = fs.readFileSync(filePath, "utf8");
+async function loadWordFile(filePath) {
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Word list file not found: ${filePath}`);
+  }
+  const raw = await fs.promises.readFile(filePath, "utf8");
   return raw
     .split(/\r?\n/)
     .map((w) => w.trim())
@@ -56,32 +87,47 @@ function loadWordFile(filePath) {
     .filter((w) => /^[A-Z]{5}$/.test(w));
 }
 
-function loadWords() {
-  if (!fs.existsSync(WORDLIST_PATH)) {
-    throw new Error(`Word list file not found at ${WORDLIST_PATH}`);
+async function loadWords() {
+  const words = await loadWordFile(WORDLIST_PATH);
+  if (words.length === 0) {
+    throw new Error(
+      `Word list is empty or contains no valid 5-letter words: ${WORDLIST_PATH}`,
+    );
   }
 
-  WORDS = Array.from(new Set(loadWordFile(WORDLIST_PATH)));
+  WORDS = Array.from(new Set(words));
   WORDSET = new Set(WORDS);
+  console.log(`[words] Loaded ${WORDS.length} solutions from ${WORDLIST_PATH}`);
 
-  const hasGuessFile = fs.existsSync(GUESSES_PATH);
-  const guessWords = hasGuessFile ? loadWordFile(GUESSES_PATH) : WORDS;
+  let guessWords = WORDS;
+  if (fs.existsSync(GUESSES_PATH)) {
+    guessWords = await loadWordFile(GUESSES_PATH);
+    if (guessWords.length === 0) {
+      console.warn(
+        `[words] Guess list at ${GUESSES_PATH} is empty; using solution list for validation`,
+      );
+      guessWords = WORDS;
+    } else {
+      console.log(
+        `[words] Loaded ${guessWords.length} allowed guesses from ${GUESSES_PATH}`,
+      );
+    }
+  } else {
+    console.warn(
+      `[words] Guess list not found at ${GUESSES_PATH}; using solution list for validation`,
+    );
+  }
 
   GUESSES = Array.from(new Set([...guessWords, ...WORDS]));
   GUESSSET = new Set(GUESSES);
-
-  console.log(`[words] Loaded ${WORDS.length} solutions from ${WORDLIST_PATH}`);
-  if (hasGuessFile) {
-    console.log(
-      `[words] Loaded ${guessWords.length} allowed guesses from ${GUESSES_PATH}`
-    );
-  } else {
-    console.warn(
-      `[words] Guess list not found at ${GUESSES_PATH}; using solution list for validation`
-    );
-  }
 }
-loadWords();
+try {
+  await loadWords();
+} catch (error) {
+  console.error("Failed to load word lists:", error.message);
+  if (!config.isTest) process.exit(1);
+  else throw error;
+}
 
 async function ensureAnonymousSession(req, userId) {
   if (!req || !req.session || !userId) return;
@@ -98,15 +144,17 @@ async function ensureAnonymousSession(req, userId) {
   });
 }
 
-// Helper to pick N random words from WORDS
+// Helper to pick N unique random words from WORDS.
+// Uses a Fisher-Yates partial shuffle so each swap is O(1) rather than
+// the O(remaining) element-shift caused by splice().
 function pickRandomWords(n) {
-  const out = [];
   const pool = [...WORDS];
-  for (let i = 0; i < n && pool.length > 0; i++) {
-    const idx = Math.floor(Math.random() * pool.length);
-    out.push(pool.splice(idx, 1)[0]);
+  const limit = Math.min(n, pool.length);
+  for (let i = 0; i < limit; i++) {
+    const j = i + Math.floor(Math.random() * (pool.length - i));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
   }
-  return out;
+  return pool.slice(0, limit);
 }
 
 function isValidWordLocal(word) {
@@ -119,98 +167,55 @@ function isValidWordLocal(word) {
 const app = express();
 export { app };
 
-const DEFAULT_ALLOWED_ORIGINS = [
-  "http://localhost:5000",
-  "http://127.0.0.1:5000",
-  "http://localhost:5173",
-  "http://127.0.0.1:5173",
-];
+// ---------- CORS ----------
+// Build a set of allowed origins from config + dev defaults.
+const allowedOrigins = new Set(
+  [
+    ...(config.isProduction
+      ? []
+      : [
+          "http://localhost:5000",
+          "http://127.0.0.1:5000",
+          "http://localhost:5173",
+          "http://127.0.0.1:5173",
+        ]),
+    config.baseUrl,
+    ...config.corsAllowedOrigins,
+  ]
+    .map((v) => {
+      try {
+        return v ? new URL(v).origin : null;
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean),
+);
 
-const normalizeOrigin = (value) => {
-  if (!value) return null;
+const allowedSuffixes = config.corsAllowedOriginSuffixes.map((s) =>
+  s.toLowerCase().replace(/^\*\./, "").replace(/^\./, ""),
+);
+
+function evaluateCorsOrigin(origin, cb) {
+  if (!origin) return cb(null, true);
+
+  if (allowedOrigins.has(origin)) return cb(null, true);
+
   try {
-    return new URL(value).origin;
-  } catch {
-    return null;
-  }
-};
-
-const getHostname = (value) => {
-  if (!value) return null;
-  try {
-    return new URL(value).hostname;
-  } catch {
-    return null;
-  }
-};
-
-const allowedOrigins = (() => {
-  const origins = new Set(
-    DEFAULT_ALLOWED_ORIGINS.map(normalizeOrigin).filter(Boolean)
-  );
-
-  const baseOrigin = normalizeOrigin(process.env.BASE_URL);
-  if (baseOrigin) {
-    origins.add(baseOrigin);
-  }
-
-  const extraOrigins = process.env.CORS_ALLOWED_ORIGINS?.split(",") ?? [];
-  for (const origin of extraOrigins) {
-    const normalized = normalizeOrigin(origin.trim());
-    if (normalized) {
-      origins.add(normalized);
+    const hostname = new URL(origin).hostname.toLowerCase();
+    if (
+      allowedSuffixes.some(
+        (sfx) => hostname === sfx || hostname.endsWith(`.${sfx}`),
+      )
+    ) {
+      return cb(null, true);
     }
+  } catch {
+    /* malformed origin — fall through to reject */
   }
 
-  return Array.from(origins);
-})();
-
-const allowedOriginSet = new Set(allowedOrigins);
-const allowedOriginSuffixes =
-  process.env.CORS_ALLOWED_ORIGIN_SUFFIXES?.split(",")
-    .map((suffix) => suffix.trim())
-    .filter(Boolean) ?? [];
-
-const hostnameMatchesSuffix = (hostname, suffix) => {
-  if (!hostname || !suffix) return false;
-  const normalizedHostname = hostname.toLowerCase();
-  const cleanedSuffix = suffix
-    .toLowerCase()
-    .replace(/^\*\./, "")
-    .replace(/^https?:\/\//, "")
-    .replace(/\/$/, "")
-    .replace(/^\./, "");
-
-  return (
-    normalizedHostname === cleanedSuffix ||
-    normalizedHostname.endsWith(`.${cleanedSuffix}`)
-  );
-};
-
-const isOriginAllowed = (origin) => {
-  if (!origin) return false;
-  if (allowedOriginSet.has(origin)) {
-    return true;
-  }
-
-  const hostname = getHostname(origin);
-  return allowedOriginSuffixes.some((suffix) =>
-    hostnameMatchesSuffix(hostname, suffix)
-  );
-};
-
-const evaluateCorsOrigin = (origin, cb) => {
-  if (!origin) {
-    return cb(null, true);
-  }
-
-  const normalizedOrigin = normalizeOrigin(origin);
-  if (normalizedOrigin && isOriginAllowed(normalizedOrigin)) {
-    return cb(null, true);
-  }
-
-  return cb(new Error(`Origin ${origin} not allowed by CORS`));
-};
+  cb(new Error(`CORS: Origin ${origin} not allowed`));
+}
 
 const corsOptions = {
   origin: evaluateCorsOrigin,
@@ -220,27 +225,47 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
+
+// ---------- Security headers ----------
+app.use(
+  helmet({
+    contentSecurityPolicy: config.isProduction
+      ? {
+          directives: {
+            defaultSrc: ["'self'"],
+            connectSrc: ["'self'", ...allowedOrigins],
+            scriptSrc: ["'self'"],
+          },
+        }
+      : false,
+    crossOriginEmbedderPolicy: false,
+  }),
+);
+
 app.use(express.json());
 app.use(cookieParser());
 
-const shouldSetupAuth =
-  process.env.NODE_ENV !== "test" && process.env.SKIP_AUTH_SETUP !== "true";
+// ---------- Rate limiting ----------
+app.use("/api/", apiLimiter);
+app.use("/api/login", authLimiter);
+app.use("/api/callback", authLimiter);
+
+const shouldSetupAuth = !config.isTest && !config.skipAuthSetup;
 
 if (shouldSetupAuth) {
   await setupAuth(app);
 }
 
 // Serve static files from client build in production
-if (process.env.NODE_ENV === "production") {
+if (config.isProduction) {
   const clientDistPath = path.join(__dirname, "..", "client", "dist");
   app.use(express.static(clientDistPath));
 } else {
   // In development, show helpful page with link to frontend
   app.get("/", (_req, res) => {
-    const replitDomain = process.env.REPLIT_DEV_DOMAIN;
-    const frontendUrl = replitDomain
-      ? `https://5000--${replitDomain}`
-      : "http://localhost:5000";
+    const frontendUrl = config.replitDevDomain
+      ? `https://5000--${config.replitDevDomain}`
+      : config.baseUrl;
 
     res.send(`
       <!DOCTYPE html>
@@ -270,8 +295,46 @@ if (process.env.NODE_ENV === "production") {
   });
 }
 
-// Health + validate
-app.get("/health", (_req, res) => res.json({ ok: true }));
+// ---------- Health / readiness / liveness ----------
+app.get("/health", async (_req, res) => {
+  const health = {
+    status: "ok",
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: config.nodeEnv,
+  };
+
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    health.database = "connected";
+  } catch {
+    health.database = "disconnected";
+    health.status = "degraded";
+  }
+
+  health.wordLists = {
+    words: WORDSET.size,
+    guesses: GUESSSET.size,
+  };
+
+  health.activeRooms = rooms.size;
+
+  const statusCode = health.status === "ok" ? 200 : 503;
+  res.status(statusCode).json(health);
+});
+
+app.get("/ready", (_req, res) => {
+  const isReady = WORDSET.size > 0 && GUESSSET.size > 0;
+  if (isReady) {
+    res.status(200).json({ ready: true });
+  } else {
+    res.status(503).json({ ready: false, reason: "Word lists not loaded" });
+  }
+});
+
+app.get("/alive", (_req, res) => {
+  res.status(200).json({ alive: true });
+});
 app.get("/api/validate", (req, res) => {
   const word = (req.query.word || "").toString();
   res.json({ valid: isValidWordLocal(word) });
@@ -421,25 +484,18 @@ app.post("/api/daily/guess", async (req, res) => {
       return res.status(400).json({ error: "Not a valid word" });
     }
 
-    // Always create or get user record to ensure userId exists in database
-    const user = await getOrCreateAnonymousUser(existingUserId);
+    // Fetch user and today's puzzle in parallel — they are independent
+    const [user, puzzle] = await Promise.all([
+      getOrCreateAnonymousUser(existingUserId),
+      getTodaysPuzzle(),
+    ]);
     const userId = user.id;
-    await ensureAnonymousSession(req, userId);
 
-    const puzzle = await getTodaysPuzzle();
     const existingResult = await getUserDailyResult(userId, puzzle.id);
 
     const guesses = existingResult?.guesses || [];
     const patterns = existingResult?.patterns || [];
     const gameOver = existingResult?.completed || false;
-
-    console.log("[Daily Guess - Load Existing]", {
-      userId,
-      puzzleId: puzzle.id,
-      hasExistingResult: !!existingResult,
-      existingGuessCount: guesses.length,
-      existingGuesses: guesses,
-    });
 
     if (gameOver) {
       return res.json({
@@ -468,27 +524,11 @@ app.post("/api/daily/guess", async (req, res) => {
     const outOfGuesses = newGuesses.length >= MAX_DAILY_GUESSES;
     const completed = won || outOfGuesses;
 
-    console.log("[Daily Guess Logic]", {
-      guessCount: newGuesses.length,
-      maxGuesses: MAX_DAILY_GUESSES,
-      outOfGuesses,
-      won,
-      completed,
-      puzzleWord: puzzle.word,
-    });
-
-    const savedResult = await createOrUpdateDailyResult(userId, puzzle.id, {
+    await createOrUpdateDailyResult(userId, puzzle.id, {
       guesses: newGuesses,
       patterns: newPatterns,
       won,
       completed,
-    });
-
-    console.log("[Daily Result Saved]", {
-      userId,
-      puzzleId: puzzle.id,
-      savedGuessCount: savedResult.guesses.length,
-      savedGuesses: savedResult.guesses,
     });
 
     const guessResponse = {
@@ -503,11 +543,6 @@ app.post("/api/daily/guess", async (req, res) => {
         ? `Game over! The word was ${puzzle.word}`
         : "",
     };
-    console.log("[POST /api/daily/guess] Response:", {
-      completed,
-      won,
-      word: guessResponse.word,
-    });
     res.json(guessResponse);
   } catch (error) {
     console.error("Error in POST /api/daily/guess:", error);
@@ -565,9 +600,8 @@ const VALID_MODES = new Set(["duel", "shared", "battle", "battle_ai"]);
 const HOST_DISCONNECT_GRACE_MS = 2 * 60 * 1000; // 2 minutes
 
 const AI_BATTLE_EVENT_BASE_KEY = "ai_battle_hour";
-let aiBattleEventActive =
-  String(process.env.AI_BATTLE_EVENT_ACTIVE || "").toLowerCase() === "true";
-const AI_BATTLE_EVENT_SLOT = process.env.AI_BATTLE_EVENT_SLOT || "20:00-21:00";
+let aiBattleEventActive = config.aiBattleEventActive;
+const AI_BATTLE_EVENT_SLOT = config.aiBattleEventSlot;
 const AI_BATTLE_EVENT_INTERVAL_MS = 30 * 1000;
 let ioRef = null;
 
@@ -840,7 +874,7 @@ function summarizeJoinableRoom(room) {
   };
 }
 
-app.get("/api/rooms/open", (_req, res) => {
+app.get("/api/rooms/open", pollingLimiter, (_req, res) => {
   const summaries = [];
 
   for (const room of rooms.values()) {
@@ -856,8 +890,49 @@ app.get("/api/rooms/open", (_req, res) => {
   res.json({ rooms: summaries.slice(0, 20) });
 });
 
-app.get("/api/events/status", (_req, res) => {
+app.get("/api/events/status", pollingLimiter, (_req, res) => {
   res.json(getAiBattleEventStatus());
+});
+
+// ---------- Leaderboard API ----------
+app.get("/api/leaderboard/top-players", async (_req, res) => {
+  try {
+    const topPlayers = await prisma.user.findMany({
+      where: { isAnonymous: false, totalWins: { gt: 0 } },
+      orderBy: { totalWins: "desc" },
+      take: 10,
+      select: {
+        displayName: true,
+        username: true,
+        totalWins: true,
+        totalGames: true,
+      },
+    });
+    res.json(topPlayers);
+  } catch (error) {
+    console.error("Leaderboard error:", error);
+    res.status(500).json({ error: "Failed to fetch leaderboard" });
+  }
+});
+
+app.get("/api/leaderboard/streaks", async (_req, res) => {
+  try {
+    const topStreaks = await prisma.user.findMany({
+      where: { isAnonymous: false, longestStreak: { gt: 0 } },
+      orderBy: { longestStreak: "desc" },
+      take: 10,
+      select: {
+        displayName: true,
+        username: true,
+        streak: true,
+        longestStreak: true,
+      },
+    });
+    res.json(topStreaks);
+  } catch (error) {
+    console.error("Streaks error:", error);
+    res.status(500).json({ error: "Failed to fetch streaks" });
+  }
 });
 
 function normalizeMode(mode) {
@@ -1012,11 +1087,12 @@ function handleAiBattleTimeout(roomId) {
 
   battleMode.endBattleRound(room, null, { updateStatsOnWin });
   room.battle.deadline = null;
-  if (room.battle.aiHost?.mode === "auto") {
-    scheduleAiBattleCountdown(roomId);
-  } else {
-    room.battle.countdownEndsAt = null;
+  if (room.battle.aiHost?.mode === "player") {
+    room.battle.aiHost = { mode: "auto", claimedBy: null, pendingStart: false };
+    room.hostId = room.meta?.isEvent ? "server" : null;
+    room.hostConnected = room.meta?.isEvent ? true : false;
   }
+  scheduleAiBattleCountdown(roomId);
   io.to(roomId).emit("roomState", sanitizeRoom(room));
 }
 
@@ -1089,6 +1165,9 @@ io.on("connection", (socket) => {
   });
 
   socket.on("createRoom", ({ name, mode = "duel" }, cb) => {
+    if (!checkSocketRateLimit(socket.id, "createRoom", 5)) {
+      return cb?.({ error: "Too many rooms created. Slow down!" });
+    }
     // Sanitize and validate inputs
     const sanitizedName = sanitizePlayerName(name);
     if (!sanitizedName || !isSafeInput(sanitizedName)) {
@@ -1149,6 +1228,9 @@ io.on("connection", (socket) => {
   });
 
   socket.on("joinRoom", ({ name, roomId }, cb) => {
+    if (!checkSocketRateLimit(socket.id, "joinRoom", 10)) {
+      return cb?.({ error: "Too many join attempts. Slow down!" });
+    }
     // Sanitize and validate inputs
     const sanitizedRoomId = sanitizeRoomId(roomId);
     const sanitizedName = sanitizePlayerName(name);
@@ -1263,16 +1345,19 @@ io.on("connection", (socket) => {
         room,
         roundMs: ROUND_MS,
         scheduleTimeout: () =>
-          setTimeout(() => handleDuelTimeout(roomId), ROUND_MS),
+          setTimeout(() => handleDuelTimeout(sanitizedRoomId), ROUND_MS),
       });
       if (startResult?.error) return cb?.(startResult);
     }
 
-    io.to(roomId).emit("roomState", sanitizeRoom(room));
+    io.to(sanitizedRoomId).emit("roomState", sanitizeRoom(room));
     cb?.({ ok: true });
   });
 
   socket.on("makeGuess", ({ roomId, guess }, cb) => {
+    if (!checkSocketRateLimit(socket.id, "makeGuess", 10)) {
+      return cb?.({ error: "Too many guesses. Slow down!" });
+    }
     // Sanitize inputs
     const sanitizedRoomId = sanitizeRoomId(roomId);
     const sanitizedGuess = sanitizeWord(guess);
@@ -1335,11 +1420,12 @@ io.on("connection", (socket) => {
           room._aiBattleRoundTimer = null;
         }
         room.battle.deadline = null;
-        if (room.battle.aiHost?.mode === "auto") {
-          scheduleAiBattleCountdown(sanitizedRoomId);
-        } else {
-          room.battle.countdownEndsAt = null;
+        if (room.battle.aiHost?.mode === "player") {
+          room.battle.aiHost = { mode: "auto", claimedBy: null, pendingStart: false };
+          room.hostId = room.meta?.isEvent ? "server" : null;
+          room.hostConnected = room.meta?.isEvent ? true : false;
         }
+        scheduleAiBattleCountdown(sanitizedRoomId);
       }
       io.to(sanitizedRoomId).emit("roomState", sanitizeRoom(room));
       return cb?.({ ok: true, pattern: result?.pattern });
@@ -1713,6 +1799,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
+    clearSocketRateLimits(socket.id);
     const now = Date.now();
     for (const [id, room] of rooms) {
       const player = room.players[socket.id];
@@ -1873,10 +1960,10 @@ const startRoomCleanupInterval = () =>
   }, 5 * 60 * 1000);
 
 const roomCleanupInterval =
-  process.env.NODE_ENV !== "test" ? startRoomCleanupInterval() : null;
+  !config.isTest ? startRoomCleanupInterval() : null;
 
 const aiBattleEventInterval =
-  isAiBattleEventActive() && process.env.NODE_ENV !== "test"
+  isAiBattleEventActive() && !config.isTest
     ? setInterval(() => ensureAiBattleEventRoom(), AI_BATTLE_EVENT_INTERVAL_MS)
     : null;
 
@@ -1945,8 +2032,29 @@ function sanitizeRoom(room) {
   };
 }
 
+// ---------- CORS rejection handler ----------
+app.use((err, req, res, next) => {
+  if (err.message && err.message.startsWith("CORS:")) {
+    console.warn(`CORS rejected: ${req.headers.origin}`);
+    if (Sentry.isInitialized()) {
+      Sentry.captureMessage(err.message, {
+        level: "warning",
+        extra: { origin: req.headers.origin, url: req.url },
+      });
+    }
+    res.status(403).json({ error: "Origin not allowed" });
+    return;
+  }
+  next(err);
+});
+
+// ---------- Sentry error handler (must be before other error handlers) ----------
+if (config.sentryDsn) {
+  Sentry.setupExpressErrorHandler(app);
+}
+
 // ---------- Catch-all route for client-side routing (production only) ----------
-if (process.env.NODE_ENV === "production") {
+if (config.isProduction) {
   app.get("*", (req, res) => {
     const clientDistPath = path.join(__dirname, "..", "client", "dist");
     res.sendFile(path.join(clientDistPath, "index.html"));
@@ -1954,12 +2062,19 @@ if (process.env.NODE_ENV === "production") {
 }
 
 // ---------- Start server ----------
-const PORT = process.env.PORT || 8080;
+const PORT = config.port;
 
-if (process.env.NODE_ENV !== "test") {
-  httpServer.listen(PORT, "0.0.0.0", () =>
-    console.log("Server listening on", PORT)
-  );
+if (!config.isTest) {
+  try {
+    httpServer.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server listening on ${PORT}`);
+      console.log(`Word lists loaded: ${WORDSET.size} solutions, ${GUESSSET.size} total guesses`);
+      startSessionCleanup();
+    });
+  } catch (error) {
+    console.error("Server startup failed:", error.message);
+    process.exit(1);
+  }
 }
 
 export { httpServer };

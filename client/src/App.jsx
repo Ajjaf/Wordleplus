@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import { socket } from "./socket";
 import { useGameContext } from "./contexts/GameContext";
 import { useGameState } from "@/hooks/useGameState";
@@ -106,11 +106,33 @@ export default function App() {
     aiBattleActions
   );
 
+  // Track the last game result that opened the victory modal.
+  // This prevents the modal from re-opening when roomState is re-broadcast
+  // after a player clicks "Play Again" (server hasn't reset the room yet).
+  const lastDuelVictoryKeyRef = useRef(null);
+  const lastSharedVictoryKeyRef = useRef(null);
+
   // Show victory for duel mode - separate effect to reduce dependencies
   useEffect(() => {
     if (!room || room.mode !== "duel") return;
     const shouldShow = Boolean(room.winner) || Boolean(room.duelReveal);
-    setShowVictory(shouldShow);
+
+    if (!shouldShow) {
+      // Game was reset — clear the key so the next result opens the modal
+      lastDuelVictoryKeyRef.current = null;
+      setShowVictory(false);
+      return;
+    }
+
+    // Build a stable key for this specific game result
+    const revealKeys = Object.keys(room.duelReveal || {}).sort().join(",");
+    const victoryKey = `${room.winner || "none"}-${revealKeys}`;
+
+    // Only open the modal for a new result; ignore re-broadcasts of the same result
+    if (victoryKey !== lastDuelVictoryKeyRef.current) {
+      lastDuelVictoryKeyRef.current = victoryKey;
+      setShowVictory(true);
+    }
   }, [room?.mode, room?.winner, room?.duelReveal, setShowVictory]);
 
   // Show victory for shared mode - separate effect to reduce dependencies
@@ -118,7 +140,19 @@ export default function App() {
     if (!room || room.mode !== "shared") return;
     const shouldShow =
       Boolean(room.shared?.winner) || Boolean(room.shared?.lastRevealedWord);
-    setShowVictory(shouldShow);
+
+    if (!shouldShow) {
+      lastSharedVictoryKeyRef.current = null;
+      setShowVictory(false);
+      return;
+    }
+
+    const victoryKey = `${room.shared?.winner || "none"}-${room.shared?.lastRevealedWord || ""}`;
+
+    if (victoryKey !== lastSharedVictoryKeyRef.current) {
+      lastSharedVictoryKeyRef.current = victoryKey;
+      setShowVictory(true);
+    }
   }, [room?.mode, room?.shared?.winner, room?.shared?.lastRevealedWord, setShowVictory]);
 
   // Hide victory for battle modes - separate effect to reduce dependencies

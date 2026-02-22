@@ -1,5 +1,6 @@
 // client/src/components/ErrorBoundary.jsx
 import React, { Component } from "react";
+import * as Sentry from "@sentry/react";
 import { logger } from "../utils/logger";
 
 class ErrorBoundary extends Component {
@@ -26,13 +27,17 @@ class ErrorBoundary extends Component {
       errorInfo,
     });
 
-    // TODO: In production, send to error tracking service (Sentry, LogRocket, etc.)
-    // Example:
-    // if (window.Sentry) {
-    //   window.Sentry.captureException(error, {
-    //     contexts: { react: { componentStack: errorInfo.componentStack } }
-    //   });
-    // }
+    // Send to Sentry if configured
+    if (Sentry.isInitialized()) {
+      Sentry.captureException(error, {
+        contexts: {
+          react: {
+            componentStack: errorInfo.componentStack,
+            componentName: this.props.componentName || "Unknown",
+          },
+        },
+      });
+    }
   }
 
   handleReset = () => {

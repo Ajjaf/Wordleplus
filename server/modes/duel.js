@@ -24,8 +24,8 @@ function computeDuelWinner(room) {
     const [a, b] = ids;
     const A = room.players[a];
     const B = room.players[b];
-    const aSolved = A.guesses.some((g) => g.guess === room.players[b].secret);
-    const bSolved = B.guesses.some((g) => g.guess === room.players[a].secret);
+    const aSolved = A.guesses.some((g) => g.guess === room.players[b]?.secret);
+    const bSolved = B.guesses.some((g) => g.guess === room.players[a]?.secret);
 
     if (aSolved && !bSolved) winner = a;
     else if (!aSolved && bSolved) winner = b;

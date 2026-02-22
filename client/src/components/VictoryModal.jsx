@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, memo, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Trophy, Crown, X, RefreshCw, Zap } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 // Enhanced Tiles component with animations
@@ -9,23 +9,23 @@ const Tiles = memo(function Tiles({ word = "", size = "md", animated = false }) 
   const letters = (word || "").toUpperCase().padEnd(5).slice(0, 5).split("");
   const sizeClasses = {
     sm: "h-8 w-8 text-sm",
-    md: "h-12 w-12 text-base",
+    md: "h-11 w-11 text-base",
     lg: "h-14 w-14 text-lg",
   };
-  
+
   return (
     <div className="flex items-center justify-center">
       <div className="flex gap-1.5">
         {letters.map((ch, i) => (
           <motion.div
             key={i}
-            initial={animated ? { opacity: 0, scale: 0.8 } : false}
-            animate={animated ? { opacity: 1, scale: 1 } : {}}
-            transition={{ delay: i * 0.05, duration: 0.3 }}
+            initial={animated ? { opacity: 0, scale: 0.6, y: 6 } : false}
+            animate={animated ? { opacity: 1, scale: 1, y: 0 } : {}}
+            transition={{ delay: i * 0.07, type: "spring", stiffness: 400, damping: 20 }}
             className={cn(
               "grid place-items-center rounded-md font-bold text-white",
               sizeClasses[size],
-              "bg-[#6aaa64] border border-[#6aaa64]"
+              "bg-[#6aaa64] border border-[#5a9a54]"
             )}
           >
             {ch.trim()}
@@ -39,11 +39,7 @@ const Tiles = memo(function Tiles({ word = "", size = "md", animated = false }) 
 // Stats calculation utilities
 function calculatePlayerStats(player, opponentSecret) {
   if (!player || !opponentSecret) {
-    return {
-      guessCount: 0,
-      solveGuess: null,
-      solved: false,
-    };
+    return { guessCount: 0, solveGuess: null, solved: false };
   }
 
   const guesses = player.guesses || [];
@@ -71,11 +67,12 @@ function VictoryModal({
   rightSecret,
   leftPlayerId = null,
   rightPlayerId = null,
-  leftPlayer = null, // Full player object with guesses, wins, streak
-  rightPlayer = null, // Full player object with guesses, wins, streak
+  leftPlayer = null,
+  rightPlayer = null,
   battleSecret,
   onPlayAgain,
-  showPlayAgain = true, // duel=true, battle=false
+  showPlayAgain = true,
+  dailyStats = null, // { guesses: number, streak: number }
 }) {
   const overlayRef = useRef(null);
   const dialogRef = useRef(null);
@@ -87,7 +84,7 @@ function VictoryModal({
     setTimeout(() => {
       const btn = dialogRef.current?.querySelector("[data-autofocus]");
       (btn || dialogRef.current)?.focus();
-    }, 0);
+    }, 50);
 
     const onKey = (e) => {
       if (e.key === "Escape") onOpenChange?.(false);
@@ -115,6 +112,25 @@ function VictoryModal({
     };
   }, [open, onOpenChange]);
 
+  // Screen reader announcement
+  useEffect(() => {
+    if (!open) return;
+    const announcement =
+      mode === "daily"
+        ? "Puzzle solved! Congratulations!"
+        : winnerName
+        ? `${winnerName} wins the round!`
+        : "Round complete.";
+
+    const liveRegion = document.createElement("div");
+    liveRegion.setAttribute("role", "status");
+    liveRegion.setAttribute("aria-live", "polite");
+    liveRegion.className = "sr-only";
+    liveRegion.textContent = announcement;
+    document.body.appendChild(liveRegion);
+    return () => liveRegion.remove();
+  }, [open, mode, winnerName]);
+
   if (!open) return null;
 
   const onOverlayClick = (e) => {
@@ -130,109 +146,85 @@ function VictoryModal({
     const leftStats = calculatePlayerStats(leftPlayer, rightSecret);
     const rightStats = calculatePlayerStats(rightPlayer, leftSecret);
 
-    // Determine winner based on who solved first or fewer guesses
     let actualWinner = winnerId;
     if (!actualWinner) {
       if (leftStats.solved && !rightStats.solved) actualWinner = leftPlayerId;
       else if (rightStats.solved && !leftStats.solved) actualWinner = rightPlayerId;
       else if (leftStats.solved && rightStats.solved) {
-        actualWinner = leftStats.solveGuess < rightStats.solveGuess 
-          ? leftPlayerId 
-          : rightStats.solveGuess < leftStats.solveGuess 
-          ? rightPlayerId 
-          : "draw";
+        actualWinner =
+          leftStats.solveGuess < rightStats.solveGuess
+            ? leftPlayerId
+            : rightStats.solveGuess < leftStats.solveGuess
+            ? rightPlayerId
+            : "draw";
       }
     }
 
-    return {
-      left: leftStats,
-      right: rightStats,
-      winner: actualWinner,
-    };
+    return { left: leftStats, right: rightStats, winner: actualWinner };
   }, [mode, leftPlayer, rightPlayer, leftSecret, rightSecret, winnerId, leftPlayerId, rightPlayerId]);
+
+  const isDraw = duelStats?.winner === "draw";
 
   const title =
     mode === "daily"
-      ? "🎉 Puzzle Solved!"
+      ? "Puzzle Solved!"
+      : isDraw
+      ? "It's a Draw!"
       : winnerName
       ? `${winnerName} wins`
       : "Round complete";
 
+  const titleEmoji =
+    mode === "daily" ? "🎉" : isDraw ? "🤝" : winnerName ? "🏆" : "✅";
+
   return (
     <div
       ref={overlayRef}
+      role="presentation"
       onMouseDown={onOverlayClick}
-      className="fixed inset-0 z-50 grid place-items-center bg-black/40 backdrop-blur-sm animate-[fadeIn_160ms_ease-out]"
-      aria-hidden="true"
+      className="fixed inset-0 z-50 grid place-items-center bg-black/50 backdrop-blur-sm"
+      style={{ animation: "fadeIn 160ms ease-out" }}
     >
-      <div
+      <motion.div
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="victory-title"
         tabIndex={-1}
-        className="w-full max-w-2xl mx-4 rounded-xl bg-white dark:bg-neutral-900 shadow-2xl outline-none ring-1 ring-black/10 animate-[popIn_200ms_cubic-bezier(0.2,0.8,0.2,1)] overflow-hidden max-h-[90vh] overflow-y-auto"
+        initial={{ opacity: 0, scale: 0.94, y: 12 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        transition={{ type: "spring", stiffness: 300, damping: 25 }}
+        className="w-full max-w-2xl mx-4 rounded-2xl bg-slate-900/95 border border-white/10 shadow-2xl outline-none max-h-[90vh] overflow-y-auto"
       >
-        {/* Gradient background overlay */}
-        <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 via-blue-500/10 to-amber-500/10 pointer-events-none" />
-        
-        <div className="relative p-4 sm:p-6 md:p-8">
-          {/* Title with trophy icon */}
+        {/* Gradient overlay */}
+        <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-purple-500/8 via-blue-500/5 to-amber-500/8 pointer-events-none" />
+
+        <div className="relative p-5 sm:p-7">
+          {/* Header */}
           <motion.div
-            initial={{ opacity: 0, y: -10 }}
+            initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3, delay: 0.1 }}
             className="flex items-center justify-center gap-3 mb-6"
           >
-            {mode !== "daily" && winnerName && (
-              <motion.div
-                animate={{ 
-                  scale: [1, 1.1, 1],
-                  rotate: [0, 5, -5, 0]
-                }}
-                transition={{ 
-                  duration: 2,
-                  repeat: Infinity,
-                  repeatDelay: 3
-                }}
-              >
-                <Trophy className="w-8 h-8 text-amber-500" />
-              </motion.div>
-            )}
-            <h3 id="victory-title" className="text-2xl sm:text-3xl font-bold tracking-tight text-center">
+            <motion.span
+              animate={{ scale: [1, 1.15, 1], rotate: [0, 8, -8, 0] }}
+              transition={{ duration: 2.5, repeat: Infinity, repeatDelay: 4 }}
+              className="text-3xl sm:text-4xl select-none"
+            >
+              {titleEmoji}
+            </motion.span>
+            <h3
+              id="victory-title"
+              className="text-2xl sm:text-3xl font-bold tracking-tight text-center text-white"
+            >
               {title}
             </h3>
-            {mode !== "daily" && winnerName && (
-              <motion.div
-                animate={{ 
-                  scale: [1, 1.1, 1],
-                  rotate: [0, -5, 5, 0]
-                }}
-                transition={{ 
-                  duration: 2,
-                  repeat: Infinity,
-                  repeatDelay: 3
-                }}
-              >
-                <Trophy className="w-8 h-8 text-amber-500" />
-              </motion.div>
-            )}
           </motion.div>
 
+          {/* Mode-specific content */}
           {mode === "daily" ? (
-            <div className="mt-4">
-              <div className="p-4 bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 rounded-lg">
-                <p className="text-center text-lg font-semibold">
-                  Congratulations, {winnerName || "Player"}!
-                </p>
-                <p className="text-center text-sm text-muted-foreground mt-2">
-                  You solved today's Daily Challenge!
-                </p>
-                <p className="text-center text-xs text-muted-foreground mt-3">
-                  Come back tomorrow for a new puzzle! 🌟
-                </p>
-              </div>
-            </div>
+            <DailyContent winnerName={winnerName} dailyStats={dailyStats} />
           ) : mode === "duel" ? (
             <DuelResults
               leftName={leftName}
@@ -245,34 +237,27 @@ function VictoryModal({
               leftPlayerId={leftPlayerId}
               rightPlayerId={rightPlayerId}
               stats={duelStats}
+              isDraw={isDraw}
             />
-          ) : mode === "shared" ? (
-            <div className="mt-4">
-              <p className="text-sm text-muted-foreground mb-2">Secret word:</p>
-              <Tiles word={battleSecret} />
-              <div className="mt-4 p-3 bg-muted rounded-lg">
-                <p className="text-sm text-muted-foreground">
-                  Congrats <span className="font-semibold">{winnerName}</span> solved the shared puzzle!
-                </p>
-              </div>
-            </div>
           ) : (
-            <div className="mt-4">
-              <p className="text-sm text-muted-foreground mb-2">Secret word:</p>
-              <Tiles word={battleSecret} />
-            </div>
+            <WordReveal
+              secret={battleSecret}
+              winnerName={winnerName}
+              mode={mode}
+            />
           )}
 
+          {/* Action buttons */}
           <motion.div
-            initial={{ opacity: 0, y: 10 }}
+            initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, delay: 0.45 }}
+            transition={{ duration: 0.3, delay: 0.5 }}
             className="mt-6 sm:mt-8 flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-3"
           >
             <Button
-              variant="secondary"
+              variant="ghost"
               onClick={() => onOpenChange?.(false)}
-              className="flex items-center justify-center gap-2 w-full sm:w-auto"
+              className="flex items-center justify-center gap-2 w-full sm:w-auto text-white/60 hover:text-white hover:bg-white/10 active:scale-95 transition-all"
             >
               <X className="w-4 h-4" />
               Close
@@ -281,7 +266,7 @@ function VictoryModal({
               <Button
                 data-autofocus
                 onClick={onPlayAgain}
-                className="flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 w-full sm:w-auto"
+                className="flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white shadow-lg hover:shadow-purple-500/25 hover:scale-105 active:scale-95 transition-all duration-200 w-full sm:w-auto"
               >
                 <RefreshCw className="w-4 h-4" />
                 Play Again
@@ -289,55 +274,194 @@ function VictoryModal({
             )}
           </motion.div>
         </div>
-      </div>
+      </motion.div>
 
       <style>{`
         @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
-        @keyframes popIn {
-          0% { opacity: 0; transform: translateY(6px) scale(.96) }
-          100% { opacity: 1; transform: translateY(0) scale(1) }
-        }
       `}</style>
     </div>
   );
 }
 
+// Daily challenge result content
+function DailyContent({ winnerName, dailyStats }) {
+  const guesses = dailyStats?.guesses ?? null;
+  const streak = dailyStats?.streak ?? null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, delay: 0.2 }}
+      className="space-y-4"
+    >
+      <div className="p-5 bg-gradient-to-br from-purple-500/10 to-blue-500/10 border border-purple-500/20 rounded-xl text-center">
+        <p className="text-lg font-semibold text-white">
+          Well done, {winnerName || "Player"}!
+        </p>
+        <p className="text-sm text-white/60 mt-1">
+          You solved today's Daily Challenge
+        </p>
+        {guesses !== null && (
+          <p className="text-sm text-white/80 mt-3 font-medium">
+            Solved in{" "}
+            <span className="text-emerald-400 font-bold">{guesses}</span>
+            {" / 6 "}
+            {guesses === 1 ? "guess" : "guesses"}
+          </p>
+        )}
+      </div>
+
+      {streak !== null && streak > 0 && (
+        <div className="flex items-center justify-between px-4 py-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+          <div className="flex items-center gap-2 text-amber-400">
+            <Zap className="w-4 h-4" />
+            <span className="text-sm font-semibold">Current streak</span>
+          </div>
+          <span className="text-xl font-bold text-amber-400">{streak}</span>
+        </div>
+      )}
+
+      <p className="text-center text-xs text-white/40">
+        Come back tomorrow for a new puzzle 🌟
+      </p>
+    </motion.div>
+  );
+}
+
+// Battle / shared word reveal
+function WordReveal({ secret, winnerName, mode }) {
+  const isShared = mode === "shared";
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, delay: 0.2 }}
+      className="space-y-4 text-center"
+    >
+      {winnerName && (
+        <p className="text-sm text-white/70">
+          <span className="font-semibold text-white">{winnerName}</span>
+          {isShared ? " solved the shared puzzle!" : " won this round!"}
+        </p>
+      )}
+      <div className="py-3">
+        <p className="text-xs text-white/40 uppercase tracking-widest mb-3">
+          The word was
+        </p>
+        <Tiles word={secret} size="lg" animated />
+      </div>
+    </motion.div>
+  );
+}
+
 // Enhanced Avatar component
-function Avatar({ name, isWinner = false, size = "md" }) {
+function Avatar({ name, isWinner = false, isDraw = false, size = "md" }) {
   const initials = (name || "")
     .trim()
     .split(/\s+/)
     .slice(0, 2)
     .map((p) => p[0]?.toUpperCase() || "")
     .join("");
-  
+
   const sizeClasses = {
-    sm: "h-10 w-10 sm:h-12 sm:w-12 text-sm sm:text-base",
-    md: "h-14 w-14 sm:h-16 sm:w-16 text-lg sm:text-xl",
-    lg: "h-18 w-18 sm:h-20 sm:w-20 text-xl sm:text-2xl",
+    sm: "h-10 w-10 text-sm",
+    md: "h-14 w-14 text-lg",
+    lg: "h-18 w-18 text-xl",
   };
 
   return (
     <div
       className={cn(
-        "rounded-full grid place-items-center font-bold text-white relative",
+        "rounded-full grid place-items-center font-bold text-white relative shrink-0",
         sizeClasses[size],
         isWinner
-          ? "bg-gradient-to-br from-amber-400 via-yellow-500 to-amber-600 shadow-lg shadow-amber-500/50 ring-2 ring-amber-400"
-          : "bg-gradient-to-br from-slate-400 to-slate-600 opacity-75"
+          ? "bg-gradient-to-br from-amber-400 via-yellow-500 to-amber-600 shadow-lg shadow-amber-500/40 ring-2 ring-amber-400"
+          : isDraw
+          ? "bg-gradient-to-br from-slate-500 to-slate-600 ring-1 ring-white/20"
+          : "bg-gradient-to-br from-slate-500 to-slate-700 opacity-60"
       )}
     >
       {initials || "?"}
       {isWinner && (
-        <div className="absolute -top-1 -right-1 bg-amber-500 rounded-full p-1">
-          <Crown className="w-4 h-4 text-white" />
+        <div className="absolute -top-1 -right-1 bg-amber-500 rounded-full p-0.5">
+          <Crown className="w-3.5 h-3.5 text-white" />
         </div>
       )}
     </div>
   );
 }
 
-// Duel Results Component with enhanced design
+// Player card inside DuelResults
+function DuelPlayerCard({ name, secret, player, isWinner, isDraw, playerId, winnerId, stats, side }) {
+  const statData = side === "left" ? stats?.left : stats?.right;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: side === "left" ? -16 : 16 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.35, delay: side === "left" ? 0.25 : 0.35, type: "spring", stiffness: 260, damping: 22 }}
+      className={cn(
+        "relative p-4 sm:p-5 rounded-xl border-2 transition-all h-full",
+        isWinner
+          ? "bg-gradient-to-br from-amber-500/10 to-yellow-500/10 border-amber-400/70 shadow-lg shadow-amber-500/15"
+          : isDraw
+          ? "bg-white/5 border-white/20"
+          : "bg-white/[0.03] border-white/10 opacity-70"
+      )}
+    >
+      {isWinner && (
+        <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-amber-500 text-white px-3 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 shadow-lg whitespace-nowrap">
+          <Trophy className="w-2.5 h-2.5" />
+          Winner
+        </div>
+      )}
+      {isDraw && (
+        <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-slate-600 text-white px-3 py-0.5 rounded-full text-[10px] font-bold shadow-lg whitespace-nowrap">
+          Draw
+        </div>
+      )}
+
+      <div className="flex items-center gap-3 mb-4">
+        <Avatar name={name} isWinner={isWinner} isDraw={isDraw} size="md" />
+        <div className="min-w-0">
+          <p className="font-bold text-white truncate">{name}</p>
+          {player?.wins !== undefined && (
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="text-xs text-white/40">{player.wins} wins</span>
+              {player.streak > 0 && (
+                <span className="inline-flex items-center gap-0.5 text-xs text-amber-400">
+                  <Zap className="w-3 h-3" />
+                  {player.streak}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <Tiles word={secret} size="md" animated />
+
+      {statData && (
+        <div className="mt-3 flex items-center justify-center gap-3 text-xs">
+          {statData.solved ? (
+            <>
+              <span className="text-emerald-400 font-semibold">
+                ✓ Solved in {statData.solveGuess} {statData.solveGuess === 1 ? "guess" : "guesses"}
+              </span>
+            </>
+          ) : (
+            <span className="text-white/40">
+              {statData.guessCount} {statData.guessCount === 1 ? "guess" : "guesses"}, not solved
+            </span>
+          )}
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
+// Duel Results — side-by-side on desktop
 function DuelResults({
   leftName,
   rightName,
@@ -349,132 +473,37 @@ function DuelResults({
   leftPlayerId,
   rightPlayerId,
   stats,
+  isDraw,
 }) {
-  const leftIsWinner = winnerId === leftPlayerId;
-  const rightIsWinner = winnerId === rightPlayerId;
-  const isDraw = winnerId === "draw" || (!leftIsWinner && !rightIsWinner);
+  const leftIsWinner = !isDraw && winnerId === leftPlayerId;
+  const rightIsWinner = !isDraw && winnerId === rightPlayerId;
 
   return (
-    <div className="space-y-4">
-      {/* Left Player Card */}
-      <motion.div
-        initial={{ opacity: 0, x: -20 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.3, delay: 0.3 }}
-        className={cn(
-          "relative p-4 sm:p-5 md:p-6 rounded-xl border-2 transition-all",
-          leftIsWinner
-            ? "bg-gradient-to-br from-amber-50/50 to-yellow-50/50 dark:from-amber-900/20 dark:to-yellow-900/20 border-amber-400 shadow-lg shadow-amber-500/20"
-            : "bg-muted/50 border-border opacity-75"
-        )}
-      >
-        {leftIsWinner && (
-          <div className="absolute -top-2 -right-2 sm:-top-3 sm:-right-3 bg-amber-500 text-white px-2 py-1 sm:px-3 rounded-full text-[10px] sm:text-xs font-bold flex items-center gap-1 shadow-lg">
-            <Trophy className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-            <span className="hidden sm:inline">Winner</span>
-          </div>
-        )}
-        <div className="flex flex-col sm:flex-row items-start gap-3 sm:gap-4">
-          <Avatar name={leftName} isWinner={leftIsWinner} size="md" />
-          <div className="flex-1 min-w-0 w-full sm:w-auto">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 mb-2">
-              <p className="font-bold text-base sm:text-lg">{leftName}</p>
-              {leftPlayer?.wins !== undefined && (
-                <span className="text-xs text-muted-foreground">
-                  ({leftPlayer.wins} wins
-                  {leftPlayer.streak > 0 && (
-                    <span className="ml-1 inline-flex items-center gap-0.5">
-                      <Zap className="w-3 h-3 text-amber-500" />
-                      {leftPlayer.streak} streak
-                    </span>
-                  )}
-                  )
-                </span>
-              )}
-            </div>
-            <div className="flex justify-center sm:justify-start">
-              <Tiles word={leftSecret} size="md" animated={true} />
-            </div>
-            {stats && (
-              <div className="mt-3 flex flex-wrap items-center gap-2 sm:gap-4 text-xs text-muted-foreground">
-                <span>
-                  {stats.left.solved
-                    ? `Solved in ${stats.left.solveGuess} guess${stats.left.solveGuess !== 1 ? "es" : ""}`
-                    : `${stats.left.guessCount} guess${stats.left.guessCount !== 1 ? "es" : ""}`}
-                </span>
-                {stats.left.solved && (
-                  <span className="text-emerald-600 font-semibold">✓ Solved</span>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      </motion.div>
-
-      {/* VS Divider */}
-      <div className="flex items-center gap-2 my-2">
-        <div className="flex-1 h-px bg-gradient-to-r from-transparent via-border to-transparent" />
-        <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">VS</span>
-        <div className="flex-1 h-px bg-gradient-to-r from-transparent via-border to-transparent" />
-      </div>
-
-      {/* Right Player Card */}
-      <motion.div
-        initial={{ opacity: 0, x: 20 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.3, delay: 0.35 }}
-        className={cn(
-          "relative p-4 sm:p-5 md:p-6 rounded-xl border-2 transition-all",
-          rightIsWinner
-            ? "bg-gradient-to-br from-amber-50/50 to-yellow-50/50 dark:from-amber-900/20 dark:to-yellow-900/20 border-amber-400 shadow-lg shadow-amber-500/20"
-            : "bg-muted/50 border-border opacity-75"
-        )}
-      >
-        {rightIsWinner && (
-          <div className="absolute -top-2 -right-2 sm:-top-3 sm:-right-3 bg-amber-500 text-white px-2 py-1 sm:px-3 rounded-full text-[10px] sm:text-xs font-bold flex items-center gap-1 shadow-lg">
-            <Trophy className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-            <span className="hidden sm:inline">Winner</span>
-          </div>
-        )}
-        <div className="flex flex-col sm:flex-row items-start gap-3 sm:gap-4">
-          <Avatar name={rightName} isWinner={rightIsWinner} size="md" />
-          <div className="flex-1 min-w-0 w-full sm:w-auto">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 mb-2">
-              <p className="font-bold text-base sm:text-lg">{rightName}</p>
-              {rightPlayer?.wins !== undefined && (
-                <span className="text-xs text-muted-foreground">
-                  ({rightPlayer.wins} wins
-                  {rightPlayer.streak > 0 && (
-                    <span className="ml-1 inline-flex items-center gap-0.5">
-                      <Zap className="w-3 h-3 text-amber-500" />
-                      {rightPlayer.streak} streak
-                    </span>
-                  )}
-                  )
-                </span>
-              )}
-            </div>
-            <div className="flex justify-center sm:justify-start">
-              <Tiles word={rightSecret} size="md" animated={true} />
-            </div>
-            {stats && (
-              <div className="mt-3 flex flex-wrap items-center gap-2 sm:gap-4 text-xs text-muted-foreground">
-                <span>
-                  {stats.right.solved
-                    ? `Solved in ${stats.right.solveGuess} guess${stats.right.solveGuess !== 1 ? "es" : ""}`
-                    : `${stats.right.guessCount} guess${stats.right.guessCount !== 1 ? "es" : ""}`}
-                </span>
-                {stats.right.solved && (
-                  <span className="text-emerald-600 font-semibold">✓ Solved</span>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      </motion.div>
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
+      <DuelPlayerCard
+        name={leftName}
+        secret={leftSecret}
+        player={leftPlayer}
+        isWinner={leftIsWinner}
+        isDraw={isDraw}
+        playerId={leftPlayerId}
+        winnerId={winnerId}
+        stats={stats}
+        side="left"
+      />
+      <DuelPlayerCard
+        name={rightName}
+        secret={rightSecret}
+        player={rightPlayer}
+        isWinner={rightIsWinner}
+        isDraw={isDraw}
+        playerId={rightPlayerId}
+        winnerId={winnerId}
+        stats={stats}
+        side="right"
+      />
     </div>
   );
 }
 
-// Memoize VictoryModal component to prevent unnecessary re-renders
 export default memo(VictoryModal);

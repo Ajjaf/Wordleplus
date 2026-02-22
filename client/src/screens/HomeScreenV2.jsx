@@ -77,6 +77,9 @@ export default function HomeScreenV2({
   const [eventStatus, setEventStatus] = useState(null);
   const [eventLoading, setEventLoading] = useState(true);
   const [eventError, setEventError] = useState("");
+  const [topPlayers, setTopPlayers] = useState([]);
+  const [topStreaks, setTopStreaks] = useState([]);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(true);
 
   useEffect(() => {
     if (!isAuthenticated || isAnonymous) return;
@@ -237,6 +240,39 @@ export default function HomeScreenV2({
     return () => {
       isActive = false;
       clearInterval(intervalId);
+    };
+  }, []);
+
+  useEffect(() => {
+    let isActive = true;
+    async function fetchLeaderboard() {
+      try {
+        const [playersRes, streaksRes] = await Promise.all([
+          fetch(buildApiUrl("/api/leaderboard/top-players"), {
+            credentials: "include",
+          }),
+          fetch(buildApiUrl("/api/leaderboard/streaks"), {
+            credentials: "include",
+          }),
+        ]);
+        if (!isActive) return;
+        if (playersRes.ok) {
+          const data = await playersRes.json();
+          if (isActive) setTopPlayers(Array.isArray(data) ? data : []);
+        }
+        if (streaksRes.ok) {
+          const data = await streaksRes.json();
+          if (isActive) setTopStreaks(Array.isArray(data) ? data : []);
+        }
+      } catch (error) {
+        logger.error("Failed to load leaderboard:", error);
+      } finally {
+        if (isActive) setLeaderboardLoading(false);
+      }
+    }
+    fetchLeaderboard();
+    return () => {
+      isActive = false;
     };
   }, []);
 
@@ -723,18 +759,38 @@ export default function HomeScreenV2({
                 title="Top Players"
                 icon={<Trophy className="w-6 h-6 text-yellow-400" />}
               >
-                <div className="text-white/50 text-sm text-center py-4">
-                  Coming soon...
-                </div>
+                <LeaderboardList
+                  loading={leaderboardLoading}
+                  items={topPlayers}
+                  renderItem={(p, i) => (
+                    <LeaderboardRow
+                      key={i}
+                      rank={i + 1}
+                      name={p.displayName || p.username || "Anonymous"}
+                      stat={`${p.totalWins}W / ${p.totalGames}G`}
+                    />
+                  )}
+                  emptyText="No players yet — be the first!"
+                />
               </LeaderboardCard>
 
               <LeaderboardCard
-                title="Recent Streaks"
+                title="Top Streaks"
                 icon={<Star className="w-6 h-6 text-cyan-400" />}
               >
-                <div className="text-white/50 text-sm text-center py-4">
-                  Coming soon...
-                </div>
+                <LeaderboardList
+                  loading={leaderboardLoading}
+                  items={topStreaks}
+                  renderItem={(p, i) => (
+                    <LeaderboardRow
+                      key={i}
+                      rank={i + 1}
+                      name={p.displayName || p.username || "Anonymous"}
+                      stat={`${p.longestStreak} best · ${p.streak} current`}
+                    />
+                  )}
+                  emptyText="No streaks yet — start one today!"
+                />
               </LeaderboardCard>
             </div>
           </section>
@@ -766,5 +822,36 @@ function LeaderboardCard({ title, icon, children }) {
       </div>
       {children}
     </motion.div>
+  );
+}
+
+function LeaderboardList({ loading, items, renderItem, emptyText }) {
+  if (loading) {
+    return (
+      <div className="flex justify-center py-4">
+        <div className="animate-spin rounded-full h-5 w-5 border-2 border-white/30 border-t-white/80" />
+      </div>
+    );
+  }
+  if (!items || items.length === 0) {
+    return (
+      <div className="text-white/50 text-sm text-center py-4">{emptyText}</div>
+    );
+  }
+  return <div className="space-y-2">{items.map(renderItem)}</div>;
+}
+
+function LeaderboardRow({ rank, name, stat }) {
+  const medals = ["🥇", "🥈", "🥉"];
+  return (
+    <div className="flex items-center gap-3 px-2 py-1.5 rounded-lg hover:bg-white/5 transition-colors">
+      <span className="w-7 text-center text-sm font-bold text-white/70">
+        {medals[rank - 1] || rank}
+      </span>
+      <span className="flex-1 text-sm text-white truncate">{name}</span>
+      <span className="text-xs text-white/60 font-mono whitespace-nowrap">
+        {stat}
+      </span>
+    </div>
   );
 }
