@@ -1087,11 +1087,12 @@ function handleAiBattleTimeout(roomId) {
 
   battleMode.endBattleRound(room, null, { updateStatsOnWin });
   room.battle.deadline = null;
-  if (room.battle.aiHost?.mode === "auto") {
-    scheduleAiBattleCountdown(roomId);
-  } else {
-    room.battle.countdownEndsAt = null;
+  if (room.battle.aiHost?.mode === "player") {
+    room.battle.aiHost = { mode: "auto", claimedBy: null, pendingStart: false };
+    room.hostId = room.meta?.isEvent ? "server" : null;
+    room.hostConnected = room.meta?.isEvent ? true : false;
   }
+  scheduleAiBattleCountdown(roomId);
   io.to(roomId).emit("roomState", sanitizeRoom(room));
 }
 
@@ -1419,11 +1420,12 @@ io.on("connection", (socket) => {
           room._aiBattleRoundTimer = null;
         }
         room.battle.deadline = null;
-        if (room.battle.aiHost?.mode === "auto") {
-          scheduleAiBattleCountdown(sanitizedRoomId);
-        } else {
-          room.battle.countdownEndsAt = null;
+        if (room.battle.aiHost?.mode === "player") {
+          room.battle.aiHost = { mode: "auto", claimedBy: null, pendingStart: false };
+          room.hostId = room.meta?.isEvent ? "server" : null;
+          room.hostConnected = room.meta?.isEvent ? true : false;
         }
+        scheduleAiBattleCountdown(sanitizedRoomId);
       }
       io.to(sanitizedRoomId).emit("roomState", sanitizeRoom(room));
       return cb?.({ ok: true, pattern: result?.pattern });
