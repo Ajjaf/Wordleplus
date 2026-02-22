@@ -214,7 +214,7 @@ export default function GameRouter({
             <ErrorBoundary componentName="HostSpectateScreen">
               <Suspense fallback={<ScreenLoadingFallback />}>
                 <HostSpectateScreen
-                key="host"
+                key={`host-${room?.hostId ?? "none"}`}
                 room={room}
                 players={players}
                 onWordSubmit={async (word) => {

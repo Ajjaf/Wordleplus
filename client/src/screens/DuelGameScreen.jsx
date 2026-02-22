@@ -192,6 +192,12 @@ function DuelGameScreen({
       setSecretWordInput("");
       setSecretLocked(false);
       setMySubmittedSecret("");
+      setShowParticles(false);
+      setShowConfetti(false);
+      setShowCorrectParticles(false);
+      setShowStreakParticles(false);
+      setLastStreak(0);
+      setSecretErrorKey(0);
     }
   }, [freshRound]);
 

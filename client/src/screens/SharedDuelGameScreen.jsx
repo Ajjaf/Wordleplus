@@ -324,7 +324,7 @@ export default function SharedDuelGameScreen({
       }}
       letterStates={letterStates}
       onKeyPress={handleKey}
-      keyboardDisabled={(!myTurn || !canGuess) && room.shared?.started || submittingGuess}
+      keyboardDisabled={!room.shared?.started || !myTurn || !canGuess || submittingGuess}
       showKeyboard={true}
       renderPlayerSection={renderPlayerSection}
       renderBoard={renderBoard}

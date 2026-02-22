@@ -1345,12 +1345,12 @@ io.on("connection", (socket) => {
         room,
         roundMs: ROUND_MS,
         scheduleTimeout: () =>
-          setTimeout(() => handleDuelTimeout(roomId), ROUND_MS),
+          setTimeout(() => handleDuelTimeout(sanitizedRoomId), ROUND_MS),
       });
       if (startResult?.error) return cb?.(startResult);
     }
 
-    io.to(roomId).emit("roomState", sanitizeRoom(room));
+    io.to(sanitizedRoomId).emit("roomState", sanitizeRoom(room));
     cb?.({ ok: true });
   });
 
