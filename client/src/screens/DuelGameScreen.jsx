@@ -4,16 +4,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { getRandomWord } from "../api";
 import { useIsMobile } from "../hooks/useIsMobile";
 import { useSwipeGestures } from "../hooks/useSwipeGestures";
-import GradientBackground from "../components/ui/GradientBackground";
 import { UnifiedPlayerCard } from "../components/player/UnifiedPlayerCard";
-import { GameEffects } from "../components/features/GameEffects";
-import { GameTimer } from "../components/features/GameTimer";
 import Board from "../components/Board.jsx";
-import Keyboard from "../components/Keyboard";
 import GlowButton from "../components/ui/GlowButton";
-import { SmartHint } from "../components/ui/SmartHint";
-import { IconStatusBadge } from "../components/ui/IconStatusBadge";
-import MicroProgressGrid from "../components/mobile/MicroProgressGrid";
 import { getModeTheme } from "../config/mode-themes";
 import { cn } from "../lib/utils";
 import { GameLayout } from "../components/layout/GameLayout";
@@ -478,56 +471,27 @@ function DuelGameScreen({
   const renderFooter = () => {
     if (isGameEnded) {
       return (
-        <div className={cn(
-          "text-center",
-          isMobile ? "pb-4" : "mb-2"
-        )}>
+        <div className={cn("text-center", isMobile ? "pb-4" : "mb-2")}>
           <GlowButton
             onClick={handleRematch}
             disabled={hasRequestedRematch}
             size="lg"
             variant={hasRequestedRematch ? "secondary" : "primary"}
-            className={cn(
-              isMobile && "w-full max-w-sm mx-auto"
-            )}
+            className={cn(isMobile && "w-full max-w-sm mx-auto")}
           >
-            {hasRequestedRematch
-              ? "✅ Rematch Requested"
-              : "🚀 Request Rematch"}
+            {hasRequestedRematch ? "Waiting..." : "Rematch"}
           </GlowButton>
           {rematchStatus && (
-            <div className="flex items-center justify-center gap-2 mt-2">
-              {opponentRequestedRematch ? (
-                <IconStatusBadge type="ready" size="sm" animated={true} />
-              ) : hasRequestedRematch ? (
-                <IconStatusBadge type="waitingForPlayer" size="sm" animated={true} />
-              ) : null}
-              <p className="text-xs text-white/60">{rematchStatus}</p>
-            </div>
+            <p className="text-[10px] text-white/40 mt-1.5">{rematchStatus}</p>
           )}
         </div>
       );
     }
     if (!canSetSecret && !canGuess) {
       return (
-        <div className="text-center py-4 flex flex-col items-center gap-2">
-          {!myReady ? (
-            <div className="flex items-center gap-2">
-              <IconStatusBadge type="ready" size="md" animated={true} />
-              <span className="text-sm text-white/60">Set your secret word</span>
-            </div>
-          ) : !oppReady ? (
-            <div className="flex items-center gap-2">
-              <IconStatusBadge type="waitingForPlayer" size="md" animated={true} />
-              <span className="text-sm text-white/60">Waiting for opponent</span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <IconStatusBadge type="ready" size="md" animated={true} />
-              <span className="text-sm text-white/60">Starting...</span>
-            </div>
-          )}
-        </div>
+        <p className="text-center text-xs text-white/40 py-3">
+          {!myReady ? "Set your secret word" : !oppReady ? "Waiting for opponent..." : "Starting..."}
+        </p>
       );
     }
     return null;
@@ -539,118 +503,47 @@ function DuelGameScreen({
     if (!isMobile && showBoardArea) {
       return (
         <div className="flex flex-col items-center flex-1 min-h-0 gap-4 w-full">
-          {/* Secret Word Entry Section - only for player */}
           {showSecretEntry && (
             <div className="flex flex-col items-center gap-2 flex-shrink-0 w-full">
-              <div className="text-[10px] uppercase tracking-[0.35em] text-white/50 text-center">
-                Choose your secret word
-              </div>
-
               <div
                 className="relative flex justify-center"
                 style={{
-                  width:
-                    secretRowWidth +
-                    (canSetSecret ? diceSize + secretGap : 0),
+                  width: secretRowWidth + (canSetSecret ? diceSize + secretGap : 0),
                   minHeight: secretTileSize,
                   paddingRight: canSetSecret ? diceSize + secretGap : 0,
                 }}
               >
-                {/* Secret Word Tiles */}
-                <div className="flex relative" style={{ gap: secretGap }}>
+                <div className="flex" style={{ gap: secretGap }}>
                   {Array.from({ length: 5 }).map((_, i) => {
-                    const typingLen = secretWordInput.length;
-                    const show =
-                      mySecretState === "typing"
-                        ? secretWordInput.padEnd(5, " ")
-                        : mySecretWord || "";
+                    const show = mySecretState === "typing" ? secretWordInput.padEnd(5, " ") : mySecretWord || "";
                     const letter = show[i] || "";
                     const isEmpty = letter === "" || letter === " ";
-                    const isActive =
-                      mySecretState === "typing" &&
-                      isEmpty &&
-                      i === typingLen;
-
-                    let bg = "var(--tile-empty-bg)",
-                      color = "var(--tile-text)",
-                      border = "1px solid var(--tile-empty-border)";
-
+                    const isActive = mySecretState === "typing" && isEmpty && i === secretWordInput.length;
                     const isReadyToSubmit = canSetSecret && secretWordInput.length === 5 && !isEmpty;
-                    
-                    if (mySecretState === "set" && !isEmpty) {
-                      bg = "#e3f2fd";
-                      color = "#1976d2";
-                      border = "1px solid #1976d2";
-                    } else if (isReadyToSubmit) {
-                      bg = "var(--tile-typed-bg)";
-                      border = "2px solid #10b981";
-                    } else if (isActive) {
-                      bg = "var(--tile-typed-bg)";
-                      border = "1px solid #999";
-                    }
 
-                    if (secretErrorActive) {
-                      bg = "#fee2e2";
-                      color = "#991b1b";
-                      border = "1px solid #ef4444";
-                    }
+                    let bg = "var(--tile-empty-bg)", color = "var(--tile-text)", border = "1px solid var(--tile-empty-border)";
+                    if (mySecretState === "set" && !isEmpty) { bg = "#e3f2fd"; color = "#1976d2"; border = "1px solid #1976d2"; }
+                    else if (isReadyToSubmit) { bg = "var(--tile-typed-bg)"; border = "2px solid #10b981"; }
+                    else if (isActive) { bg = "var(--tile-typed-bg)"; border = "1px solid #999"; }
+                    if (secretErrorActive) { bg = "#fee2e2"; color = "#991b1b"; border = "1px solid #ef4444"; }
 
                     return (
                       <div
                         key={`secret-${i}`}
                         className={secretErrorActive ? "tile-error" : ""}
                         style={{
-                          width: secretTileSize,
-                          height: secretTileSize,
-                          display: "grid",
-                          placeItems: "center",
-                          background: bg,
-                          color,
-                          fontWeight: "bold",
-                          fontSize: secretFontSize,
-                          lineHeight: 1,
-                          textTransform: "uppercase",
-                          border,
-                          borderRadius: 6,
-                          overflow: "hidden",
-                          transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-                          transform:
-                            mySecretState === "typing" && isEmpty
-                              ? "scale(1.05)"
-                              : "scale(1)",
-                          boxShadow:
-                            isReadyToSubmit
-                              ? "0 0 12px rgba(16, 185, 129, 0.6), 0 4px 12px rgba(16, 185, 129, 0.3)"
-                              : mySecretState === "set" && !isEmpty
-                              ? "0 4px 12px rgba(25, 118, 210, 0.3)"
-                              : mySecretState === "typing" && isEmpty
-                              ? "0 2px 8px rgba(0, 0, 0, 0.2)"
-                              : "0 1px 3px rgba(0, 0, 0, 0.1)",
-                          animation:
-                            isReadyToSubmit
-                              ? "pulse 2s ease-in-out infinite"
-                              : mySecretState === "typing" && isEmpty
-                              ? "pulse 1.5s ease-in-out infinite"
-                              : "none",
+                          width: secretTileSize, height: secretTileSize,
+                          display: "grid", placeItems: "center",
+                          background: bg, color, border, borderRadius: 6,
+                          fontWeight: "bold", fontSize: secretFontSize,
+                          textTransform: "uppercase", transition: "all 0.15s ease",
                         }}
                       >
-                        {mySecretState === "typing"
-                          ? letter.trim()
-                          : letter || ""}
+                        {mySecretState === "typing" ? letter.trim() : letter || ""}
                       </div>
                     );
                   })}
                 </div>
-
-                {canSetSecret && secretWordInput.length === 5 && (
-                  <SmartHint
-                    show={true}
-                    message="Press Enter"
-                    position="below"
-                    autoHide={4000}
-                    storageKey="duel_secret_word_hint_seen"
-                  />
-                )}
 
                 {canSetSecret && (
                   <motion.button
@@ -658,29 +551,22 @@ function DuelGameScreen({
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={handleGenerateSecret}
                     disabled={genBusy}
-                    title="Generate a random word"
                     aria-label="Generate a random word"
-                    className="w-12 h-12 rounded-full border border-white/20 bg-white/10 backdrop-blur-sm shadow-lg grid place-items-center text-xl"
-                    whileHover={{
-                      scale: 1.1,
-                      backgroundColor: "rgba(255, 255, 255, 0.15)",
-                    }}
+                    className="rounded-full border border-white/15 bg-white/5 grid place-items-center"
                     whileTap={{ scale: 0.95 }}
                     style={{
-                      position: "absolute",
-                      right: 0,
-                      top: "50%",
-                      marginTop: -(diceSize / 2),
-                      width: diceSize,
-                      height: diceSize,
+                      position: "absolute", right: 0, top: "50%",
+                      marginTop: -(diceSize / 2), width: diceSize, height: diceSize,
                       fontSize: Math.round(diceSize * 0.45),
-                      transformOrigin: "center",
                     }}
                   >
                     🎲
                   </motion.button>
                 )}
               </div>
+              {canSetSecret && secretWordInput.length === 5 && (
+                <span className="text-[10px] text-white/40">Press Enter</span>
+              )}
             </div>
           )}
 
@@ -752,118 +638,47 @@ function DuelGameScreen({
     // Mobile: Single board view with switching
     return (
       <div className="flex flex-col items-center flex-1 min-h-0 gap-4">
-        {/* Secret Word Entry Section */}
         {showSecretEntry && (
           <div className="flex flex-col items-center gap-2 flex-shrink-0">
-            <div className="text-[10px] uppercase tracking-[0.35em] text-white/50 text-center">
-              Choose your secret word
-            </div>
-
             <div
               className="relative flex justify-center"
               style={{
-                width:
-                  secretRowWidth +
-                  (canSetSecret ? diceSize + secretGap : 0),
+                width: secretRowWidth + (canSetSecret ? diceSize + secretGap : 0),
                 minHeight: secretTileSize,
                 paddingRight: canSetSecret ? diceSize + secretGap : 0,
               }}
             >
-              {/* Secret Word Tiles */}
-              <div className="flex relative" style={{ gap: secretGap }}>
+              <div className="flex" style={{ gap: secretGap }}>
                 {Array.from({ length: 5 }).map((_, i) => {
-                  const typingLen = secretWordInput.length;
-                  const show =
-                    mySecretState === "typing"
-                      ? secretWordInput.padEnd(5, " ")
-                      : mySecretWord || "";
+                  const show = mySecretState === "typing" ? secretWordInput.padEnd(5, " ") : mySecretWord || "";
                   const letter = show[i] || "";
                   const isEmpty = letter === "" || letter === " ";
-                  const isActive =
-                    mySecretState === "typing" &&
-                    isEmpty &&
-                    i === typingLen;
-
-                  let bg = "var(--tile-empty-bg)",
-                    color = "var(--tile-text)",
-                    border = "1px solid var(--tile-empty-border)";
-
+                  const isActive = mySecretState === "typing" && isEmpty && i === secretWordInput.length;
                   const isReadyToSubmit = canSetSecret && secretWordInput.length === 5 && !isEmpty;
-                  
-                  if (mySecretState === "set" && !isEmpty) {
-                    bg = "#e3f2fd";
-                    color = "#1976d2";
-                    border = "1px solid #1976d2";
-                  } else if (isReadyToSubmit) {
-                    bg = "var(--tile-typed-bg)";
-                    border = "2px solid #10b981";
-                  } else if (isActive) {
-                    bg = "var(--tile-typed-bg)";
-                    border = "1px solid #999";
-                  }
 
-                  if (secretErrorActive) {
-                    bg = "#fee2e2";
-                    color = "#991b1b";
-                    border = "1px solid #ef4444";
-                  }
+                  let bg = "var(--tile-empty-bg)", color = "var(--tile-text)", border = "1px solid var(--tile-empty-border)";
+                  if (mySecretState === "set" && !isEmpty) { bg = "#e3f2fd"; color = "#1976d2"; border = "1px solid #1976d2"; }
+                  else if (isReadyToSubmit) { bg = "var(--tile-typed-bg)"; border = "2px solid #10b981"; }
+                  else if (isActive) { bg = "var(--tile-typed-bg)"; border = "1px solid #999"; }
+                  if (secretErrorActive) { bg = "#fee2e2"; color = "#991b1b"; border = "1px solid #ef4444"; }
 
                   return (
                     <div
                       key={`secret-${i}`}
                       className={secretErrorActive ? "tile-error" : ""}
                       style={{
-                        width: secretTileSize,
-                        height: secretTileSize,
-                        display: "grid",
-                        placeItems: "center",
-                        background: bg,
-                        color,
-                        fontWeight: "bold",
-                        fontSize: secretFontSize,
-                        lineHeight: 1,
-                        textTransform: "uppercase",
-                        border,
-                        borderRadius: 6,
-                        overflow: "hidden",
-                        transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-                        transform:
-                          mySecretState === "typing" && isEmpty
-                            ? "scale(1.05)"
-                            : "scale(1)",
-                        boxShadow:
-                          isReadyToSubmit
-                            ? "0 0 12px rgba(16, 185, 129, 0.6), 0 4px 12px rgba(16, 185, 129, 0.3)"
-                            : mySecretState === "set" && !isEmpty
-                            ? "0 4px 12px rgba(25, 118, 210, 0.3)"
-                            : mySecretState === "typing" && isEmpty
-                            ? "0 2px 8px rgba(0, 0, 0, 0.2)"
-                            : "0 1px 3px rgba(0, 0, 0, 0.1)",
-                        animation:
-                          isReadyToSubmit
-                            ? "pulse 2s ease-in-out infinite"
-                            : mySecretState === "typing" && isEmpty
-                            ? "pulse 1.5s ease-in-out infinite"
-                            : "none",
+                        width: secretTileSize, height: secretTileSize,
+                        display: "grid", placeItems: "center",
+                        background: bg, color, border, borderRadius: 6,
+                        fontWeight: "bold", fontSize: secretFontSize,
+                        textTransform: "uppercase", transition: "all 0.15s ease",
                       }}
                     >
-                      {mySecretState === "typing"
-                        ? letter.trim()
-                        : letter || ""}
+                      {mySecretState === "typing" ? letter.trim() : letter || ""}
                     </div>
                   );
                 })}
               </div>
-
-              {canSetSecret && secretWordInput.length === 5 && (
-                <SmartHint
-                  show={true}
-                  message="Press Enter"
-                  position="below"
-                  autoHide={4000}
-                  storageKey="duel_secret_word_hint_seen"
-                />
-              )}
 
               {canSetSecret && (
                 <motion.button
@@ -871,39 +686,28 @@ function DuelGameScreen({
                   onMouseDown={(e) => e.preventDefault()}
                   onClick={handleGenerateSecret}
                   disabled={genBusy}
-                  title="Generate a random word"
                   aria-label="Generate a random word"
-                  className="w-12 h-12 rounded-full border border-white/20 bg-white/10 backdrop-blur-sm shadow-lg grid place-items-center text-xl"
-                  whileHover={{
-                    scale: 1.1,
-                    backgroundColor: "rgba(255, 255, 255, 0.15)",
-                  }}
+                  className="rounded-full border border-white/15 bg-white/5 grid place-items-center"
                   whileTap={{ scale: 0.95 }}
                   style={{
-                    position: "absolute",
-                    right: 0,
-                    top: "50%",
-                    marginTop: -(diceSize / 2),
-                    width: diceSize,
-                    height: diceSize,
+                    position: "absolute", right: 0, top: "50%",
+                    marginTop: -(diceSize / 2), width: diceSize, height: diceSize,
                     fontSize: Math.round(diceSize * 0.45),
-                    transformOrigin: "center",
                   }}
                 >
                   🎲
                 </motion.button>
               )}
             </div>
+            {canSetSecret && secretWordInput.length === 5 && (
+              <span className="text-[10px] text-white/40">Press Enter</span>
+            )}
           </div>
         )}
 
         {/* Mobile: Single board view with switching */}
         {showBoardArea ? (
-          <div className="flex flex-col items-center flex-1 min-h-0 gap-2 w-full">
-            <div className="text-[10px] uppercase tracking-[0.35em] text-white/50 text-center flex-shrink-0">
-              Guesses
-            </div>
-
+          <div className="flex flex-col items-center flex-1 min-h-0 w-full">
             <div 
               className="w-full flex-1 flex justify-center items-start min-h-0 relative"
               {...(isMobile ? swipeHandlers : {})}
@@ -970,17 +774,7 @@ function DuelGameScreen({
               </AnimatePresence>
             </div>
           </div>
-        ) : (
-          <div className="flex flex-col items-center gap-3 flex-1 min-h-0 justify-center text-center px-6">
-            <div className="text-[10px] uppercase tracking-[0.35em] text-white/50">
-              Guesses
-            </div>
-            <p className="text-sm text-white/60">
-              The board appears once both players lock in their secret words
-              and the round begins.
-            </p>
-          </div>
-        )}
+        ) : null}
       </div>
     );
   };

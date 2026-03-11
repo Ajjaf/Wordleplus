@@ -1,5 +1,6 @@
 import { useCallback, useRef, useEffect, useState } from "react";
 import { useGameContext } from "../contexts/GameContext";
+import { playErrorSound } from "../utils/sounds";
 
 export function useBattleGame(room, canGuessBattle, isHost, wasHost, battleActions, aiBattleActions) {
   const { screen, roomId, currentGuess, setCurrentGuess, setShowActiveError, setShakeKey } = useGameContext();
@@ -7,7 +8,6 @@ export function useBattleGame(room, canGuessBattle, isHost, wasHost, battleActio
   const gameErrorTimeoutRef = useRef(null);
   const [submittingGuess, setSubmittingGuess] = useState(false);
 
-  // Cleanup timeout on unmount
   useEffect(() => {
     return () => {
       if (gameErrorTimeoutRef.current) {
@@ -20,6 +20,7 @@ export function useBattleGame(room, canGuessBattle, isHost, wasHost, battleActio
   const bumpActiveRowError = useCallback(() => {
     setShowActiveError(true);
     setShakeKey((k) => k + 1);
+    playErrorSound();
     if (gameErrorTimeoutRef.current) {
       clearTimeout(gameErrorTimeoutRef.current);
     }
