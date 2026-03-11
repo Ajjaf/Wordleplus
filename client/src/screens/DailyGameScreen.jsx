@@ -1,11 +1,10 @@
 import React from "react";
-import { motion } from "framer-motion";
 import { useIsMobile } from "../hooks/useIsMobile";
 import { GameLayout } from "../components/layout/GameLayout";
 import Board from "../components/Board";
 import MobileBoard from "../components/mobile/MobileBoard";
 // GameNotification removed - using visual feedback only (shake animations)
-import LoadingSpinner, { LoadingOverlay } from "../components/ui/LoadingSpinner";
+import { LoadingOverlay } from "../components/ui/LoadingSpinner";
 import { getModeTheme } from "../config/mode-themes";
 import { cn } from "../lib/utils";
 
@@ -41,45 +40,20 @@ export default function DailyGameScreen({
         {loading && !challenge && (
           <LoadingOverlay text="Loading daily challenge..." />
         )}
-        <div className={cn("px-3", isMobile ? "pt-1.5 pb-1" : "pt-3 pb-2")}>
-          <div className="max-w-7xl mx-auto">
-            <motion.h2
-              className={cn(
-                "font-semibold text-white text-center",
-                isMobile
-                  ? "text-base mb-1"
-                  : "text-xl md:text-2xl mb-1.5"
-              )}
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3 }}
-            >
-              {title}
-            </motion.h2>
-            <div className="text-center space-y-0.5">
-              {subtitle && (
-                <motion.p
-                  className={cn("text-white/60", isMobile ? "text-[10px]" : "text-xs")}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.1, duration: 0.3 }}
-                >
-                  {subtitle}
-                </motion.p>
-              )}
-              <motion.p
-                className={cn(
-                  "text-white/70 font-medium tracking-[0.35em] uppercase",
-                  isMobile ? "text-[10px]" : "text-xs"
-                )}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.2, duration: 0.3 }}
-              >
-                Guess the word in {maxGuesses} tries
-              </motion.p>
-            </div>
-          </div>
+        <div className={cn("px-3", isMobile ? "pt-2 pb-1" : "pt-3 pb-2")}>
+          <h2
+            className={cn(
+              "font-semibold text-white text-center",
+              isMobile ? "text-sm" : "text-lg"
+            )}
+          >
+            {title}
+          </h2>
+          {subtitle && (
+            <p className={cn("text-white/40 text-center", isMobile ? "text-[10px]" : "text-xs")}>
+              {subtitle}
+            </p>
+          )}
         </div>
       </>
     );

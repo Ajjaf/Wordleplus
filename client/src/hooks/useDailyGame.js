@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { buildLetterStates } from "../modes/utils.js";
 import { useGameContext } from "../contexts/GameContext";
+import { playErrorSound } from "../utils/sounds";
 
 const maxDailyGuessesDefault = 6;
 const dailyWordLengthDefault = 5;
@@ -135,22 +136,18 @@ export function useDailyGame(screen, dailyActions, persistSession, goHome) {
       return;
     }
     if (dailyCurrentGuess.length !== dailyWordLength) {
-      // Visual feedback: shake animation only
       setDailyShakeKey((prev) => prev + 1);
       setDailyShowActiveError(true);
-      if (dailyErrorTimeoutRef.current) {
-        clearTimeout(dailyErrorTimeoutRef.current);
-      }
+      playErrorSound();
+      if (dailyErrorTimeoutRef.current) clearTimeout(dailyErrorTimeoutRef.current);
       dailyErrorTimeoutRef.current = setTimeout(() => setDailyShowActiveError(false), 250);
       return;
     }
     if (dailyGuesses.includes(dailyCurrentGuess)) {
-      // Visual feedback: shake animation only
       setDailyShakeKey((prev) => prev + 1);
       setDailyShowActiveError(true);
-      if (dailyErrorTimeoutRef.current) {
-        clearTimeout(dailyErrorTimeoutRef.current);
-      }
+      playErrorSound();
+      if (dailyErrorTimeoutRef.current) clearTimeout(dailyErrorTimeoutRef.current);
       dailyErrorTimeoutRef.current = setTimeout(() => setDailyShowActiveError(false), 250);
       return;
     }
@@ -161,12 +158,10 @@ export function useDailyGame(screen, dailyActions, persistSession, goHome) {
         dailyCurrentGuess.toLowerCase()
       );
       if (result?.error) {
-        // Visual feedback: shake animation only - no text notification
         setDailyShakeKey((prev) => prev + 1);
         setDailyShowActiveError(true);
-        if (dailyErrorTimeoutRef.current) {
-          clearTimeout(dailyErrorTimeoutRef.current);
-        }
+        playErrorSound();
+        if (dailyErrorTimeoutRef.current) clearTimeout(dailyErrorTimeoutRef.current);
         dailyErrorTimeoutRef.current = setTimeout(() => setDailyShowActiveError(false), 250);
         return;
       }
@@ -204,12 +199,10 @@ export function useDailyGame(screen, dailyActions, persistSession, goHome) {
         setShowVictory(true);
       }
     } catch (err) {
-      // Visual feedback: shake animation only - no text notification
       setDailyShakeKey((prev) => prev + 1);
       setDailyShowActiveError(true);
-      if (dailyErrorTimeoutRef.current) {
-        clearTimeout(dailyErrorTimeoutRef.current);
-      }
+      playErrorSound();
+      if (dailyErrorTimeoutRef.current) clearTimeout(dailyErrorTimeoutRef.current);
       dailyErrorTimeoutRef.current = setTimeout(() => setDailyShowActiveError(false), 250);
     } finally {
       setDailyLoading(false);

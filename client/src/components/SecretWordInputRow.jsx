@@ -24,9 +24,31 @@ export default function SecretWordInputRow({
     inputRef.current?.focus();
   }, []);
 
+  // Global keydown fallback so physical keyboard works even if hidden input loses focus
+  useEffect(() => {
+    if (disabled) return;
+    const handler = (e) => {
+      if (document.activeElement === inputRef.current) return;
+      const tag = document.activeElement?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+
+      const k = e.key;
+      if (k === "Enter") { e.preventDefault(); submit(); return; }
+      if (k === "Backspace") { e.preventDefault(); setError(""); setValue((s) => s.slice(0, -1)); return; }
+      if (k === "Tab") { e.preventDefault(); handleGenerate(); return; }
+      if (/^[a-zA-Z]$/.test(k)) {
+        e.preventDefault();
+        setError("");
+        setValue((s) => (s.length < 5 ? s + k.toUpperCase() : s));
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  });
+
   const onKeyDown = async (e) => {
     if (disabled) return;
-    e.stopPropagation(); // don't let window/global listeners fire
+    e.stopPropagation();
     const k = e.key;
 
     if (k === "Enter") {

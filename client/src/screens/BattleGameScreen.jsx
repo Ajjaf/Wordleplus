@@ -344,7 +344,6 @@ function BattleGameScreen({
             <BattleProgressStrip
               players={otherPlayers}
               isMobile={true}
-              maxGuesses={6}
             />
           )}
           {roundActive ? (
@@ -381,7 +380,6 @@ function BattleGameScreen({
           <BattleProgressStrip
             players={otherPlayers}
             isMobile={false}
-            maxGuesses={6}
           />
         )}
 

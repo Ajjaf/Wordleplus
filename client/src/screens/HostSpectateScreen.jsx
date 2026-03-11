@@ -1,12 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Trophy, Crown } from "lucide-react";
-import { UnifiedPlayerCard } from "../components/player/UnifiedPlayerCard";
+import { Trophy } from "lucide-react";
 import SpectateCard from "../components/SpectateCard.jsx";
 import SecretWordInputRow from "../components/SecretWordInputRow.jsx";
 import GradientBackground from "../components/ui/GradientBackground";
 import GlowButton from "../components/ui/GlowButton";
-import Board from "../components/Board";
 
 function HostSpectateScreen({
   room,
@@ -164,145 +162,66 @@ function HostSpectateScreen({
   return (
     <GradientBackground fullHeight className="flex h-full">
       <div className="flex flex-1 flex-col w-full min-h-0 overflow-hidden relative">
-        {/* Header */}
-        <div className="flex items-center justify-between gap-3 px-3 pt-3 pb-2">
-          <motion.div
-            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-500/20 border border-blue-500/30 rounded-xl backdrop-blur-sm"
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.3 }}
-          >
-            <Crown className="w-4 h-4 text-blue-300" />
-            <span className="text-sm font-medium text-blue-300">
-              You are the Host
-            </span>
-            {showReconnected && (
-              <span className="ml-2 text-xs text-emerald-300 bg-emerald-500/20 border border-emerald-500/30 rounded px-2 py-1 animate-pulse">
-                Reconnected
-              </span>
-            )}
-          </motion.div>
-
+        <div className="flex items-center justify-between gap-2 px-3 pt-2 pb-1">
+          <span className="text-xs font-medium text-white/50">
+            Host
+            {showReconnected && <span className="ml-1.5 text-emerald-400">· reconnected</span>}
+          </span>
           <div className="flex items-center gap-2">
-            <GlowButton
+            <button
               onClick={() => setShowLeaderboard(true)}
-              variant="secondary"
-              size="sm"
+              className="text-[10px] text-white/40 hover:text-white/60 transition-colors"
             >
-              <Trophy className="w-4 h-4 mr-1" />
               Leaderboard
-            </GlowButton>
+            </button>
             {canStartRound && (
-              <GlowButton
-                onClick={handleStartRound}
-                variant="primary"
-                size="sm"
-                disabled={startingRound}
-              >
-                {startingRound
-                  ? "Starting..."
-                  : pendingStart
-                  ? "Start Game"
-                  : "Start Now"}
+              <GlowButton onClick={handleStartRound} size="sm" disabled={startingRound} className="!py-1 !text-xs !px-3">
+                {startingRound ? "Starting..." : pendingStart ? "Start" : "Start Now"}
               </GlowButton>
             )}
             {canReleaseHost && (
-              <GlowButton
+              <button
                 onClick={handleReleaseHost}
-                variant="ghost"
-                size="sm"
                 disabled={releasing}
+                className="text-[10px] text-white/30 hover:text-white/50 transition-colors"
               >
-                {releasing ? "Releasing..." : "Release to AI"}
-              </GlowButton>
+                {releasing ? "..." : "Release"}
+              </button>
             )}
-            <span className="text-xs text-white/60">
-              {connectedCount}/{players.length} online
+            <span className="text-[10px] text-white/30">
+              {connectedCount}/{players.length}
             </span>
           </div>
         </div>
-        {startError && (
-          <div className="px-3 text-xs text-red-300">{startError}</div>
-        )}
+        {startError && <div className="px-3 text-[10px] text-red-300">{startError}</div>}
 
-        {/* Title / status */}
-        <div className="text-center mt-2 mb-3 px-3">
+        <div className="text-center mt-1 mb-2 px-3">
           {roundActive ? (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3 }}
-            >
-              <h3 className="text-lg font-semibold text-white">
-                Player Progress
-              </h3>
-              <p className="text-sm text-white/60">
-                Watch players compete in real time.
+            <p className="text-xs text-white/40">Live</p>
+          ) : aiIsInControl ? (
+            <div className="mx-auto max-w-md">
+              <p className="text-xs text-white/50">
+                {roundFinished
+                  ? winnerName ? `${winnerName} won` : "No winner"
+                  : standbyMessage || "Waiting..."}
               </p>
-            </motion.div>
+            </div>
           ) : (
-            <>
-              {aiIsInControl ? (
-                <motion.div
-                  className="mx-auto max-w-xl mb-3 bg-white/10 border border-white/20 rounded-2xl p-4 backdrop-blur-sm"
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  {roundFinished ? (
-                    <p className="text-sm text-emerald-300 font-medium">
-                      {winnerName
-                        ? `Round finished — ${winnerName} won!`
-                        : "Round finished — no winner."}
-                    </p>
-                  ) : (
-                    <p className="text-sm text-white/70">
-                      The AI host is holding the lobby until a player starts the game.
-                    </p>
-                  )}
-                  {standbyMessage && (
-                    <p className="text-xs text-white/60 mt-2">{standbyMessage}</p>
-                  )}
-                  {canStartRound && (
-                    <p className="text-xs text-amber-200 mt-2">
-                      Press the start button when everyone is ready.
-                    </p>
-                  )}
-                </motion.div>
-              ) : (
-                <>
-                  {roundFinished ? (
-                    <motion.div
-                      className="mx-auto max-w-xl mb-3 bg-emerald-500/20 border border-emerald-500/30 rounded-2xl p-4 backdrop-blur-sm"
-                      initial={{ opacity: 0, scale: 0.95 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ duration: 0.2 }}
-                    >
-                      <p className="text-sm text-emerald-300 font-medium">
-                        {winnerName
-                          ? `Round finished — ${winnerName} won!`
-                          : "Round finished — no winner."}
-                      </p>
-                      <p className="text-xs text-emerald-400 mt-1">
-                        Enter a new word below to start the next round.
-                      </p>
-                    </motion.div>
-                  ) : (
-                    <p className="text-sm text-white/70 mb-2">
-                      Enter a word to start the game.
-                    </p>
-                  )}
-                  {!room?.battle?.started && (
-                    <SecretWordInputRow
-                      onSubmit={onWordSubmit}
-                      submitHint="Press Enter to set word"
-                      showGenerate={true}
-                      size={64}
-                    />
-                  )}
-                </>
+            <div className="mx-auto max-w-md">
+              {roundFinished && (
+                <p className="text-xs text-emerald-400/70 mb-2">
+                  {winnerName ? `${winnerName} won` : "No winner"}
+                </p>
               )}
-            </>
+              {!room?.battle?.started && (
+                <SecretWordInputRow
+                  onSubmit={onWordSubmit}
+                  submitHint="Press Enter to set word"
+                  showGenerate={true}
+                  size={56}
+                />
+              )}
+            </div>
           )}
         </div>
 
