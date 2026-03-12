@@ -6,8 +6,7 @@ import { logger } from "../utils/logger";
 const LS_ROOM = "wp.lastRoomId";
 const LS_SOCKET = "wp.lastSocketId";
 const LS_LAST_NAME = "wp.lastName";
-//reset my works
-export function useSocketConnection(room, setScreen) {
+export function useSocketConnection(room, onGameResumed) {
   const [connected, setConnected] = useState(socket.connected);
   const [reconnecting, setReconnecting] = useState(false);
   const [rejoinOffered, setRejoinOffered] = useState(false);
@@ -63,13 +62,11 @@ export function useSocketConnection(room, setScreen) {
         triedResumeRef.current = true;
         socket.emit("resume", { roomId: savedRoomId, oldId }, (res) => {
           if (res?.ok) {
-            // One-shot banner for this page session
             sessionStorage.setItem("wp.reconnected", "1");
-            // Store the new, current socket id and clear old
             localStorage.setItem(LS_SOCKET, socket.id);
             localStorage.removeItem(LS_SOCKET + ".old");
 
-            setScreen?.("game");
+            onGameResumed?.(savedRoomId);
             setRejoinOffered(false);
           } else {
             // Couldn't resume—offer manual rejoin
@@ -123,7 +120,7 @@ export function useSocketConnection(room, setScreen) {
     room?.id,
     savedRoomId,
     savedName,
-    setScreen,
+    onGameResumed,
     showNotification,
     dismissNotification,
   ]);
@@ -162,10 +159,9 @@ export function useSocketConnection(room, setScreen) {
           sessionStorage.setItem("wp.reconnected", "1");
           localStorage.setItem(LS_SOCKET, socket.id);
           localStorage.removeItem(LS_SOCKET + ".old");
-          setScreen?.("game");
+          onGameResumed?.(targetRoomId);
           setRejoinOffered(false);
         } else {
-          // Fallback: regular join
           socket.emit(
             "joinRoom",
             { name: targetName, roomId: targetRoomId },
@@ -173,7 +169,7 @@ export function useSocketConnection(room, setScreen) {
               if (res2?.ok) {
                 localStorage.setItem(LS_SOCKET, socket.id);
                 localStorage.removeItem(LS_SOCKET + ".old");
-                setScreen?.("game");
+                onGameResumed?.(targetRoomId);
                 setRejoinOffered(false);
               }
             }
@@ -181,14 +177,13 @@ export function useSocketConnection(room, setScreen) {
         }
       });
     } else {
-      // No old socket id—just rejoin fresh
       socket.emit(
         "joinRoom",
         { name: targetName, roomId: targetRoomId },
         (res2) => {
           if (res2?.ok) {
             localStorage.setItem(LS_SOCKET, socket.id);
-            setScreen?.("game");
+            onGameResumed?.(targetRoomId);
             setRejoinOffered(false);
           }
         }

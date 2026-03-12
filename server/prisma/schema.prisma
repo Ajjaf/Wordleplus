@@ -29,6 +29,10 @@ model User {
   mergedIntoUserId String? // If this account was merged into another, store the target user ID
   mergedAt         DateTime? // When the merge happened
 
+  // Profile customisation
+  profileAvatar String?   // preset avatar key, e.g. "cat", "robot", "flame"
+  profileColour String?   // hex accent colour, e.g. "#8b5cf6"
+
   // Game stats (denorm hints; keep truth in result tables)
   totalWins     Int      @default(0)
   totalGames    Int      @default(0)

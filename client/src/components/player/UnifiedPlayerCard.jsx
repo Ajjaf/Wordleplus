@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Crown, Wifi, WifiOff, Trophy, Zap, CheckCircle2, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import MicroProgressGrid from "../mobile/MicroProgressGrid";
+import PlayerAvatar from "../PlayerAvatar";
 
 /**
  * UnifiedPlayerCard - Consolidates all player card variants
@@ -20,6 +21,8 @@ export function UnifiedPlayerCard({
   wins = 0,
   streak = 0,
   avatar,
+  profileAvatar,
+  profileColour,
   guesses = [],
   maxGuesses = 6,
   

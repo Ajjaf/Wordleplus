@@ -370,6 +370,58 @@ app.get("/api/auth/user", async (req, res) => {
   }
 });
 
+// Update profile (works for anonymous and authenticated)
+const ALLOWED_AVATAR_KEYS = new Set([
+  "cat","dog","fox","panda","robot","alien","ghost","skull",
+  "flame","bolt","star","gem","rocket","crown","heart","moon",
+]);
+const HEX_COLOUR_RE = /^#[0-9a-fA-F]{6}$/;
+
+app.patch("/api/auth/profile", async (req, res) => {
+  try {
+    const userId = getUserIdFromRequest(req);
+    if (!userId) {
+      return res.status(401).json({ message: "No user session" });
+    }
+
+    const { displayName, profileAvatar, profileColour } = req.body || {};
+    const data = {};
+
+    if (displayName !== undefined) {
+      const trimmed = String(displayName).trim().slice(0, 20);
+      if (!isSafeInput(trimmed)) {
+        return res.status(400).json({ message: "Invalid display name" });
+      }
+      data.displayName = trimmed || null;
+    }
+
+    if (profileAvatar !== undefined) {
+      if (profileAvatar !== null && !ALLOWED_AVATAR_KEYS.has(profileAvatar)) {
+        return res.status(400).json({ message: "Invalid avatar" });
+      }
+      data.profileAvatar = profileAvatar;
+    }
+
+    if (profileColour !== undefined) {
+      if (profileColour !== null && !HEX_COLOUR_RE.test(profileColour)) {
+        return res.status(400).json({ message: "Invalid colour" });
+      }
+      data.profileColour = profileColour;
+    }
+
+    if (Object.keys(data).length === 0) {
+      return res.status(400).json({ message: "No fields to update" });
+    }
+
+    await prisma.user.update({ where: { id: userId }, data });
+    const profile = await getFullUserProfile(userId);
+    res.json(profile);
+  } catch (error) {
+    console.error("Error updating profile:", error);
+    res.status(500).json({ message: "Failed to update profile" });
+  }
+});
+
 // Get user stats
 app.get("/api/auth/stats", async (req, res) => {
   try {
@@ -1153,7 +1205,20 @@ ioRef = io;
 // ---------- Socket authentication middleware ----------
 io.use(authenticateSocket);
 
-// ---------- Socket handlers ----------
+// ---------- Socket helpers ----------
+
+async function getSocketProfileData(socket) {
+  if (!socket.userId) return {};
+  try {
+    const u = await prisma.user.findUnique({
+      where: { id: socket.userId },
+      select: { profileAvatar: true, profileColour: true },
+    });
+    return { profileAvatar: u?.profileAvatar || null, profileColour: u?.profileColour || null };
+  } catch {
+    return {};
+  }
+}
 
 // ---------- Socket handlers ----------
 io.on("connection", (socket) => {
@@ -1164,11 +1229,10 @@ io.on("connection", (socket) => {
     cb?.({ ok: true, state: sanitizeRoom(room) });
   });
 
-  socket.on("createRoom", ({ name, mode = "duel" }, cb) => {
+  socket.on("createRoom", async ({ name, mode = "duel" }, cb) => {
     if (!checkSocketRateLimit(socket.id, "createRoom", 5)) {
       return cb?.({ error: "Too many rooms created. Slow down!" });
     }
-    // Sanitize and validate inputs
     const sanitizedName = sanitizePlayerName(name);
     if (!sanitizedName || !isSafeInput(sanitizedName)) {
       return cb?.({ error: "Invalid name" });
@@ -1205,8 +1269,9 @@ io.on("connection", (socket) => {
       };
     }
 
+    const profile = await getSocketProfileData(socket);
     room.players[socket.id] = {
-      name: sanitizedName, // Use sanitized name
+      name: sanitizedName,
       ready: false,
       secret: null,
       guesses: [],
@@ -1216,6 +1281,7 @@ io.on("connection", (socket) => {
       disconnected: false,
       rematchRequested: false,
       disconnectedAt: null,
+      ...profile,
     };
 
     rooms.set(id, room);
@@ -1227,11 +1293,10 @@ io.on("connection", (socket) => {
     io.to(id).emit("roomState", sanitizeRoom(room));
   });
 
-  socket.on("joinRoom", ({ name, roomId }, cb) => {
+  socket.on("joinRoom", async ({ name, roomId }, cb) => {
     if (!checkSocketRateLimit(socket.id, "joinRoom", 10)) {
       return cb?.({ error: "Too many join attempts. Slow down!" });
     }
-    // Sanitize and validate inputs
     const sanitizedRoomId = sanitizeRoomId(roomId);
     const sanitizedName = sanitizePlayerName(name);
 
@@ -1291,8 +1356,9 @@ io.on("connection", (socket) => {
       if (allowShared?.error) return cb?.(allowShared);
     }
 
+    const joinProfile = await getSocketProfileData(socket);
     room.players[socket.id] = {
-      name: sanitizedName, // Use sanitized name
+      name: sanitizedName,
       ready: false,
       secret: null,
       guesses: [],
@@ -1302,6 +1368,7 @@ io.on("connection", (socket) => {
       disconnected: false,
       rematchRequested: false,
       disconnectedAt: null,
+      ...joinProfile,
     };
     room.updatedAt = Date.now();
 
@@ -1987,6 +2054,8 @@ function sanitizeRoom(room) {
         streak = 0,
         disconnected = false,
         rematchRequested = false,
+        profileAvatar = null,
+        profileColour = null,
       } = p;
       return [
         id,
@@ -2000,6 +2069,8 @@ function sanitizeRoom(room) {
           streak,
           disconnected,
           rematchRequested,
+          profileAvatar,
+          profileColour,
         },
       ];
     })

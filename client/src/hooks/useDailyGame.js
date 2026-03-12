@@ -6,12 +6,11 @@ import { playErrorSound } from "../utils/sounds";
 const maxDailyGuessesDefault = 6;
 const dailyWordLengthDefault = 5;
 
-export function useDailyGame(screen, dailyActions, persistSession, goHome) {
+export function useDailyGame(screen, dailyActions, persistSession, goHome, navigateDaily) {
   const {
     name,
     room,
     setRoom,
-    setScreen,
     setMode,
     setMsg,
     setRoomId,
@@ -73,7 +72,7 @@ export function useDailyGame(screen, dailyActions, persistSession, goHome) {
     setCurrentGuess("");
     setShowVictory(false);
     resetDailyProgress();
-    setScreen("daily");
+    if (navigateDaily) navigateDaily();
     setDailyLoading(true);
     try {
       const response = await dailyActions.loadChallenge();
@@ -123,7 +122,7 @@ export function useDailyGame(screen, dailyActions, persistSession, goHome) {
     } finally {
       setDailyLoading(false);
     }
-  }, [dailyActions, name, persistSession, resetDailyProgress, goHome, setMode, setMsg, setRoom, setRoomId, setCurrentGuess, setShowVictory, setScreen, room]);
+  }, [dailyActions, name, persistSession, resetDailyProgress, goHome, setMode, setMsg, setRoom, setRoomId, setCurrentGuess, setShowVictory, navigateDaily, room]);
 
   const handleDailySubmit = useCallback(async () => {
     if (screen !== "daily") return;
