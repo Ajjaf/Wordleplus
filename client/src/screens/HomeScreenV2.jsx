@@ -375,7 +375,7 @@ export default function HomeScreenV2({
           >
             <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-3xl p-8 shadow-2xl">
               <h2 className="text-3xl font-bold text-white mb-2 text-center">
-                Welcome to WordlePlus
+                Welcome to EvoWordo
               </h2>
               <p className="text-white/70 text-center mb-6">
                 Enter your name to get started
@@ -797,7 +797,7 @@ export default function HomeScreenV2({
 
           <footer className="text-center py-8 text-white/50 text-sm">
             <p>
-              © 2025 WordlePlus. Login for the Daily Word, Stay for the
+              © 2025 EvoWordo. Login for the Daily Word, Stay for the
               Multiplayer.
             </p>
           </footer>

@@ -183,6 +183,50 @@ export default function App() {
     return () => clearTimeout(t);
   }, [msg, setMsg]);
 
+  // Navigation guard: warn before leaving an active game
+  useEffect(() => {
+    const isActiveGame =
+      screen === "game" &&
+      room?.id &&
+      !showVictory &&
+      (room.mode === "battle" || room.mode === "battle_ai"
+        ? room.battle?.started && !room.battle?.winner && !room.battle?.reveal
+        : room.mode === "duel"
+        ? room.started && !room.winner && !room.duelReveal
+        : room.mode === "shared"
+        ? room.shared?.started && !room.shared?.winner
+        : false);
+
+    if (!isActiveGame) return;
+
+    const onBeforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [screen, room?.id, room?.mode, room?.started, room?.winner, room?.duelReveal, room?.battle, room?.shared, showVictory]);
+
+  // Dynamic document.title
+  useEffect(() => {
+    const modeLabels = {
+      duel: "Duel Mode",
+      battle: "Battle Royale",
+      battle_ai: "AI Battle",
+      shared: "Shared Duel",
+    };
+    let title = "EvoWordo";
+    if (screen === "daily") {
+      title = "Daily Challenge | EvoWordo";
+    } else if (screen === "game" && room?.mode) {
+      const label = modeLabels[room.mode] || "Game";
+      const rid = room.id ? ` · ${room.id.toUpperCase()}` : "";
+      title = `${label}${rid} | EvoWordo`;
+    }
+    document.title = title;
+  }, [screen, room?.mode, room?.id]);
+
   // Sync URL to match active room (handles reconnects, mode mismatches, duel start)
   useEffect(() => {
     if (!room?.id || !room?.mode) return;
@@ -317,6 +361,20 @@ export default function App() {
   ) : null;
 
   const handleHomeClick = () => {
+    const isActiveGame =
+      screen === "game" &&
+      room?.id &&
+      !showVictory &&
+      (room.mode === "battle" || room.mode === "battle_ai"
+        ? room.battle?.started && !room.battle?.winner && !room.battle?.reveal
+        : room.mode === "duel"
+        ? room.started && !room.winner && !room.duelReveal
+        : room.mode === "shared"
+        ? room.shared?.started && !room.shared?.winner
+        : false);
+
+    if (isActiveGame && !window.confirm("Leave the active game?")) return;
+
     goHome(room?.id);
     if (screen === "daily") {
       dailyGame.resetDailyProgress();

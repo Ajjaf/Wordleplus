@@ -271,7 +271,7 @@ if (config.isProduction) {
       <!DOCTYPE html>
       <html>
       <head>
-        <title>WordlePlus Backend</title>
+        <title>EvoWordo Backend</title>
         <style>
           body { font-family: Arial, sans-serif; text-align: center; padding: 50px; background: #f5f5f5; }
           .container { background: white; padding: 40px; border-radius: 10px; max-width: 600px; margin: 0 auto; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
@@ -283,10 +283,10 @@ if (config.isProduction) {
       </head>
       <body>
         <div class="container">
-          <h1>🎮 WordlePlus Backend API</h1>
-          <p>You've reached the backend API server. The WordlePlus game frontend is running on a different port.</p>
+          <h1>🎮 EvoWordo Backend API</h1>
+          <p>You've reached the backend API server. The EvoWordo game frontend is running on a different port.</p>
           <p><strong>Click the button below to access the game:</strong></p>
-          <a href="${frontendUrl}" class="button">Open WordlePlus Game →</a>
+          <a href="${frontendUrl}" class="button">Open EvoWordo →</a>
           <p style="margin-top: 30px; font-size: 14px; color: #999;">Backend API running on port 8080 | Frontend on port 5000</p>
         </div>
       </body>

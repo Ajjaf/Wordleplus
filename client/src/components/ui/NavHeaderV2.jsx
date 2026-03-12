@@ -7,6 +7,7 @@ import {
   Trophy,
   LogOut,
   User,
+  Share2,
 } from "lucide-react";
 import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import ProfileModal from "../ProfileModal";
@@ -42,15 +43,29 @@ export default function NavHeaderV2({
   const handleCopyRoomId = async () => {
     if (!roomId) return;
 
+    const inviteUrl = window.location.href;
+    const shareTitle = "Join my EvoWordo room!";
+    const shareText = `Join my game — room code: ${roomId.toUpperCase()}`;
+
     try {
-      await navigator.clipboard?.writeText?.(roomId);
-      setCopied(true);
-      if (copyResetTimeout.current) {
-        clearTimeout(copyResetTimeout.current);
+      if (navigator.share) {
+        await navigator.share({ title: shareTitle, text: shareText, url: inviteUrl });
+      } else {
+        await navigator.clipboard?.writeText?.(inviteUrl);
       }
+      setCopied(true);
+      if (copyResetTimeout.current) clearTimeout(copyResetTimeout.current);
       copyResetTimeout.current = setTimeout(() => setCopied(false), 2000);
     } catch (error) {
-      // Swallow clipboard errors silently to avoid noisy UX
+      // User cancelled share or clipboard not available — try copying code as fallback
+      try {
+        await navigator.clipboard?.writeText?.(roomId);
+        setCopied(true);
+        if (copyResetTimeout.current) clearTimeout(copyResetTimeout.current);
+        copyResetTimeout.current = setTimeout(() => setCopied(false), 2000);
+      } catch {
+        // Silently fail
+      }
     }
   };
 
@@ -189,16 +204,18 @@ export default function NavHeaderV2({
                   type="button"
                   onClick={handleCopyRoomId}
                   className="h-7 w-7 rounded-full bg-white/10 hover:bg-white/20 border border-white/10 text-white transition flex items-center justify-center"
-                  aria-label={copied ? "Room id copied" : "Copy room id"}
-                  title={copied ? "Copied!" : "Copy room id"}
+                  aria-label={copied ? "Link copied!" : "Share invite link"}
+                  title={copied ? "Copied!" : "Share invite link"}
                 >
                   {copied ? (
                     <Check className="w-4 h-4 text-green-400" />
+                  ) : typeof navigator !== "undefined" && navigator.share ? (
+                    <Share2 className="w-4 h-4" />
                   ) : (
                     <Copy className="w-4 h-4" />
                   )}
                   <span className="sr-only">
-                    {copied ? "Room id copied" : "Copy room id"}
+                    {copied ? "Link copied!" : "Share invite link"}
                   </span>
                 </button>
               </div>

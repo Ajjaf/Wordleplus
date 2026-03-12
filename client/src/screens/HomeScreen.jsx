@@ -51,7 +51,7 @@ export default function HomeScreen({
               <BrandLogo withText size="lg" className="drop-shadow-glow" />
             </div>
             <h1 className="text-3xl md:text-5xl font-bold bg-gradient-primary bg-clip-text text-transparent mb-4">
-              WordlePlus
+              EvoWordo
             </h1>
             <p className="text-lg md:text-xl text-muted-foreground mb-4 max-w-2xl mx-auto leading-relaxed">
               The ultimate competitive Wordle experience. Battle friends in
