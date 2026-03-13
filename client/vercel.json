@@ -12,6 +12,10 @@
     {
       "source": "/socket.io/(.*)",
       "destination": "https://wordleplus-1-8f2s.onrender.com/socket.io/$1"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }

@@ -1,18 +1,18 @@
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  User,
   Copy,
   Check,
   ChevronDown,
   Settings,
   Trophy,
   LogOut,
-  Wifi,
-  WifiOff,
+  User,
+  Share2,
 } from "lucide-react";
 import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import ProfileModal from "../ProfileModal";
 import BrandLogo from "../BrandLogo";
+import PlayerAvatar from "../PlayerAvatar";
 import { useAuth } from "../../contexts/AuthContext";
 import LoadingSpinner from "./LoadingSpinner";
 
@@ -30,8 +30,7 @@ export default function NavHeaderV2({
   const [menuOpen, setMenuOpen] = useState(false);
   const copyResetTimeout = useRef(null);
   const menuRef = useRef(null);
-  const { user, isAuthenticated, isAnonymous, login, signup, logout } =
-    useAuth();
+  const { user, isAuthenticated, isAnonymous, logout } = useAuth();
 
   useEffect(() => {
     // Force dark mode on mount
@@ -44,15 +43,29 @@ export default function NavHeaderV2({
   const handleCopyRoomId = async () => {
     if (!roomId) return;
 
+    const inviteUrl = window.location.href;
+    const shareTitle = "Join my EvoWordo room!";
+    const shareText = `Join my game — room code: ${roomId.toUpperCase()}`;
+
     try {
-      await navigator.clipboard?.writeText?.(roomId);
-      setCopied(true);
-      if (copyResetTimeout.current) {
-        clearTimeout(copyResetTimeout.current);
+      if (navigator.share) {
+        await navigator.share({ title: shareTitle, text: shareText, url: inviteUrl });
+      } else {
+        await navigator.clipboard?.writeText?.(inviteUrl);
       }
+      setCopied(true);
+      if (copyResetTimeout.current) clearTimeout(copyResetTimeout.current);
       copyResetTimeout.current = setTimeout(() => setCopied(false), 2000);
     } catch (error) {
-      // Swallow clipboard errors silently to avoid noisy UX
+      // User cancelled share or clipboard not available — try copying code as fallback
+      try {
+        await navigator.clipboard?.writeText?.(roomId);
+        setCopied(true);
+        if (copyResetTimeout.current) clearTimeout(copyResetTimeout.current);
+        copyResetTimeout.current = setTimeout(() => setCopied(false), 2000);
+      } catch {
+        // Silently fail
+      }
     }
   };
 
@@ -191,49 +204,43 @@ export default function NavHeaderV2({
                   type="button"
                   onClick={handleCopyRoomId}
                   className="h-7 w-7 rounded-full bg-white/10 hover:bg-white/20 border border-white/10 text-white transition flex items-center justify-center"
-                  aria-label={copied ? "Room id copied" : "Copy room id"}
-                  title={copied ? "Copied!" : "Copy room id"}
+                  aria-label={copied ? "Link copied!" : "Share invite link"}
+                  title={copied ? "Copied!" : "Share invite link"}
                 >
                   {copied ? (
                     <Check className="w-4 h-4 text-green-400" />
+                  ) : typeof navigator !== "undefined" && navigator.share ? (
+                    <Share2 className="w-4 h-4" />
                   ) : (
                     <Copy className="w-4 h-4" />
                   )}
                   <span className="sr-only">
-                    {copied ? "Room id copied" : "Copy room id"}
+                    {copied ? "Link copied!" : "Share invite link"}
                   </span>
                 </button>
               </div>
             )}
             {right}
 
-            {isAuthenticated ? (
-              <div className="relative" ref={menuRef}>
-                <motion.button
-                  onClick={() => setMenuOpen((open) => !open)}
-                  className="flex items-center gap-3 rounded-full bg-white/5 border border-white/10 px-3 py-1.5 md:px-4 md:py-2 transition hover:bg-white/10"
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  aria-haspopup="menu"
-                  aria-expanded={menuOpen}
-                >
-                  {user?.avatarUrl ? (
-                    <img
-                      src={user.avatarUrl}
-                      alt={displayName}
-                      className="w-9 h-9 md:w-10 md:h-10 rounded-full border border-white/20 object-cover"
-                    />
-                  ) : (
-                    <div className="w-9 h-9 md:w-10 md:h-10 rounded-full bg-gradient-to-br from-violet-500 to-cyan-500 flex items-center justify-center border border-white/20">
-                      <User className="w-4 h-4 text-white" />
-                    </div>
-                  )}
-                  <span className="text-xs font-medium text-white truncate max-w-[6rem] sm:text-sm sm:max-w-none md:text-base">
-                    {displayName}
-                  </span>
-                  <ChevronDown className="w-4 h-4 text-white/70" />
-                </motion.button>
+            <div className="relative" ref={menuRef}>
+              <motion.button
+                onClick={isAuthenticated ? () => setMenuOpen((o) => !o) : () => handleOpenProfileModal("profile")}
+                className="flex items-center gap-2 rounded-full bg-white/5 border border-white/10 pl-1 pr-2 py-1 md:pl-1.5 md:pr-3 md:py-1.5 transition hover:bg-white/10"
+                whileTap={{ scale: 0.97 }}
+                aria-label="Open profile"
+              >
+                <PlayerAvatar
+                  avatarKey={user?.profileAvatar}
+                  colour={user?.profileColour}
+                  name={displayName}
+                  size={34}
+                />
+                {isAuthenticated && (
+                  <ChevronDown className="w-3.5 h-3.5 text-white/50" />
+                )}
+              </motion.button>
 
+              {isAuthenticated && (
                 <AnimatePresence>
                   {menuOpen && (
                     <motion.div
@@ -241,7 +248,7 @@ export default function NavHeaderV2({
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -6 }}
                       transition={{ duration: 0.15 }}
-                      className="absolute right-0 mt-2 w-52 rounded-xl border border-white/10 bg-slate-900/95 backdrop-blur-md shadow-lg overflow-hidden z-50"
+                      className="absolute right-0 mt-2 w-48 rounded-xl border border-white/10 bg-slate-900/95 backdrop-blur-md shadow-lg overflow-hidden z-50"
                     >
                       {menuItems.map(({ key, label, icon: Icon, action }) => (
                         <button
@@ -256,23 +263,8 @@ export default function NavHeaderV2({
                     </motion.div>
                   )}
                 </AnimatePresence>
-              </div>
-            ) : (
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={login}
-                  className="px-4 py-2 text-sm font-medium text-white/80 hover:text-white transition"
-                >
-                  Log In
-                </button>
-                <button
-                  onClick={signup}
-                  className="px-4 py-2 rounded-full bg-gradient-to-r from-violet-500 to-cyan-500 text-sm font-semibold text-white shadow-lg hover:from-violet-400 hover:to-cyan-400 transition"
-                >
-                  Sign Up
-                </button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </div>

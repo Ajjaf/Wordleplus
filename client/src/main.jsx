@@ -1,6 +1,7 @@
 
 import React, { Suspense } from "react";
 import ReactDOM from "react-dom/client";
+import { BrowserRouter } from "react-router-dom";
 import * as Sentry from "@sentry/react";
 import "./index.css";
 import { ErrorNotificationProvider } from "./contexts/ErrorNotificationContext.jsx";
@@ -102,13 +103,15 @@ ReactDOM.createRoot(document.getElementById("root")).render(
         </div>
       }
     >
-      <ErrorNotificationProvider>
-        <AuthProvider>
-          <GameProvider>
-            <App />
-          </GameProvider>
-        </AuthProvider>
-      </ErrorNotificationProvider>
+      <BrowserRouter>
+        <ErrorNotificationProvider>
+          <AuthProvider>
+            <GameProvider>
+              <App />
+            </GameProvider>
+          </AuthProvider>
+        </ErrorNotificationProvider>
+      </BrowserRouter>
     </Suspense>
   </ErrorBoundary>
 );

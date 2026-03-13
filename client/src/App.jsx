@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import { socket } from "./socket";
 import { useGameContext } from "./contexts/GameContext";
 import { useGameState } from "@/hooks/useGameState";
+import { useAppNavigation, modeToUrlSegment } from "./hooks/useAppNavigation.js";
 import { useSocketConnection } from "./hooks/useSocketConnection.js";
 import { useGameActions } from "./hooks/useGameActions.js";
 import { useRoomManagement } from "./hooks/useRoomManagement.js";
@@ -19,8 +20,6 @@ const LS_LAST_SOCKET = "wp.lastSocketId";
 
 export default function App() {
   const {
-    screen,
-    setScreen,
     name,
     setName,
     roomId,
@@ -40,6 +39,15 @@ export default function App() {
     showActiveError,
     setShowActiveError,
   } = useGameContext();
+
+  const {
+    screen,
+    urlMode,
+    urlRoomId,
+    navigateToGame,
+    navigateHome,
+    navigateDaily,
+  } = useAppNavigation();
 
   const wasHost =
     (typeof window !== "undefined" &&
@@ -71,7 +79,14 @@ export default function App() {
   } = useGameState(room);
 
   // Socket connection management
-  const { canRejoin, doRejoin, savedRoomId, reconnecting } = useSocketConnection(room, setScreen);
+  const onGameResumed = useCallback(
+    (resumedRoomId) => {
+      const savedMode = localStorage.getItem("wp.lastMode") || "duel";
+      navigateToGame(savedMode, resumedRoomId);
+    },
+    [navigateToGame],
+  );
+  const { canRejoin, doRejoin, savedRoomId, reconnecting } = useSocketConnection(room, onGameResumed);
 
   // Game actions by mode
   const actionsByMode = useGameActions();
@@ -85,7 +100,7 @@ export default function App() {
   const { createRoom, joinRoom, persistSession, goHome } = useRoomManagement();
 
   // Daily game hook
-  const dailyGame = useDailyGame(screen, dailyActions, persistSession, goHome);
+  const dailyGame = useDailyGame(screen, dailyActions, persistSession, goHome, navigateDaily);
 
   // Duel game hook
   const { handleDuelKey, submittingGuess: submittingDuelGuess } = useDuelGame(
@@ -168,21 +183,102 @@ export default function App() {
     return () => clearTimeout(t);
   }, [msg, setMsg]);
 
-  // Navigate to game screen when duel room starts - separate effect
+  // Navigation guard: warn before leaving an active game
   useEffect(() => {
-    if (room?.mode === "duel" && room?.started) {
-      setScreen("game");
-      setCurrentGuess("");
-    }
-  }, [room?.mode, room?.started, setScreen, setCurrentGuess]);
+    const isActiveGame =
+      screen === "game" &&
+      room?.id &&
+      !showVictory &&
+      (room.mode === "battle" || room.mode === "battle_ai"
+        ? room.battle?.started && !room.battle?.winner && !room.battle?.reveal
+        : room.mode === "duel"
+        ? room.started && !room.winner && !room.duelReveal
+        : room.mode === "shared"
+        ? room.shared?.started && !room.shared?.winner
+        : false);
 
-  // Navigate to game screen for battle modes - separate effect
+    if (!isActiveGame) return;
+
+    const onBeforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [screen, room?.id, room?.mode, room?.started, room?.winner, room?.duelReveal, room?.battle, room?.shared, showVictory]);
+
+  // Dynamic document.title
   useEffect(() => {
-    if (room?.mode === "battle" || room?.mode === "battle_ai") {
-      setScreen("game");
-      setCurrentGuess("");
+    const modeLabels = {
+      duel: "Duel Mode",
+      battle: "Battle Royale",
+      battle_ai: "AI Battle",
+      shared: "Shared Duel",
+    };
+    let title = "EvoWordo";
+    if (screen === "daily") {
+      title = "Daily Challenge | EvoWordo";
+    } else if (screen === "game" && room?.mode) {
+      const label = modeLabels[room.mode] || "Game";
+      const rid = room.id ? ` · ${room.id.toUpperCase()}` : "";
+      title = `${label}${rid} | EvoWordo`;
     }
-  }, [room?.mode, setScreen, setCurrentGuess]);
+    document.title = title;
+  }, [screen, room?.mode, room?.id]);
+
+  // Sync URL to match active room (handles reconnects, mode mismatches, duel start)
+  useEffect(() => {
+    if (!room?.id || !room?.mode) return;
+    if (room.mode === "duel" && !room.started) return;
+
+    const expectedSeg = modeToUrlSegment(room.mode);
+    const alreadyCorrect =
+      urlMode === expectedSeg &&
+      urlRoomId?.toUpperCase() === room.id.toUpperCase();
+
+    if (!alreadyCorrect) {
+      navigateToGame(room.mode, room.id, { replace: true });
+    }
+    setCurrentGuess("");
+  }, [room?.id, room?.mode, room?.started, urlMode, urlRoomId, navigateToGame, setCurrentGuess]);
+
+  // Deep link: auto-join when URL has a room but we're not connected
+  const deepLinkAttemptedRef = useRef(null);
+  useEffect(() => {
+    if (screen !== "game" || !urlRoomId || room?.id) return;
+    if (deepLinkAttemptedRef.current === urlRoomId) return;
+
+    deepLinkAttemptedRef.current = urlRoomId;
+    const savedName = name || "";
+
+    if (!savedName) {
+      navigateHome();
+      return;
+    }
+
+    joinRoom(savedName, urlRoomId).then((result) => {
+      if (result?.error) {
+        setMsg(result.error || "Room not found");
+        navigateHome();
+      }
+    });
+  }, [screen, urlRoomId, room?.id, name, joinRoom, setMsg, navigateHome]);
+
+  // Back button cleanup: if user navigates to home via browser back while in a room, leave the room
+  const prevScreenRef = useRef(screen);
+  useEffect(() => {
+    const prev = prevScreenRef.current;
+    prevScreenRef.current = screen;
+    if (screen === "home" && (prev === "game" || prev === "daily") && room?.id) {
+      goHome(room?.id);
+      if (prev === "daily") dailyGame.resetDailyProgress?.();
+      setRoom(null);
+      setRoomId("");
+      setCurrentGuess("");
+      setShowVictory(false);
+    }
+  }, [screen]);
 
   // Track wasHost for battle mode
   useEffect(() => {
@@ -211,7 +307,7 @@ export default function App() {
       setRoomId(sanitizeRoomId(result.roomId));
       setCurrentGuess("");
       setShowVictory(false);
-      setScreen("game");
+      navigateToGame(effectiveMode, result.roomId);
     } else {
       setMsg(result?.error || "Failed to create room");
     }
@@ -241,7 +337,7 @@ export default function App() {
       setRoomId(sanitizedRoomId);
       setCurrentGuess("");
       setShowVictory(false);
-      setScreen("game");
+      navigateToGame(joinedMode || mode || "duel", sanitizedRoomId);
     }
   };
 
@@ -265,13 +361,27 @@ export default function App() {
   ) : null;
 
   const handleHomeClick = () => {
+    const isActiveGame =
+      screen === "game" &&
+      room?.id &&
+      !showVictory &&
+      (room.mode === "battle" || room.mode === "battle_ai"
+        ? room.battle?.started && !room.battle?.winner && !room.battle?.reveal
+        : room.mode === "duel"
+        ? room.started && !room.winner && !room.duelReveal
+        : room.mode === "shared"
+        ? room.shared?.started && !room.shared?.winner
+        : false);
+
+    if (isActiveGame && !window.confirm("Leave the active game?")) return;
+
     goHome(room?.id);
     if (screen === "daily") {
       dailyGame.resetDailyProgress();
       setMode("daily");
     }
     setRoom(null);
-    setScreen("home");
+    navigateHome();
     setRoomId("");
     setCurrentGuess("");
     setShowVictory(false);

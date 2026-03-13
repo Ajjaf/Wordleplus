@@ -1,8 +1,8 @@
 import React from "react";
 import Board from "./Board";
+import PlayerAvatar from "./PlayerAvatar";
 
 function SpectateCard({ player, room }) {
-  const initials = getInitials(player?.name);
   const isHost = player?.id === room?.hostId;
 
   return (
@@ -16,13 +16,12 @@ function SpectateCard({ player, room }) {
     >
       {/* Header */}
       <div className="flex items-center gap-2">
-        <div
-          className={`h-8 w-8 rounded-full grid place-items-center text-xs font-semibold
-            ${isHost ? "bg-blue-100 text-blue-700" : "bg-muted"}`}
-          title={isHost ? "Host" : player?.name}
-        >
-          {isHost ? "👑" : initials}
-        </div>
+        <PlayerAvatar
+          avatarKey={isHost ? null : player?.profileAvatar}
+          colour={isHost ? null : player?.profileColour}
+          name={player?.name}
+          size={32}
+        />
         <div className="min-w-0">
           <div
             className="text-sm font-semibold truncate"
@@ -60,11 +59,6 @@ function SpectateCard({ player, room }) {
       </div>
     </div>
   );
-}
-
-function getInitials(name = "") {
-  const parts = name.trim().split(/\s+/).slice(0, 2);
-  return parts.map((p) => p[0]?.toUpperCase() || "").join("");
 }
 
 export default SpectateCard;

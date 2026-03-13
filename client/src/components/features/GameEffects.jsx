@@ -20,6 +20,7 @@ export function GameEffects({
   
   // Confetti effects
   showConfetti = false,
+  celebrationStyle = "confetti",
   
   // Audio effects
   lastGuess = null,
@@ -68,7 +69,7 @@ export function GameEffects({
         </>
       )}
       {enableConfetti && (
-        <ConfettiEffect trigger={showConfetti} />
+        <ConfettiEffect trigger={showConfetti} celebrationStyle={celebrationStyle} />
       )}
       {enableAudio && (
         <AudioFeedback

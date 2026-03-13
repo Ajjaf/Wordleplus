@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   X,
-  User,
   Trophy,
   Target,
   Flame,
@@ -10,16 +9,19 @@ import {
   LogIn,
   LogOut,
   Zap,
+  Check,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { createPortal } from "react-dom";
+import PlayerAvatar from "./PlayerAvatar";
+import { PRESET_AVATARS, PRESET_COLOURS } from "../config/avatars";
 
 const TABS = [
   { id: "profile", label: "Overview" },
+  { id: "customise", label: "Customise" },
   { id: "achievements", label: "Achievements" },
 ];
 
-// Map achievement keywords to icon + color
 function getAchievementStyle(title = "") {
   const t = title.toLowerCase();
   if (t.includes("win") || t.includes("champion") || t.includes("victor")) {
@@ -39,14 +41,8 @@ export default function ProfileModal({ open, onOpenChange, view = "profile" }) {
   const [mounted, setMounted] = useState(false);
   const [activeView, setActiveView] = useState(view);
 
-  useEffect(() => {
-    setMounted(true);
-    return () => setMounted(false);
-  }, []);
-
-  useEffect(() => {
-    if (view) setActiveView(view);
-  }, [view]);
+  useEffect(() => { setMounted(true); return () => setMounted(false); }, []);
+  useEffect(() => { if (view) setActiveView(view); }, [view]);
 
   const stats = user?.stats || {};
   const achievements = useMemo(() => {
@@ -80,7 +76,6 @@ export default function ProfileModal({ open, onOpenChange, view = "profile" }) {
     <AnimatePresence>
       {open && (
         <>
-          {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -89,7 +84,6 @@ export default function ProfileModal({ open, onOpenChange, view = "profile" }) {
             className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40"
           />
 
-          {/* Scroll container */}
           <div
             className="fixed inset-0 z-50 overflow-y-auto"
             onClick={() => onOpenChange(false)}
@@ -103,7 +97,6 @@ export default function ProfileModal({ open, onOpenChange, view = "profile" }) {
                 className="relative w-full max-w-md bg-gradient-to-br from-slate-900 to-violet-900/50 border border-white/15 rounded-2xl shadow-2xl overflow-hidden max-h-[85vh] pointer-events-auto overflow-y-auto"
                 onClick={(e) => e.stopPropagation()}
               >
-                {/* Subtle gradient overlay */}
                 <div className="absolute inset-0 bg-gradient-to-b from-white/[0.02] to-transparent pointer-events-none" />
 
                 {/* Header */}
@@ -117,25 +110,21 @@ export default function ProfileModal({ open, onOpenChange, view = "profile" }) {
                   </button>
 
                   <div className="flex items-center gap-4 pr-10">
-                    {user.avatarUrl ? (
-                      <img
-                        src={user.avatarUrl}
-                        alt={user.displayName || "User"}
-                        className="w-14 h-14 rounded-full border-2 border-white/20 shrink-0"
-                        style={{ objectFit: "cover" }}
-                      />
-                    ) : (
-                      <div className="w-14 h-14 rounded-full bg-gradient-to-br from-violet-600/50 to-slate-700 border-2 border-white/20 flex items-center justify-center shrink-0">
-                        <User className="w-7 h-7 text-white/60" />
-                      </div>
-                    )}
-
+                    <PlayerAvatar
+                      avatarKey={user.profileAvatar}
+                      colour={user.profileColour}
+                      name={playerName}
+                      size={56}
+                    />
                     <div className="min-w-0">
                       <h2 className="text-lg font-bold text-white truncate">{playerName}</h2>
                       {isAnonymous && (
-                        <span className="inline-block text-[11px] font-medium text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full mt-1">
-                          Anonymous
-                        </span>
+                        <button
+                          onClick={login}
+                          className="text-[11px] text-violet-400 hover:text-violet-300 transition-colors mt-0.5"
+                        >
+                          Sign in to keep progress
+                        </button>
                       )}
                     </div>
                   </div>
@@ -161,23 +150,15 @@ export default function ProfileModal({ open, onOpenChange, view = "profile" }) {
                 {/* Content */}
                 <AnimatePresence mode="wait">
                   {activeView === "achievements" ? (
-                    <motion.div
-                      key="achievements"
-                      initial={{ opacity: 0, x: 10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: -10 }}
-                      transition={{ duration: 0.15 }}
-                    >
+                    <motion.div key="achievements" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} transition={{ duration: 0.15 }}>
                       <AchievementsSection achievements={achievements} />
                     </motion.div>
+                  ) : activeView === "customise" ? (
+                    <motion.div key="customise" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} transition={{ duration: 0.15 }}>
+                      <CustomiseSection user={user} playerName={playerName} />
+                    </motion.div>
                   ) : (
-                    <motion.div
-                      key="profile"
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: 10 }}
-                      transition={{ duration: 0.15 }}
-                    >
+                    <motion.div key="profile" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }} transition={{ duration: 0.15 }}>
                       <StatsSection
                         statCards={statCards}
                         winRate={winRate}
@@ -199,10 +180,144 @@ export default function ProfileModal({ open, onOpenChange, view = "profile" }) {
   );
 }
 
+/* ---------- Customise Tab ---------- */
+
+function CustomiseSection({ user, playerName }) {
+  const { updateProfile } = useAuth();
+  const [name, setName] = useState(user.displayName || "");
+  const [avatar, setAvatar] = useState(user.profileAvatar || null);
+  const [colour, setColour] = useState(user.profileColour || null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const hasChanges =
+    name !== (user.displayName || "") ||
+    avatar !== (user.profileAvatar || null) ||
+    colour !== (user.profileColour || null);
+
+  async function handleSave() {
+    if (!hasChanges || saving) return;
+    setSaving(true);
+    setSaved(false);
+    try {
+      const updates = {};
+      if (name !== (user.displayName || "")) updates.displayName = name.trim() || null;
+      if (avatar !== (user.profileAvatar || null)) updates.profileAvatar = avatar;
+      if (colour !== (user.profileColour || null)) updates.profileColour = colour;
+      await updateProfile(updates);
+
+      if (updates.displayName !== undefined) {
+        const storedName = updates.displayName || name.trim();
+        if (storedName) localStorage.setItem("wp.lastName", storedName);
+      }
+
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      console.error("Profile save failed:", err);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="px-4 sm:px-6 py-5 space-y-5">
+      {/* Live preview */}
+      <div className="flex justify-center">
+        <PlayerAvatar
+          avatarKey={avatar}
+          colour={colour}
+          name={name || playerName}
+          size={72}
+        />
+      </div>
+
+      {/* Display name */}
+      <div className="space-y-1.5">
+        <label className="text-[11px] uppercase tracking-wide text-white/40 font-medium">
+          Display name
+        </label>
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value.slice(0, 20))}
+          placeholder="Enter a name..."
+          className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white text-sm placeholder-white/30 focus:outline-none focus:border-white/25 transition"
+        />
+      </div>
+
+      {/* Avatar picker */}
+      <div className="space-y-1.5">
+        <label className="text-[11px] uppercase tracking-wide text-white/40 font-medium">
+          Avatar
+        </label>
+        <div className="grid grid-cols-8 gap-2">
+          {PRESET_AVATARS.map(({ key, emoji }) => {
+            const selected = avatar === key;
+            return (
+              <button
+                key={key}
+                onClick={() => setAvatar(selected ? null : key)}
+                className={`aspect-square rounded-lg text-xl grid place-items-center transition-all ${
+                  selected
+                    ? "ring-2 bg-white/10 scale-110"
+                    : "bg-white/[0.03] hover:bg-white/[0.08]"
+                }`}
+                style={selected ? { ringColor: colour || "#8b5cf6" } : undefined}
+              >
+                {emoji}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Colour picker */}
+      <div className="space-y-1.5">
+        <label className="text-[11px] uppercase tracking-wide text-white/40 font-medium">
+          Accent colour
+        </label>
+        <div className="flex gap-2 flex-wrap">
+          {PRESET_COLOURS.map((hex) => {
+            const selected = colour === hex;
+            return (
+              <button
+                key={hex}
+                onClick={() => setColour(selected ? null : hex)}
+                className="w-8 h-8 rounded-full grid place-items-center transition-transform hover:scale-110 flex-shrink-0"
+                style={{
+                  backgroundColor: hex,
+                  boxShadow: selected ? `0 0 0 2px ${hex}, 0 0 0 4px rgba(255,255,255,0.3)` : "none",
+                }}
+              >
+                {selected && <Check className="w-4 h-4 text-white drop-shadow" />}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Save */}
+      <button
+        onClick={handleSave}
+        disabled={!hasChanges || saving}
+        className={`w-full py-2.5 rounded-xl text-sm font-semibold transition-all ${
+          hasChanges && !saving
+            ? "bg-violet-600 hover:bg-violet-500 text-white"
+            : "bg-white/5 text-white/30 cursor-not-allowed"
+        }`}
+      >
+        {saved ? "Saved!" : saving ? "Saving..." : "Save Changes"}
+      </button>
+    </div>
+  );
+}
+
+/* ---------- Stats Tab ---------- */
+
 function StatsSection({ statCards, winRate, stats, isAnonymous, login, logout }) {
   return (
     <div className="px-4 sm:px-6 py-5 space-y-4">
-      {/* 2x2 stat grid */}
       <div className="grid grid-cols-2 gap-3">
         {statCards.map(({ icon: Icon, color, label, value }) => (
           <div
@@ -211,16 +326,13 @@ function StatsSection({ statCards, winRate, stats, isAnonymous, login, logout })
           >
             <div className="flex items-center gap-2 mb-1">
               <Icon className={`w-4 h-4 ${color}`} />
-              <span className="text-[11px] text-white/50 uppercase tracking-wide font-medium">
-                {label}
-              </span>
+              <span className="text-[11px] text-white/50 uppercase tracking-wide font-medium">{label}</span>
             </div>
             <p className="text-2xl font-bold text-white">{value}</p>
           </div>
         ))}
       </div>
 
-      {/* Win rate bar */}
       <div className="space-y-2">
         <div className="flex items-center justify-between text-xs text-white/50">
           <span>Win rate</span>
@@ -236,7 +348,6 @@ function StatsSection({ statCards, winRate, stats, isAnonymous, login, logout })
         </div>
       </div>
 
-      {/* Best streak */}
       {stats.longestStreak > 0 && (
         <div className="flex items-center justify-between px-4 py-3 bg-amber-500/10 border border-amber-500/20 rounded-xl">
           <div className="flex items-center gap-2 text-amber-400">
@@ -247,24 +358,16 @@ function StatsSection({ statCards, winRate, stats, isAnonymous, login, logout })
         </div>
       )}
 
-      {/* Sign in / out */}
       {isAnonymous ? (
-        <div className="space-y-3">
-          <div className="bg-gradient-to-r from-violet-500/10 to-cyan-500/10 border border-violet-500/20 rounded-xl p-4">
-            <p className="text-sm text-white/70 text-center">
-              Sign in to save your progress and compete on the leaderboard!
-            </p>
-          </div>
-          <motion.button
-            onClick={login}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.97 }}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-500 hover:to-cyan-500 text-white font-semibold rounded-xl transition-colors shadow-lg shadow-violet-500/20"
-          >
-            <LogIn className="w-5 h-5" />
-            Sign In to Save Progress
-          </motion.button>
-        </div>
+        <motion.button
+          onClick={login}
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.97 }}
+          className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-500 hover:to-cyan-500 text-white font-semibold rounded-xl transition-colors shadow-lg shadow-violet-500/20"
+        >
+          <LogIn className="w-5 h-5" />
+          Sign In to Save Progress
+        </motion.button>
       ) : (
         <button
           onClick={logout}
@@ -277,6 +380,8 @@ function StatsSection({ statCards, winRate, stats, isAnonymous, login, logout })
     </div>
   );
 }
+
+/* ---------- Achievements Tab ---------- */
 
 function AchievementsSection({ achievements }) {
   if (achievements.length === 0) {
@@ -292,17 +397,9 @@ function AchievementsSection({ achievements }) {
   return (
     <div className="px-4 sm:px-6 py-5 space-y-3">
       {achievements.map((achievement, idx) => {
-        const title =
-          typeof achievement === "string"
-            ? achievement
-            : achievement?.title || `Achievement ${idx + 1}`;
-        const description =
-          typeof achievement === "object" ? achievement?.description || "" : "";
-        const earnedAt =
-          typeof achievement === "object" && achievement?.earnedAt
-            ? new Date(achievement.earnedAt)
-            : null;
-
+        const title = typeof achievement === "string" ? achievement : achievement?.title || `Achievement ${idx + 1}`;
+        const description = typeof achievement === "object" ? achievement?.description || "" : "";
+        const earnedAt = typeof achievement === "object" && achievement?.earnedAt ? new Date(achievement.earnedAt) : null;
         const { Icon, color, bg, border } = getAchievementStyle(title);
 
         return (
@@ -319,13 +416,9 @@ function AchievementsSection({ achievements }) {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-white">{title}</p>
-                {description && (
-                  <p className="text-xs text-white/50 mt-0.5">{description}</p>
-                )}
+                {description && <p className="text-xs text-white/50 mt-0.5">{description}</p>}
                 {earnedAt && !Number.isNaN(earnedAt.valueOf()) && (
-                  <p className="text-[11px] text-white/30 mt-1">
-                    {earnedAt.toLocaleDateString()}
-                  </p>
+                  <p className="text-[11px] text-white/30 mt-1">{earnedAt.toLocaleDateString()}</p>
                 )}
               </div>
             </div>

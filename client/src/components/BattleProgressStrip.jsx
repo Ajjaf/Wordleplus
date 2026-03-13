@@ -1,10 +1,6 @@
 import React from "react";
-import { cn } from "../lib/utils";
 import MicroProgressGrid from "./mobile/MicroProgressGrid";
-
-function initial(name = "") {
-  return (name || "?").trim().charAt(0).toUpperCase() || "?";
-}
+import PlayerAvatar from "./PlayerAvatar";
 
 /**
  * NYT-style progress strip: avatar + visible 6-row mini grid per player.
@@ -14,7 +10,6 @@ export function BattleProgressStrip({ players = [], isMobile = false }) {
   if (!players.length) return null;
 
   const avatarSize = isMobile ? 36 : 44;
-  const avatarFont = isMobile ? 14 : 17;
   const gridTile = isMobile ? 8 : 10;
   const gridGap = isMobile ? 1.5 : 2;
   const gridRows = 6;
@@ -39,17 +34,13 @@ export function BattleProgressStrip({ players = [], isMobile = false }) {
               key={player.id || i}
               className="flex-shrink-0 flex items-center gap-2 px-2.5 py-2 rounded-xl border border-white/[0.08]"
             >
-              <div
-                className={cn(
-                  "rounded-full grid place-items-center flex-shrink-0 font-bold",
-                  isDone
-                    ? "bg-emerald-500/25 text-emerald-400 ring-2 ring-emerald-500/40"
-                    : "bg-white/[0.08] text-white/50"
-                )}
-                style={{ width: avatarSize, height: avatarSize, fontSize: avatarFont }}
-              >
-                {isDone ? "✓" : initial(player.name)}
-              </div>
+              <PlayerAvatar
+                avatarKey={player.profileAvatar}
+                colour={player.profileColour}
+                name={player.name}
+                size={avatarSize}
+                done={isDone}
+              />
 
               <MicroProgressGrid
                 rows={gridRows}

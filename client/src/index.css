@@ -61,7 +61,7 @@
     --kbd-idle-border: #c4c7cb;
 }
 
-/* --- WordlePlus theme tokens --- */
+/* --- EvoWordo theme tokens --- */
 :root {
   /* Light mode (kept close to your current look) */
   --app-bg:            #f8fafc;
@@ -220,32 +220,33 @@
   }
 }
 
-/* Base flip animation (transform only) */
+/* Base flip animation with compress + bounce physics */
 @keyframes tileFlipBase {
-  0% { 
-    transform: rotateY(0deg) scale(1);
-  }
-  50% { 
-    transform: rotateY(90deg) scale(1.1);
-  }
-  100% { 
-    transform: rotateY(0deg) scale(1);
-  }
+  0%   { transform: rotateY(0deg) scale(1); }
+  10%  { transform: rotateY(0deg) scale(0.95); }
+  50%  { transform: rotateY(90deg) scale(1.05); }
+  85%  { transform: rotateY(0deg) scale(1.03); }
+  100% { transform: rotateY(0deg) scale(1); }
 }
 
 /* Color transitions for different tile states */
 @keyframes tileFlipToGreen {
-  0% { 
+  0% {
     background-color: var(--tile-empty-bg);
     color: var(--tile-text);
     border: 1px solid var(--tile-empty-border);
   }
-  50% { 
+  45% {
     background-color: var(--tile-typed-bg);
     color: var(--tile-text);
     border: 1px solid var(--tile-empty-border);
   }
-  100% { 
+  55% {
+    background-color: var(--tile-correct-bg);
+    color: var(--tile-correct-fg);
+    border: 1px solid var(--tile-correct-bg);
+  }
+  100% {
     background-color: var(--tile-correct-bg);
     color: var(--tile-correct-fg);
     border: 1px solid var(--tile-correct-bg);
@@ -253,17 +254,22 @@
 }
 
 @keyframes tileFlipToYellow {
-  0% { 
+  0% {
     background-color: var(--tile-empty-bg);
     color: var(--tile-text);
     border: 1px solid var(--tile-empty-border);
   }
-  50% { 
+  45% {
     background-color: var(--tile-typed-bg);
     color: var(--tile-text);
     border: 1px solid var(--tile-empty-border);
   }
-  100% { 
+  55% {
+    background-color: var(--tile-present-bg);
+    color: var(--tile-present-fg);
+    border: 1px solid var(--tile-present-bg);
+  }
+  100% {
     background-color: var(--tile-present-bg);
     color: var(--tile-present-fg);
     border: 1px solid var(--tile-present-bg);
@@ -271,17 +277,22 @@
 }
 
 @keyframes tileFlipToGray {
-  0% { 
+  0% {
     background-color: var(--tile-empty-bg);
     color: var(--tile-text);
     border: 1px solid var(--tile-empty-border);
   }
-  50% { 
+  45% {
     background-color: var(--tile-typed-bg);
     color: var(--tile-text);
     border: 1px solid var(--tile-empty-border);
   }
-  100% { 
+  55% {
+    background-color: var(--tile-absent-bg);
+    color: var(--tile-absent-fg);
+    border: 1px solid var(--tile-absent-bg);
+  }
+  100% {
     background-color: var(--tile-absent-bg);
     color: var(--tile-absent-fg);
     border: 1px solid var(--tile-absent-bg);
@@ -294,5 +305,14 @@
   color: hsl(var(--destructive)) !important;
 }
 
-
+/* Accessibility: respect user's reduced-motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
 

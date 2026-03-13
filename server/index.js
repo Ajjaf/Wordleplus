@@ -271,7 +271,7 @@ if (config.isProduction) {
       <!DOCTYPE html>
       <html>
       <head>
-        <title>WordlePlus Backend</title>
+        <title>EvoWordo Backend</title>
         <style>
           body { font-family: Arial, sans-serif; text-align: center; padding: 50px; background: #f5f5f5; }
           .container { background: white; padding: 40px; border-radius: 10px; max-width: 600px; margin: 0 auto; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
@@ -283,10 +283,10 @@ if (config.isProduction) {
       </head>
       <body>
         <div class="container">
-          <h1>🎮 WordlePlus Backend API</h1>
-          <p>You've reached the backend API server. The WordlePlus game frontend is running on a different port.</p>
+          <h1>🎮 EvoWordo Backend API</h1>
+          <p>You've reached the backend API server. The EvoWordo game frontend is running on a different port.</p>
           <p><strong>Click the button below to access the game:</strong></p>
-          <a href="${frontendUrl}" class="button">Open WordlePlus Game →</a>
+          <a href="${frontendUrl}" class="button">Open EvoWordo →</a>
           <p style="margin-top: 30px; font-size: 14px; color: #999;">Backend API running on port 8080 | Frontend on port 5000</p>
         </div>
       </body>
@@ -367,6 +367,58 @@ app.get("/api/auth/user", async (req, res) => {
   } catch (error) {
     console.error("Error fetching user:", error);
     res.status(500).json({ message: "Failed to fetch user" });
+  }
+});
+
+// Update profile (works for anonymous and authenticated)
+const ALLOWED_AVATAR_KEYS = new Set([
+  "cat","dog","fox","panda","robot","alien","ghost","skull",
+  "flame","bolt","star","gem","rocket","crown","heart","moon",
+]);
+const HEX_COLOUR_RE = /^#[0-9a-fA-F]{6}$/;
+
+app.patch("/api/auth/profile", async (req, res) => {
+  try {
+    const userId = getUserIdFromRequest(req);
+    if (!userId) {
+      return res.status(401).json({ message: "No user session" });
+    }
+
+    const { displayName, profileAvatar, profileColour } = req.body || {};
+    const data = {};
+
+    if (displayName !== undefined) {
+      const trimmed = String(displayName).trim().slice(0, 20);
+      if (!isSafeInput(trimmed)) {
+        return res.status(400).json({ message: "Invalid display name" });
+      }
+      data.displayName = trimmed || null;
+    }
+
+    if (profileAvatar !== undefined) {
+      if (profileAvatar !== null && !ALLOWED_AVATAR_KEYS.has(profileAvatar)) {
+        return res.status(400).json({ message: "Invalid avatar" });
+      }
+      data.profileAvatar = profileAvatar;
+    }
+
+    if (profileColour !== undefined) {
+      if (profileColour !== null && !HEX_COLOUR_RE.test(profileColour)) {
+        return res.status(400).json({ message: "Invalid colour" });
+      }
+      data.profileColour = profileColour;
+    }
+
+    if (Object.keys(data).length === 0) {
+      return res.status(400).json({ message: "No fields to update" });
+    }
+
+    await prisma.user.update({ where: { id: userId }, data });
+    const profile = await getFullUserProfile(userId);
+    res.json(profile);
+  } catch (error) {
+    console.error("Error updating profile:", error);
+    res.status(500).json({ message: "Failed to update profile" });
   }
 });
 
@@ -935,6 +987,183 @@ app.get("/api/leaderboard/streaks", async (_req, res) => {
   }
 });
 
+app.get("/api/leaderboard/categories", async (_req, res) => {
+  try {
+    const [wins, streaks, winRateRows, avgGuessRows] = await Promise.all([
+      prisma.user.findMany({
+        where: { isAnonymous: false, totalWins: { gt: 0 } },
+        orderBy: { totalWins: "desc" },
+        take: 20,
+        select: { id: true, displayName: true, username: true, profileAvatar: true, totalWins: true, totalGames: true },
+      }),
+      prisma.user.findMany({
+        where: { isAnonymous: false, longestStreak: { gt: 0 } },
+        orderBy: { longestStreak: "desc" },
+        take: 20,
+        select: { id: true, displayName: true, username: true, profileAvatar: true, streak: true, longestStreak: true },
+      }),
+      prisma.$queryRaw`
+        SELECT id, "displayName", username, "profileAvatar", "totalWins", "totalGames",
+               ROUND("totalWins"::numeric / GREATEST("totalGames", 1) * 100, 1) as "winRate"
+        FROM "User"
+        WHERE "isAnonymous" = false AND "totalGames" >= 10
+        ORDER BY "totalWins"::numeric / GREATEST("totalGames", 1) DESC
+        LIMIT 20
+      `,
+      prisma.$queryRaw`
+        SELECT u.id, u."displayName", u.username, u."profileAvatar",
+               ROUND(AVG(dr.attempts)::numeric, 2) as "avgGuesses",
+               COUNT(*)::int as "gamesWon"
+        FROM "DailyResult" dr
+        JOIN "User" u ON u.id = dr."userId"
+        WHERE dr.won = true AND u."isAnonymous" = false
+        GROUP BY u.id, u."displayName", u.username, u."profileAvatar"
+        HAVING COUNT(*) >= 5
+        ORDER BY AVG(dr.attempts) ASC
+        LIMIT 20
+      `,
+    ]);
+
+    res.json({
+      wins,
+      streaks,
+      winRate: winRateRows.map((r) => ({ ...r, winRate: Number(r.winRate) })),
+      avgGuesses: avgGuessRows.map((r) => ({ ...r, avgGuesses: Number(r.avgGuesses) })),
+    });
+  } catch (error) {
+    console.error("Leaderboard categories error:", error);
+    res.status(500).json({ error: "Failed to fetch leaderboard categories" });
+  }
+});
+
+function getWeekStartUTC() {
+  const now = new Date();
+  const day = now.getUTCDay();
+  const diff = day === 0 ? 6 : day - 1;
+  const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - diff));
+  return monday;
+}
+
+app.get("/api/leaderboard/weekly", async (_req, res) => {
+  try {
+    const weekStart = getWeekStartUTC();
+    const rows = await prisma.$queryRaw`
+      SELECT u.id, u."displayName", u.username, u."profileAvatar",
+             COUNT(*)::int as "weeklyWins"
+      FROM "DailyResult" dr
+      JOIN "User" u ON u.id = dr."userId"
+      WHERE dr.won = true AND dr."createdAt" >= ${weekStart}
+        AND u."isAnonymous" = false
+      GROUP BY u.id, u."displayName", u.username, u."profileAvatar"
+      ORDER BY "weeklyWins" DESC
+      LIMIT 20
+    `;
+    res.json(rows);
+  } catch (error) {
+    console.error("Weekly leaderboard error:", error);
+    res.status(500).json({ error: "Failed to fetch weekly leaderboard" });
+  }
+});
+
+app.get("/api/leaderboard/near-me", async (req, res) => {
+  const userId = getUserIdFromRequest(req);
+  if (!userId) return res.status(401).json({ error: "Not authenticated" });
+
+  const category = (req.query.category || "wins").toString();
+  const NEIGHBORS = 3;
+
+  try {
+    let rankedQuery;
+    switch (category) {
+      case "winRate":
+        rankedQuery = `
+          SELECT id, "displayName", username, "profileAvatar", "totalWins", "totalGames",
+                 ROUND("totalWins"::numeric / GREATEST("totalGames", 1) * 100, 1) as "statValue",
+                 ROW_NUMBER() OVER (ORDER BY "totalWins"::numeric / GREATEST("totalGames", 1) DESC, "totalWins" DESC) as rank
+          FROM "User"
+          WHERE "isAnonymous" = false AND "totalGames" >= 10
+        `;
+        break;
+      case "streaks":
+        rankedQuery = `
+          SELECT id, "displayName", username, "profileAvatar", streak, "longestStreak",
+                 "longestStreak" as "statValue",
+                 ROW_NUMBER() OVER (ORDER BY "longestStreak" DESC, streak DESC) as rank
+          FROM "User"
+          WHERE "isAnonymous" = false AND "longestStreak" > 0
+        `;
+        break;
+      case "avgGuesses":
+        rankedQuery = `
+          SELECT u.id, u."displayName", u.username, u."profileAvatar",
+                 ROUND(AVG(dr.attempts)::numeric, 2) as "statValue",
+                 COUNT(*)::int as "gamesWon",
+                 ROW_NUMBER() OVER (ORDER BY AVG(dr.attempts) ASC) as rank
+          FROM "DailyResult" dr
+          JOIN "User" u ON u.id = dr."userId"
+          WHERE dr.won = true AND u."isAnonymous" = false
+          GROUP BY u.id, u."displayName", u.username, u."profileAvatar"
+          HAVING COUNT(*) >= 5
+        `;
+        break;
+      case "weekly": {
+        const weekStart = getWeekStartUTC();
+        const rows = await prisma.$queryRaw`
+          WITH ranked AS (
+            SELECT u.id, u."displayName", u.username, u."profileAvatar",
+                   COUNT(*)::int as "weeklyWins",
+                   ROW_NUMBER() OVER (ORDER BY COUNT(*) DESC) as rank
+            FROM "DailyResult" dr
+            JOIN "User" u ON u.id = dr."userId"
+            WHERE dr.won = true AND dr."createdAt" >= ${weekStart}
+              AND u."isAnonymous" = false
+            GROUP BY u.id, u."displayName", u.username, u."profileAvatar"
+          )
+          SELECT * FROM ranked
+          WHERE rank BETWEEN
+            (SELECT GREATEST(rank - ${NEIGHBORS}, 1) FROM ranked WHERE id = ${userId})
+            AND
+            (SELECT rank + ${NEIGHBORS} FROM ranked WHERE id = ${userId})
+        `;
+        const myRow = rows.find((r) => r.id === userId);
+        return res.json({
+          myRank: myRow ? Number(myRow.rank) : null,
+          total: rows.length,
+          players: rows.map((r) => ({ ...r, rank: Number(r.rank), weeklyWins: Number(r.weeklyWins) })),
+        });
+      }
+      default:
+        rankedQuery = `
+          SELECT id, "displayName", username, "profileAvatar", "totalWins", "totalGames",
+                 "totalWins" as "statValue",
+                 ROW_NUMBER() OVER (ORDER BY "totalWins" DESC, "totalGames" DESC) as rank
+          FROM "User"
+          WHERE "isAnonymous" = false AND "totalWins" > 0
+        `;
+        break;
+    }
+
+    const rows = await prisma.$queryRawUnsafe(`
+      WITH ranked AS (${rankedQuery})
+      SELECT * FROM ranked
+      WHERE rank BETWEEN
+        (SELECT GREATEST(rank - ${NEIGHBORS}, 1) FROM ranked WHERE id = '${userId}')
+        AND
+        (SELECT rank + ${NEIGHBORS} FROM ranked WHERE id = '${userId}')
+    `);
+
+    const myRow = rows.find((r) => r.id === userId);
+    res.json({
+      myRank: myRow ? Number(myRow.rank) : null,
+      total: rows.length,
+      players: rows.map((r) => ({ ...r, rank: Number(r.rank), statValue: Number(r.statValue) })),
+    });
+  } catch (error) {
+    console.error("Near-me leaderboard error:", error);
+    res.status(500).json({ error: "Failed to fetch near-me leaderboard" });
+  }
+});
+
 function normalizeMode(mode) {
   const candidate = (mode || "").toString().toLowerCase();
   return VALID_MODES.has(candidate) ? candidate : "duel";
@@ -1153,7 +1382,20 @@ ioRef = io;
 // ---------- Socket authentication middleware ----------
 io.use(authenticateSocket);
 
-// ---------- Socket handlers ----------
+// ---------- Socket helpers ----------
+
+async function getSocketProfileData(socket) {
+  if (!socket.userId) return {};
+  try {
+    const u = await prisma.user.findUnique({
+      where: { id: socket.userId },
+      select: { profileAvatar: true, profileColour: true },
+    });
+    return { profileAvatar: u?.profileAvatar || null, profileColour: u?.profileColour || null };
+  } catch {
+    return {};
+  }
+}
 
 // ---------- Socket handlers ----------
 io.on("connection", (socket) => {
@@ -1164,11 +1406,10 @@ io.on("connection", (socket) => {
     cb?.({ ok: true, state: sanitizeRoom(room) });
   });
 
-  socket.on("createRoom", ({ name, mode = "duel" }, cb) => {
+  socket.on("createRoom", async ({ name, mode = "duel" }, cb) => {
     if (!checkSocketRateLimit(socket.id, "createRoom", 5)) {
       return cb?.({ error: "Too many rooms created. Slow down!" });
     }
-    // Sanitize and validate inputs
     const sanitizedName = sanitizePlayerName(name);
     if (!sanitizedName || !isSafeInput(sanitizedName)) {
       return cb?.({ error: "Invalid name" });
@@ -1205,8 +1446,9 @@ io.on("connection", (socket) => {
       };
     }
 
+    const profile = await getSocketProfileData(socket);
     room.players[socket.id] = {
-      name: sanitizedName, // Use sanitized name
+      name: sanitizedName,
       ready: false,
       secret: null,
       guesses: [],
@@ -1216,6 +1458,7 @@ io.on("connection", (socket) => {
       disconnected: false,
       rematchRequested: false,
       disconnectedAt: null,
+      ...profile,
     };
 
     rooms.set(id, room);
@@ -1227,11 +1470,10 @@ io.on("connection", (socket) => {
     io.to(id).emit("roomState", sanitizeRoom(room));
   });
 
-  socket.on("joinRoom", ({ name, roomId }, cb) => {
+  socket.on("joinRoom", async ({ name, roomId }, cb) => {
     if (!checkSocketRateLimit(socket.id, "joinRoom", 10)) {
       return cb?.({ error: "Too many join attempts. Slow down!" });
     }
-    // Sanitize and validate inputs
     const sanitizedRoomId = sanitizeRoomId(roomId);
     const sanitizedName = sanitizePlayerName(name);
 
@@ -1291,8 +1533,9 @@ io.on("connection", (socket) => {
       if (allowShared?.error) return cb?.(allowShared);
     }
 
+    const joinProfile = await getSocketProfileData(socket);
     room.players[socket.id] = {
-      name: sanitizedName, // Use sanitized name
+      name: sanitizedName,
       ready: false,
       secret: null,
       guesses: [],
@@ -1302,6 +1545,7 @@ io.on("connection", (socket) => {
       disconnected: false,
       rematchRequested: false,
       disconnectedAt: null,
+      ...joinProfile,
     };
     room.updatedAt = Date.now();
 
@@ -1987,6 +2231,8 @@ function sanitizeRoom(room) {
         streak = 0,
         disconnected = false,
         rematchRequested = false,
+        profileAvatar = null,
+        profileColour = null,
       } = p;
       return [
         id,
@@ -2000,6 +2246,8 @@ function sanitizeRoom(room) {
           streak,
           disconnected,
           rematchRequested,
+          profileAvatar,
+          profileColour,
         },
       ];
     })

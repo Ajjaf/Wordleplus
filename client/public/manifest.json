@@ -1,0 +1,27 @@
+{
+  "name": "EvoWordo",
+  "short_name": "EvoWordo",
+  "description": "Competitive multiplayer Wordle — Duels, Battle Royale, and Daily Challenges.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b0b10",
+  "theme_color": "#7c3aed",
+  "icons": [
+    {
+      "src": "/download.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/download.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["games", "entertainment"],
+  "lang": "en",
+  "scope": "/"
+}

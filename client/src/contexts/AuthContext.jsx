@@ -106,6 +106,22 @@ export function AuthProvider({ children }) {
     );
   }
 
+  const updateProfile = useCallback(async (updates) => {
+    const response = await fetch(buildApiUrl("/api/auth/profile"), {
+      method: "PATCH",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updates),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.message || "Failed to update profile");
+    }
+    const updated = await response.json();
+    setUser(updated);
+    return updated;
+  }, []);
+
   const value = {
     user,
     isLoading,
@@ -115,6 +131,7 @@ export function AuthProvider({ children }) {
     signup,
     logout,
     refreshUser: loadUser,
+    updateProfile,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

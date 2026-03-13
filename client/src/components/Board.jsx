@@ -1,5 +1,6 @@
 // Board.jsx
 import React, { useEffect, useMemo, useRef, useState, memo } from "react";
+import BoardGlow from "./BoardGlow";
 
 function Board({
   guesses = [],
@@ -176,7 +177,7 @@ function Board({
         ref={wrapRef}
         className={className}
         style={{
-          // Let parent decide final width/height; we center the grid within.
+          position: "relative",
           width: "100%",
           height: "100%",
           padding,
@@ -187,6 +188,10 @@ function Board({
           ...style,
         }}
       >
+        <BoardGlow
+          guessFlipKey={guessFlipKey}
+          lastPattern={guesses.length > 0 ? guesses[guesses.length - 1]?.pattern : null}
+        />
         <div style={gridStyle} role="grid" aria-label="Wordle game board">
           {/* Secret Word Row (if provided) */}
           {secretWord !== null && (
@@ -353,21 +358,20 @@ function Board({
                     row.guess.trim().length === 5 &&
                     guessFlipKey > 0;
 
-                  const flipDelay = shouldFlip ? i * 100 : 0; // 100ms delay between each tile
+                  const flipDelay = shouldFlip ? i * 80 : 0;
 
                   // Create dynamic animation based on tile state
                   const getFlipAnimation = () => {
                     if (!shouldFlip) return "none";
 
-                    const baseAnimation = `tileFlipBase 0.6s ease-in-out ${flipDelay}ms both`;
+                    const baseAnimation = `tileFlipBase 0.5s ease-in-out ${flipDelay}ms both`;
 
-                    // Add state-specific color transition
                     if (state === "green") {
-                      return `${baseAnimation}, tileFlipToGreen 0.6s ease-in-out ${flipDelay}ms both`;
+                      return `${baseAnimation}, tileFlipToGreen 0.5s ease-in-out ${flipDelay}ms both`;
                     } else if (state === "yellow") {
-                      return `${baseAnimation}, tileFlipToYellow 0.6s ease-in-out ${flipDelay}ms both`;
+                      return `${baseAnimation}, tileFlipToYellow 0.5s ease-in-out ${flipDelay}ms both`;
                     } else if (state === "gray") {
-                      return `${baseAnimation}, tileFlipToGray 0.6s ease-in-out ${flipDelay}ms both`;
+                      return `${baseAnimation}, tileFlipToGray 0.5s ease-in-out ${flipDelay}ms both`;
                     }
 
                     return baseAnimation;
