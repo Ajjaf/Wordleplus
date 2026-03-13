@@ -286,37 +286,47 @@ function HostSpectateScreen({
                   </GlowButton>
                 </div>
                 <div className="space-y-2 max-h-[60vh] overflow-auto">
-                  {leaderboard.map((p, i) => (
-                    <motion.div
-                      key={p.id}
-                      className="flex items-center justify-between text-sm py-2 px-3 rounded-xl bg-white/5 hover:bg-white/10 transition-colors"
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: i * 0.05, duration: 0.2 }}
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <span className="w-6 text-white/60 font-medium">
-                          {i + 1}.
-                        </span>
-                        <span
-                          className={`truncate font-medium ${
-                            p.disconnected ? "opacity-60" : ""
-                          } text-white`}
-                          title={p.name}
+                  <AnimatePresence mode="popLayout">
+                    {leaderboard.map((p, i) => {
+                      const medals = ["🥇", "🥈", "🥉"];
+                      return (
+                        <motion.div
+                          key={p.id}
+                          layout
+                          className="flex items-center justify-between text-sm py-2 px-3 rounded-xl bg-white/5 hover:bg-white/10 transition-colors"
+                          initial={{ opacity: 0, scale: 0.95 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.95 }}
+                          transition={{
+                            layout: { type: "spring", stiffness: 500, damping: 35 },
+                            opacity: { duration: 0.2 },
+                          }}
                         >
-                          {p.name}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-xs px-2 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                          W:{p.wins}
-                        </span>
-                        <span className="text-xs px-2 py-1 rounded-lg bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                          Stk:{p.streak}
-                        </span>
-                      </div>
-                    </motion.div>
-                  ))}
+                          <div className="flex items-center gap-3 min-w-0">
+                            <span className="w-6 text-center text-white/60 font-medium">
+                              {medals[i] || `${i + 1}.`}
+                            </span>
+                            <span
+                              className={`truncate font-medium ${
+                                p.disconnected ? "opacity-60" : ""
+                              } text-white`}
+                              title={p.name}
+                            >
+                              {p.name}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="text-xs px-2 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                              W:{p.wins}
+                            </span>
+                            <span className="text-xs px-2 py-1 rounded-lg bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                              Stk:{p.streak}
+                            </span>
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+                  </AnimatePresence>
                   {leaderboard.length === 0 && (
                     <div className="text-xs text-center py-8 text-white/50">
                       No players yet.

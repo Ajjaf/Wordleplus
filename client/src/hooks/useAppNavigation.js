@@ -11,6 +11,10 @@ function parseRoute(pathname) {
     return { screen: "daily", urlMode: null, urlRoomId: null };
   }
 
+  if (parts[0] === "leaderboard") {
+    return { screen: "leaderboard", urlMode: null, urlRoomId: null };
+  }
+
   if (VALID_MODES.includes(parts[0]) && parts[1]) {
     return {
       screen: "game",
@@ -65,6 +69,10 @@ export function useAppNavigation() {
     navigate("/daily");
   }, [navigate]);
 
+  const navigateLeaderboard = useCallback(() => {
+    navigate("/leaderboard");
+  }, [navigate]);
+
   return {
     screen: route.screen,
     urlMode: route.urlMode,
@@ -72,6 +80,7 @@ export function useAppNavigation() {
     navigateToGame,
     navigateHome,
     navigateDaily,
+    navigateLeaderboard,
     navigate,
   };
 }

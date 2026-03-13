@@ -987,6 +987,183 @@ app.get("/api/leaderboard/streaks", async (_req, res) => {
   }
 });
 
+app.get("/api/leaderboard/categories", async (_req, res) => {
+  try {
+    const [wins, streaks, winRateRows, avgGuessRows] = await Promise.all([
+      prisma.user.findMany({
+        where: { isAnonymous: false, totalWins: { gt: 0 } },
+        orderBy: { totalWins: "desc" },
+        take: 20,
+        select: { id: true, displayName: true, username: true, profileAvatar: true, totalWins: true, totalGames: true },
+      }),
+      prisma.user.findMany({
+        where: { isAnonymous: false, longestStreak: { gt: 0 } },
+        orderBy: { longestStreak: "desc" },
+        take: 20,
+        select: { id: true, displayName: true, username: true, profileAvatar: true, streak: true, longestStreak: true },
+      }),
+      prisma.$queryRaw`
+        SELECT id, "displayName", username, "profileAvatar", "totalWins", "totalGames",
+               ROUND("totalWins"::numeric / GREATEST("totalGames", 1) * 100, 1) as "winRate"
+        FROM "User"
+        WHERE "isAnonymous" = false AND "totalGames" >= 10
+        ORDER BY "totalWins"::numeric / GREATEST("totalGames", 1) DESC
+        LIMIT 20
+      `,
+      prisma.$queryRaw`
+        SELECT u.id, u."displayName", u.username, u."profileAvatar",
+               ROUND(AVG(dr.attempts)::numeric, 2) as "avgGuesses",
+               COUNT(*)::int as "gamesWon"
+        FROM "DailyResult" dr
+        JOIN "User" u ON u.id = dr."userId"
+        WHERE dr.won = true AND u."isAnonymous" = false
+        GROUP BY u.id, u."displayName", u.username, u."profileAvatar"
+        HAVING COUNT(*) >= 5
+        ORDER BY AVG(dr.attempts) ASC
+        LIMIT 20
+      `,
+    ]);
+
+    res.json({
+      wins,
+      streaks,
+      winRate: winRateRows.map((r) => ({ ...r, winRate: Number(r.winRate) })),
+      avgGuesses: avgGuessRows.map((r) => ({ ...r, avgGuesses: Number(r.avgGuesses) })),
+    });
+  } catch (error) {
+    console.error("Leaderboard categories error:", error);
+    res.status(500).json({ error: "Failed to fetch leaderboard categories" });
+  }
+});
+
+function getWeekStartUTC() {
+  const now = new Date();
+  const day = now.getUTCDay();
+  const diff = day === 0 ? 6 : day - 1;
+  const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - diff));
+  return monday;
+}
+
+app.get("/api/leaderboard/weekly", async (_req, res) => {
+  try {
+    const weekStart = getWeekStartUTC();
+    const rows = await prisma.$queryRaw`
+      SELECT u.id, u."displayName", u.username, u."profileAvatar",
+             COUNT(*)::int as "weeklyWins"
+      FROM "DailyResult" dr
+      JOIN "User" u ON u.id = dr."userId"
+      WHERE dr.won = true AND dr."createdAt" >= ${weekStart}
+        AND u."isAnonymous" = false
+      GROUP BY u.id, u."displayName", u.username, u."profileAvatar"
+      ORDER BY "weeklyWins" DESC
+      LIMIT 20
+    `;
+    res.json(rows);
+  } catch (error) {
+    console.error("Weekly leaderboard error:", error);
+    res.status(500).json({ error: "Failed to fetch weekly leaderboard" });
+  }
+});
+
+app.get("/api/leaderboard/near-me", async (req, res) => {
+  const userId = getUserIdFromRequest(req);
+  if (!userId) return res.status(401).json({ error: "Not authenticated" });
+
+  const category = (req.query.category || "wins").toString();
+  const NEIGHBORS = 3;
+
+  try {
+    let rankedQuery;
+    switch (category) {
+      case "winRate":
+        rankedQuery = `
+          SELECT id, "displayName", username, "profileAvatar", "totalWins", "totalGames",
+                 ROUND("totalWins"::numeric / GREATEST("totalGames", 1) * 100, 1) as "statValue",
+                 ROW_NUMBER() OVER (ORDER BY "totalWins"::numeric / GREATEST("totalGames", 1) DESC, "totalWins" DESC) as rank
+          FROM "User"
+          WHERE "isAnonymous" = false AND "totalGames" >= 10
+        `;
+        break;
+      case "streaks":
+        rankedQuery = `
+          SELECT id, "displayName", username, "profileAvatar", streak, "longestStreak",
+                 "longestStreak" as "statValue",
+                 ROW_NUMBER() OVER (ORDER BY "longestStreak" DESC, streak DESC) as rank
+          FROM "User"
+          WHERE "isAnonymous" = false AND "longestStreak" > 0
+        `;
+        break;
+      case "avgGuesses":
+        rankedQuery = `
+          SELECT u.id, u."displayName", u.username, u."profileAvatar",
+                 ROUND(AVG(dr.attempts)::numeric, 2) as "statValue",
+                 COUNT(*)::int as "gamesWon",
+                 ROW_NUMBER() OVER (ORDER BY AVG(dr.attempts) ASC) as rank
+          FROM "DailyResult" dr
+          JOIN "User" u ON u.id = dr."userId"
+          WHERE dr.won = true AND u."isAnonymous" = false
+          GROUP BY u.id, u."displayName", u.username, u."profileAvatar"
+          HAVING COUNT(*) >= 5
+        `;
+        break;
+      case "weekly": {
+        const weekStart = getWeekStartUTC();
+        const rows = await prisma.$queryRaw`
+          WITH ranked AS (
+            SELECT u.id, u."displayName", u.username, u."profileAvatar",
+                   COUNT(*)::int as "weeklyWins",
+                   ROW_NUMBER() OVER (ORDER BY COUNT(*) DESC) as rank
+            FROM "DailyResult" dr
+            JOIN "User" u ON u.id = dr."userId"
+            WHERE dr.won = true AND dr."createdAt" >= ${weekStart}
+              AND u."isAnonymous" = false
+            GROUP BY u.id, u."displayName", u.username, u."profileAvatar"
+          )
+          SELECT * FROM ranked
+          WHERE rank BETWEEN
+            (SELECT GREATEST(rank - ${NEIGHBORS}, 1) FROM ranked WHERE id = ${userId})
+            AND
+            (SELECT rank + ${NEIGHBORS} FROM ranked WHERE id = ${userId})
+        `;
+        const myRow = rows.find((r) => r.id === userId);
+        return res.json({
+          myRank: myRow ? Number(myRow.rank) : null,
+          total: rows.length,
+          players: rows.map((r) => ({ ...r, rank: Number(r.rank), weeklyWins: Number(r.weeklyWins) })),
+        });
+      }
+      default:
+        rankedQuery = `
+          SELECT id, "displayName", username, "profileAvatar", "totalWins", "totalGames",
+                 "totalWins" as "statValue",
+                 ROW_NUMBER() OVER (ORDER BY "totalWins" DESC, "totalGames" DESC) as rank
+          FROM "User"
+          WHERE "isAnonymous" = false AND "totalWins" > 0
+        `;
+        break;
+    }
+
+    const rows = await prisma.$queryRawUnsafe(`
+      WITH ranked AS (${rankedQuery})
+      SELECT * FROM ranked
+      WHERE rank BETWEEN
+        (SELECT GREATEST(rank - ${NEIGHBORS}, 1) FROM ranked WHERE id = '${userId}')
+        AND
+        (SELECT rank + ${NEIGHBORS} FROM ranked WHERE id = '${userId}')
+    `);
+
+    const myRow = rows.find((r) => r.id === userId);
+    res.json({
+      myRank: myRow ? Number(myRow.rank) : null,
+      total: rows.length,
+      players: rows.map((r) => ({ ...r, rank: Number(r.rank), statValue: Number(r.statValue) })),
+    });
+  } catch (error) {
+    console.error("Near-me leaderboard error:", error);
+    res.status(500).json({ error: "Failed to fetch near-me leaderboard" });
+  }
+});
+
 function normalizeMode(mode) {
   const candidate = (mode || "").toString().toLowerCase();
   return VALID_MODES.has(candidate) ? candidate : "duel";

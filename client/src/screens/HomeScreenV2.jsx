@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Swords, Users, Shield, Trophy, Star, Clock, Zap } from "lucide-react";
+import { Swords, Users, Shield, Trophy, Star, Clock, Zap, ArrowRight } from "lucide-react";
 import GradientBackground from "../components/ui/GradientBackground";
 import DailyChallengeHero from "../components/ui/DailyChallengeHero";
 import AnimatedGameCard from "../components/ui/AnimatedGameCard";
@@ -64,6 +65,7 @@ export default function HomeScreenV2({
   onPlayDaily,
   message,
 }) {
+  const navigate = useNavigate();
   const [creating, setCreating] = useState(false);
   const [joining, setJoining] = useState(false);
   const [isNameSet, setIsNameSet] = useState(!!name);
@@ -745,14 +747,23 @@ export default function HomeScreenV2({
           </section>
 
           <section>
-            <motion.h2
-              className="text-2xl md:text-3xl font-bold text-white mb-6"
+            <motion.div
+              className="flex items-center justify-between mb-6"
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.5 }}
             >
-              Leaderboard
-            </motion.h2>
+              <h2 className="text-2xl md:text-3xl font-bold text-white">
+                Leaderboard
+              </h2>
+              <button
+                onClick={() => navigate("/leaderboard")}
+                className="inline-flex items-center gap-1.5 text-sm text-violet-300 hover:text-violet-200 transition-colors font-medium"
+              >
+                View Full Board
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </motion.div>
 
             <div className="grid md:grid-cols-2 gap-4 md:gap-6">
               <LeaderboardCard
@@ -761,7 +772,7 @@ export default function HomeScreenV2({
               >
                 <LeaderboardList
                   loading={leaderboardLoading}
-                  items={topPlayers}
+                  items={topPlayers.slice(0, 3)}
                   renderItem={(p, i) => (
                     <LeaderboardRow
                       key={i}
@@ -780,7 +791,7 @@ export default function HomeScreenV2({
               >
                 <LeaderboardList
                   loading={leaderboardLoading}
-                  items={topStreaks}
+                  items={topStreaks.slice(0, 3)}
                   renderItem={(p, i) => (
                     <LeaderboardRow
                       key={i}

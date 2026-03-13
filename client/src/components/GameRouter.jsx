@@ -9,6 +9,7 @@ const SharedDuelGameScreen = lazy(() => import("../screens/SharedDuelGameScreen"
 const BattleGameScreen = lazy(() => import("../screens/BattleGameScreen"));
 const HostSpectateScreen = lazy(() => import("../screens/HostSpectateScreen"));
 const DailyGameScreen = lazy(() => import("../screens/DailyGameScreen"));
+const LeaderboardScreen = lazy(() => import("../screens/LeaderboardScreen"));
 const HomeScreen = lazy(() => import("../screens/HomeScreenV2"));
 
 // Loading fallback component for lazy-loaded screens
@@ -358,6 +359,16 @@ export default function GameRouter({
           />
         )}
       </div>
+    );
+  }
+
+  if (screen === "leaderboard") {
+    return (
+      <ErrorBoundary componentName="LeaderboardScreen">
+        <Suspense fallback={<ScreenLoadingFallback />}>
+          <LeaderboardScreen />
+        </Suspense>
+      </ErrorBoundary>
     );
   }
 

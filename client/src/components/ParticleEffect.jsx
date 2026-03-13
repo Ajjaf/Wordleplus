@@ -11,6 +11,7 @@ export default function ParticleEffect({
 
   useEffect(() => {
     if (!trigger) return;
+    if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
     const createParticles = () => {
       let particleCount, colors, velocity, size, life, decay;
