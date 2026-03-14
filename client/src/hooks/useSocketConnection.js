@@ -47,11 +47,29 @@ export function useSocketConnection(room, onGameResumed) {
         hasShownDisconnectRef.current = false;
       }
 
-      // If we already have a room in state, nothing to resume.
+      // If we're already in an active room, we may still need to re-register
+      // the new socket ID with the server. This happens on mobile when the user
+      // tabs out: the socket drops, React state is kept, but the server still
+      // holds the player under the old socket ID. Without re-registering, every
+      // subsequent emit is rejected with "Player not in room".
       if (room?.id) {
-        localStorage.setItem(LS_SOCKET, socket.id);
-        triedResumeRef.current = true;
-        setRejoinOffered(false);
+        const oldId = localStorage.getItem(LS_SOCKET + ".old");
+        if (oldId && !triedResumeRef.current) {
+          triedResumeRef.current = true;
+          socket.emit("resume", { roomId: room.id, oldId }, (res) => {
+            localStorage.setItem(LS_SOCKET, socket.id);
+            localStorage.removeItem(LS_SOCKET + ".old");
+            setRejoinOffered(false);
+            if (!res?.ok) {
+              // Resume failed (room may have ended) — fall back to offering rejoin
+              setRejoinOffered(Boolean(savedRoomId && savedName));
+            }
+          });
+        } else {
+          localStorage.setItem(LS_SOCKET, socket.id);
+          triedResumeRef.current = true;
+          setRejoinOffered(false);
+        }
         return;
       }
 
