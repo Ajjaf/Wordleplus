@@ -2,13 +2,47 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { socket } from "../socket";
 import { useErrorNotification } from "../contexts/ErrorNotificationContext";
 import { logger } from "../utils/logger";
+import { getOrCreatePlayerId } from "../utils/playerId";
 
 const LS_ROOM = "wp.lastRoomId";
 const LS_SOCKET = "wp.lastSocketId";
 const LS_LAST_NAME = "wp.lastName";
+const RESUME_ACK_TIMEOUT_MS = 5000;
+
+/** Drives emit + timeout handling for all resume entry points. */
+const RESUME_MODE = {
+  CONNECT_IN_ROOM: "connectInRoom",
+  CONNECT_SAVED_SESSION: "connectSavedSession",
+  MANUAL_REJOIN: "manualRejoin",
+};
+
+/** Ack callback only; if no ack within timeout, onTimeout runs (existing flow unchanged). */
+function emitResumeWithTimeout(resumePayload, { onAck, onTimeout }) {
+  if (typeof window === "undefined") {
+    socket.emit("resume", resumePayload, onAck);
+    return;
+  }
+  let settled = false;
+  const timerId = window.setTimeout(() => {
+    if (!settled) {
+      settled = true;
+      onTimeout();
+    }
+  }, RESUME_ACK_TIMEOUT_MS);
+
+  socket.emit("resume", resumePayload, (res) => {
+    if (!settled) {
+      settled = true;
+      window.clearTimeout(timerId);
+      onAck(res);
+    }
+  });
+}
+
 export function useSocketConnection(room, onGameResumed) {
   const [connected, setConnected] = useState(socket.connected);
   const [reconnecting, setReconnecting] = useState(false);
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
   const [rejoinOffered, setRejoinOffered] = useState(false);
   const { showNotification, dismissNotification } = useErrorNotification();
 
@@ -17,6 +51,10 @@ export function useSocketConnection(room, onGameResumed) {
   const hasShownDisconnectRef = useRef(false);
   const hasConnectedOnceRef = useRef(socket.connected);
   const disconnectNotificationIdRef = useRef(null);
+
+  useEffect(() => {
+    getOrCreatePlayerId();
+  }, []);
 
   // Read these once; they rarely change during a session
   const savedRoomId = useMemo(
@@ -28,10 +66,75 @@ export function useSocketConnection(room, onGameResumed) {
     []
   );
 
+  const attemptResume = useCallback(
+    (roomId, mode) => {
+      const oldId = typeof window !== "undefined" ? localStorage.getItem(LS_SOCKET + ".old") : null;
+      if (!oldId || !roomId) return;
+
+      const payload = { roomId, oldId, playerId: getOrCreatePlayerId() };
+
+      const joinRoomFallback = () => {
+        const targetName =
+          typeof window !== "undefined"
+            ? localStorage.getItem(LS_LAST_NAME) || savedName
+            : savedName;
+        socket.emit(
+          "joinRoom",
+          { name: targetName, roomId, playerId: getOrCreatePlayerId() },
+          (res2) => {
+            if (res2?.ok) {
+              localStorage.setItem(LS_SOCKET, socket.id);
+              localStorage.removeItem(LS_SOCKET + ".old");
+              onGameResumed?.(roomId);
+              setRejoinOffered(false);
+            }
+          }
+        );
+      };
+
+      emitResumeWithTimeout(payload, {
+        onAck: (res) => {
+          if (mode === RESUME_MODE.CONNECT_IN_ROOM) {
+            localStorage.setItem(LS_SOCKET, socket.id);
+            localStorage.removeItem(LS_SOCKET + ".old");
+            setRejoinOffered(false);
+            if (!res?.ok) {
+              setRejoinOffered(Boolean(savedRoomId && savedName));
+            }
+            return;
+          }
+
+          if (res?.ok) {
+            sessionStorage.setItem("wp.reconnected", "1");
+            localStorage.setItem(LS_SOCKET, socket.id);
+            localStorage.removeItem(LS_SOCKET + ".old");
+            onGameResumed?.(roomId);
+            setRejoinOffered(false);
+          } else if (mode === RESUME_MODE.MANUAL_REJOIN) {
+            joinRoomFallback();
+          } else {
+            setRejoinOffered(Boolean(savedRoomId && savedName));
+          }
+        },
+        onTimeout: () => {
+          if (mode === RESUME_MODE.CONNECT_IN_ROOM) {
+            setRejoinOffered(Boolean(savedRoomId && savedName));
+          } else if (mode === RESUME_MODE.MANUAL_REJOIN) {
+            joinRoomFallback();
+          } else {
+            setRejoinOffered(Boolean(savedRoomId && savedName));
+          }
+        },
+      });
+    },
+    [onGameResumed, savedName, savedRoomId]
+  );
+
   useEffect(() => {
     const onConnect = () => {
       setConnected(true);
       setReconnecting(false);
+      setReconnectAttempt(0);
       hasConnectedOnceRef.current = true;
 
       if (disconnectNotificationIdRef.current) {
@@ -56,15 +159,7 @@ export function useSocketConnection(room, onGameResumed) {
         const oldId = localStorage.getItem(LS_SOCKET + ".old");
         if (oldId && !triedResumeRef.current) {
           triedResumeRef.current = true;
-          socket.emit("resume", { roomId: room.id, oldId }, (res) => {
-            localStorage.setItem(LS_SOCKET, socket.id);
-            localStorage.removeItem(LS_SOCKET + ".old");
-            setRejoinOffered(false);
-            if (!res?.ok) {
-              // Resume failed (room may have ended) — fall back to offering rejoin
-              setRejoinOffered(Boolean(savedRoomId && savedName));
-            }
-          });
+          attemptResume(room.id, RESUME_MODE.CONNECT_IN_ROOM);
         } else {
           localStorage.setItem(LS_SOCKET, socket.id);
           triedResumeRef.current = true;
@@ -78,19 +173,7 @@ export function useSocketConnection(room, onGameResumed) {
       // Try resume exactly once per page session
       if (!triedResumeRef.current && savedRoomId && oldId) {
         triedResumeRef.current = true;
-        socket.emit("resume", { roomId: savedRoomId, oldId }, (res) => {
-          if (res?.ok) {
-            sessionStorage.setItem("wp.reconnected", "1");
-            localStorage.setItem(LS_SOCKET, socket.id);
-            localStorage.removeItem(LS_SOCKET + ".old");
-
-            onGameResumed?.(savedRoomId);
-            setRejoinOffered(false);
-          } else {
-            // Couldn't resume—offer manual rejoin
-            setRejoinOffered(Boolean(savedRoomId && savedName));
-          }
-        });
+        attemptResume(savedRoomId, RESUME_MODE.CONNECT_SAVED_SESSION);
       } else {
         // Nothing to resume, but we can offer rejoin if a saved session exists
         setRejoinOffered(Boolean(savedRoomId && savedName && !room?.id));
@@ -122,9 +205,15 @@ export function useSocketConnection(room, onGameResumed) {
       showNotification("Connection error - Please check your network", "error");
     };
 
+    const manager = socket.io;
+    const onReconnectAttempt = (attempt) => {
+      setReconnectAttempt(typeof attempt === "number" ? attempt : 1);
+    };
+
     socket.on("connect", onConnect);
     socket.on("disconnect", onDisconnect);
     socket.on("connect_error", onConnectError);
+    manager?.on?.("reconnect_attempt", onReconnectAttempt);
     return () => {
       if (disconnectNotificationIdRef.current) {
         dismissNotification(disconnectNotificationIdRef.current);
@@ -133,8 +222,10 @@ export function useSocketConnection(room, onGameResumed) {
       socket.off("connect", onConnect);
       socket.off("disconnect", onDisconnect);
       socket.off("connect_error", onConnectError);
+      manager?.off?.("reconnect_attempt", onReconnectAttempt);
     };
   }, [
+    attemptResume,
     room?.id,
     savedRoomId,
     savedName,
@@ -172,32 +263,11 @@ export function useSocketConnection(room, onGameResumed) {
 
     // Prefer resume to preserve state
     if (oldId) {
-      socket.emit("resume", { roomId: targetRoomId, oldId }, (res) => {
-        if (res?.ok) {
-          sessionStorage.setItem("wp.reconnected", "1");
-          localStorage.setItem(LS_SOCKET, socket.id);
-          localStorage.removeItem(LS_SOCKET + ".old");
-          onGameResumed?.(targetRoomId);
-          setRejoinOffered(false);
-        } else {
-          socket.emit(
-            "joinRoom",
-            { name: targetName, roomId: targetRoomId },
-            (res2) => {
-              if (res2?.ok) {
-                localStorage.setItem(LS_SOCKET, socket.id);
-                localStorage.removeItem(LS_SOCKET + ".old");
-                onGameResumed?.(targetRoomId);
-                setRejoinOffered(false);
-              }
-            }
-          );
-        }
-      });
+      attemptResume(targetRoomId, RESUME_MODE.MANUAL_REJOIN);
     } else {
       socket.emit(
         "joinRoom",
-        { name: targetName, roomId: targetRoomId },
+        { name: targetName, roomId: targetRoomId, playerId: getOrCreatePlayerId() },
         (res2) => {
           if (res2?.ok) {
             localStorage.setItem(LS_SOCKET, socket.id);
@@ -212,6 +282,7 @@ export function useSocketConnection(room, onGameResumed) {
   return {
     connected,
     reconnecting,
+    reconnectAttempt,
     canRejoin,
     doRejoin,
     savedRoomId,

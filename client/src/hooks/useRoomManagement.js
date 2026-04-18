@@ -1,5 +1,6 @@
 import { socket } from "../socket";
 import { logger } from "../utils/logger";
+import { getOrCreatePlayerId } from "../utils/playerId";
 
 const LS_LAST_ROOM = "wp.lastRoomId";
 const LS_LAST_NAME = "wp.lastName";
@@ -30,7 +31,7 @@ export function useRoomManagement() {
   // Create a new room
   const createRoom = (name, mode) => {
     return new Promise((resolve) => {
-      socket.emit("createRoom", { name, mode }, (resp) => {
+      socket.emit("createRoom", { name, mode, playerId: getOrCreatePlayerId() }, (resp) => {
         if (resp?.roomId) {
           persistAfterJoinOrCreate({ name, roomId: resp.roomId, mode });
           resolve({ success: true, roomId: resp.roomId });
@@ -44,7 +45,7 @@ export function useRoomManagement() {
   // Join an existing room
   const joinRoom = (name, roomId) => {
     return new Promise((resolve) => {
-      socket.emit("joinRoom", { name, roomId }, (resp) => {
+      socket.emit("joinRoom", { name, roomId, playerId: getOrCreatePlayerId() }, (resp) => {
         if (resp?.error) {
           resolve({ error: resp.error });
         } else {
