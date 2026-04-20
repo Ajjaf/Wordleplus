@@ -30,18 +30,18 @@ export default function createAdminEventsRouter({
     return next();
   }
 
-  router.post("/ai-battle/start", requireAdmin, (_req, res) => {
-    const status = setAiBattleEventActive(true);
+  router.post("/ai-battle/start", requireAdmin, async (_req, res) => {
+    const status = await setAiBattleEventActive(true);
     res.json({ ok: true, ...status });
   });
 
-  router.post("/ai-battle/stop", requireAdmin, (_req, res) => {
-    const status = setAiBattleEventActive(false);
+  router.post("/ai-battle/stop", requireAdmin, async (_req, res) => {
+    const status = await setAiBattleEventActive(false);
     res.json({ ok: true, ...status });
   });
 
-  router.get("/ai-battle/status", requireAdmin, (_req, res) => {
-    res.json({ ok: true, ...getAiBattleEventStatus() });
+  router.get("/ai-battle/status", requireAdmin, async (_req, res) => {
+    res.json({ ok: true, ...(await getAiBattleEventStatus()) });
   });
 
   return router;

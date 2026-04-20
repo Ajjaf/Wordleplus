@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { socket } from "../socket";
 import { useErrorNotification } from "../contexts/ErrorNotificationContext";
 import { logger } from "../utils/logger";

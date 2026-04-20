@@ -40,6 +40,11 @@ export const config = Object.freeze({
   // ---- Database ------------------------------------------------------------
   databaseUrl: process.env.DATABASE_URL,
 
+  // ---- Redis (room state) --------------------------------------------------
+  /** Upstash / Redis URL (rediss:// or redis://). Optional in test (in-memory fallback). */
+  redisUrl: process.env.REDIS_URL || process.env.UPSTASH_REDIS_URL || "",
+  redisKeyPrefix: process.env.REDIS_KEY_PREFIX || "wp:room",
+
   // ---- Sessions ------------------------------------------------------------
   sessionSecret: process.env.SESSION_SECRET,
 

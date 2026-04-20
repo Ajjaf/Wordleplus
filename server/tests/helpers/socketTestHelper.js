@@ -1,4 +1,5 @@
 import { io as ioClient } from "socket.io-client";
+import { closeRoomStore } from "../../room-store.js";
 
 let serverModule;
 let httpServer;
@@ -36,6 +37,7 @@ export async function shutdownServer() {
   if (httpServer?.listening) {
     await new Promise((resolve) => httpServer.close(resolve));
   }
+  await closeRoomStore();
 }
 
 /**

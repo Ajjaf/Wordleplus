@@ -1,4 +1,5 @@
 import request from "supertest";
+import { closeRoomStore } from "../room-store.js";
 
 let app;
 let httpServer;
@@ -15,6 +16,7 @@ afterAll(async () => {
   if (httpServer?.listening) {
     await new Promise((resolve) => httpServer.close(resolve));
   }
+  await closeRoomStore();
 });
 
 describe("Health endpoint", () => {

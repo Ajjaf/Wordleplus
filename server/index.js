@@ -30,6 +30,7 @@ import * as Sentry from "@sentry/node";
 import { PrismaClient } from "@prisma/client";
 import { config, validateConfig } from "./config/env.js";
 import { startSessionCleanup } from "./jobs/cleanupSessions.js";
+import { startRoomCleanupInterval } from "./jobs/cleanupRooms.js";
 import {
   apiLimiter,
   authLimiter,
@@ -37,6 +38,14 @@ import {
   checkSocketRateLimit,
   clearSocketRateLimits,
 } from "./middleware/rateLimiter.js";
+import {
+  initRoomStore,
+  getRoom,
+  saveRoom,
+  deleteRoom,
+  listRoomIds,
+  getActiveRoomCount,
+} from "./room-store.js";
 
 const prisma = new PrismaClient();
 
@@ -125,6 +134,14 @@ try {
   await loadWords();
 } catch (error) {
   console.error("Failed to load word lists:", error.message);
+  if (!config.isTest) process.exit(1);
+  else throw error;
+}
+
+try {
+  await initRoomStore();
+} catch (error) {
+  console.error("Failed to initialize room store:", error.message);
   if (!config.isTest) process.exit(1);
   else throw error;
 }
@@ -304,8 +321,17 @@ app.get("/health", async (_req, res) => {
     environment: config.nodeEnv,
   };
 
+  const DB_PING_MS = 2000;
   try {
-    await prisma.$queryRaw`SELECT 1`;
+    await Promise.race([
+      prisma.$queryRaw`SELECT 1`,
+      new Promise((_, reject) =>
+        setTimeout(
+          () => reject(new Error("database ping timeout")),
+          DB_PING_MS,
+        ),
+      ),
+    ]);
     health.database = "connected";
   } catch {
     health.database = "disconnected";
@@ -317,7 +343,15 @@ app.get("/health", async (_req, res) => {
     guesses: GUESSSET.size,
   };
 
-  health.activeRooms = rooms.size;
+  health.activeRooms = await getActiveRoomCount();
+  health.resume = getResumeMetricsSnapshot();
+  const now = Date.now();
+  health.heartbeat = {
+    trackedSockets: socketHeartbeat.size,
+    staleSockets: [...socketHeartbeat.values()].filter(
+      (entry) => now - entry.lastHeartbeatAt > HEARTBEAT_STALE_MS,
+    ).length,
+  };
 
   const statusCode = health.status === "ok" ? 200 : 503;
   res.status(statusCode).json(health);
@@ -646,12 +680,22 @@ app.get("/api/daily/stats", async (req, res) => {
  *   }
  * }
  */
-const rooms = new Map();
 const VALID_MODES = new Set(["duel", "shared", "battle", "battle_ai"]);
 
 const HOST_DISCONNECT_GRACE_MS = 2 * 60 * 1000; // 2 minutes
 const SOCKET_DISCONNECT_GRACE_MS = 5 * 1000; // 5 seconds
+const HEARTBEAT_STALE_MS = 45 * 1000;
+const HEARTBEAT_LOG_INTERVAL_MS = 30 * 1000;
 const pendingDisconnectTimers = new Map();
+const socketHeartbeat = new Map();
+const resumeMetrics = {
+  attempts: 0,
+  success: 0,
+  failure: 0,
+  timeoutExpired: 0,
+  totalLatencyMs: 0,
+  byCode: new Map(),
+};
 
 const AI_BATTLE_EVENT_BASE_KEY = "ai_battle_hour";
 let aiBattleEventActive = config.aiBattleEventActive;
@@ -675,24 +719,24 @@ function isAiBattleEventActive() {
   return aiBattleEventActive;
 }
 
-function setAiBattleEventActive(nextActive) {
+async function setAiBattleEventActive(nextActive) {
   const normalized = isTruthy(nextActive);
   const previous = aiBattleEventActive;
   if (previous === normalized) {
     if (normalized) {
-      ensureAiBattleEventRoom();
+      await ensureAiBattleEventRoom();
     } else {
-      retireAiBattleEventRooms();
+      await retireAiBattleEventRooms();
     }
-    return getAiBattleEventStatus();
+    return await getAiBattleEventStatus();
   }
   aiBattleEventActive = normalized;
   if (normalized) {
-    ensureAiBattleEventRoom();
+    await ensureAiBattleEventRoom();
   } else {
-    retireAiBattleEventRooms();
+    await retireAiBattleEventRooms();
   }
-  return getAiBattleEventStatus();
+  return await getAiBattleEventStatus();
 }
 
 function getAiBattleEventContext() {
@@ -734,7 +778,7 @@ function ensureEventRoomDefaults(room, ctx) {
   room.updatedAt = Date.now();
 }
 
-function createAiBattleEventRoom(ctx) {
+async function createAiBattleEventRoom(ctx) {
   const id = Math.random().toString(36).slice(2, 8).toUpperCase();
   const now = Date.now();
   const room = {
@@ -767,17 +811,20 @@ function createAiBattleEventRoom(ctx) {
     claimedBy: null,
     pendingStart: false,
   };
-  rooms.set(id, room);
-  scheduleAiBattleCountdown(id);
+  await saveRoom(room);
+  await scheduleAiBattleCountdown(id);
   return room;
 }
 
-function ensureAiBattleEventRoom() {
+async function ensureAiBattleEventRoom() {
   const ctx = getAiBattleEventContext();
   if (!ctx) return null;
   let activeRoom = null;
   const staleRooms = [];
-  for (const [roomId, room] of rooms.entries()) {
+  const ids = await listRoomIds();
+  for (const roomId of ids) {
+    const room = await getRoom(roomId);
+    if (!room) continue;
     if (room.meta?.isEvent && room.meta.eventKey === ctx.key) {
       if (room.meta.eventId === ctx.eventId) {
         activeRoom = room;
@@ -795,18 +842,20 @@ function ensureAiBattleEventRoom() {
       room.hostId = null;
       room.hostConnected = false;
     }
+    await saveRoom(room);
     if (ioRef) {
       ioRef.to(roomId).emit("roomState", sanitizeRoom(room));
     }
   }
 
   if (!activeRoom) {
-    activeRoom = createAiBattleEventRoom(ctx);
+    activeRoom = await createAiBattleEventRoom(ctx);
   } else {
     ensureEventRoomDefaults(activeRoom, ctx);
     if (getActivePlayerIds(activeRoom).length === 0) {
-      scheduleAiBattleCountdown(activeRoom.id);
+      await scheduleAiBattleCountdown(activeRoom.id);
     }
+    await saveRoom(activeRoom);
   }
 
   if (ioRef) {
@@ -815,10 +864,13 @@ function ensureAiBattleEventRoom() {
   return activeRoom;
 }
 
-function findActiveAiBattleEventRoom(ctx = getAiBattleEventContext()) {
+async function findActiveAiBattleEventRoom(ctx = getAiBattleEventContext()) {
   if (!ctx) return null;
-  for (const room of rooms.values()) {
+  const ids = await listRoomIds();
+  for (const roomId of ids) {
+    const room = await getRoom(roomId);
     if (
+      room &&
       room.meta?.isEvent &&
       room.meta.eventKey === ctx.key &&
       room.meta.eventId === ctx.eventId
@@ -829,8 +881,11 @@ function findActiveAiBattleEventRoom(ctx = getAiBattleEventContext()) {
   return null;
 }
 
-function retireAiBattleEventRooms() {
-  for (const [roomId, room] of rooms.entries()) {
+async function retireAiBattleEventRooms() {
+  const ids = await listRoomIds();
+  for (const roomId of ids) {
+    const room = await getRoom(roomId);
+    if (!room) continue;
     if (room.meta?.isEvent && room.meta.eventKey === AI_BATTLE_EVENT_BASE_KEY) {
       room.meta.isEvent = false;
       room.meta.eventEndedAt = Date.now();
@@ -839,6 +894,7 @@ function retireAiBattleEventRooms() {
         room.hostId = null;
         room.hostConnected = false;
       }
+      await saveRoom(room);
       if (ioRef) {
         ioRef.to(roomId).emit("roomState", sanitizeRoom(room));
       }
@@ -846,9 +902,9 @@ function retireAiBattleEventRooms() {
   }
 }
 
-function getAiBattleEventStatus() {
+async function getAiBattleEventStatus() {
   const ctx = getAiBattleEventContext();
-  const room = ctx ? findActiveAiBattleEventRoom(ctx) : null;
+  const room = ctx ? await findActiveAiBattleEventRoom(ctx) : null;
   return {
     active: Boolean(ctx && room),
     eventKey: ctx?.key ?? AI_BATTLE_EVENT_BASE_KEY,
@@ -928,10 +984,13 @@ function summarizeJoinableRoom(room) {
   };
 }
 
-app.get("/api/rooms/open", pollingLimiter, (_req, res) => {
+app.get("/api/rooms/open", pollingLimiter, async (_req, res) => {
   const summaries = [];
 
-  for (const room of rooms.values()) {
+  const ids = await listRoomIds();
+  for (const id of ids) {
+    const room = await getRoom(id);
+    if (!room) continue;
     const summary = summarizeJoinableRoom(room);
     if (summary) summaries.push(summary);
   }
@@ -944,8 +1003,8 @@ app.get("/api/rooms/open", pollingLimiter, (_req, res) => {
   res.json({ rooms: summaries.slice(0, 20) });
 });
 
-app.get("/api/events/status", pollingLimiter, (_req, res) => {
-  res.json(getAiBattleEventStatus());
+app.get("/api/events/status", pollingLimiter, async (_req, res) => {
+  res.json(await getAiBattleEventStatus());
 });
 
 // ---------- Leaderboard API ----------
@@ -1191,6 +1250,44 @@ function resumeError(cb, error, code) {
   cb?.({ ok: false, error, code });
 }
 
+function logReconnect(event, socket, extra = {}) {
+  console.log(
+    `[reconnect] ${event} socket=${socket.id} transport=${socket.conn?.transport?.name || "unknown"} extra=${JSON.stringify(
+      extra,
+    )}`,
+  );
+}
+
+function trackResumeResult({ ok, code, latencyMs }) {
+  resumeMetrics.attempts += 1;
+  if (ok) {
+    resumeMetrics.success += 1;
+    resumeMetrics.totalLatencyMs += latencyMs;
+  } else {
+    resumeMetrics.failure += 1;
+    if (code === "RESUME_EXPIRED") {
+      resumeMetrics.timeoutExpired += 1;
+    }
+    const key = code || "UNKNOWN";
+    resumeMetrics.byCode.set(key, (resumeMetrics.byCode.get(key) || 0) + 1);
+  }
+}
+
+function getResumeMetricsSnapshot() {
+  const avgResumeLatencyMs =
+    resumeMetrics.success > 0
+      ? Math.round(resumeMetrics.totalLatencyMs / resumeMetrics.success)
+      : 0;
+  return {
+    attempts: resumeMetrics.attempts,
+    success: resumeMetrics.success,
+    failure: resumeMetrics.failure,
+    timeoutExpired: resumeMetrics.timeoutExpired,
+    avgResumeLatencyMs,
+    byCode: Object.fromEntries(resumeMetrics.byCode.entries()),
+  };
+}
+
 function getPlayerIdBySocket(room, socketId) {
   if (!room?.players || !socketId) return null;
   return (
@@ -1227,64 +1324,67 @@ function scheduleDisconnectMark(roomId, playerId) {
   const key = disconnectTimerKey(roomId, playerId);
   clearPendingDisconnect(roomId, playerId);
   const timer = setTimeout(() => {
-    pendingDisconnectTimers.delete(key);
-    const room = rooms.get(roomId);
-    if (!room) return;
-    const player = room.players[playerId];
-    if (!player) return;
-    // Player already reconnected before the grace timer fired.
-    if (!player.socketId || player.disconnected) return;
+    void (async () => {
+      pendingDisconnectTimers.delete(key);
+      const room = await getRoom(roomId);
+      if (!room) return;
+      const player = room.players[playerId];
+      if (!player) return;
+      // Player already reconnected before the grace timer fired.
+      if (!player.socketId || player.disconnected) return;
 
-    const now = Date.now();
-    player.disconnected = true;
-    player.disconnectedAt = now;
-    sharedMode.handleSharedDisconnect(room, playerId);
+      const now = Date.now();
+      player.disconnected = true;
+      player.disconnectedAt = now;
+      sharedMode.handleSharedDisconnect(room, playerId);
 
-    if (room.hostId === playerId) {
-      if (room.mode === "battle_ai") {
-        if (room.meta?.isEvent) {
-          room.hostId = "server";
-          room.hostConnected = true;
+      if (room.hostId === playerId) {
+        if (room.mode === "battle_ai") {
+          if (room.meta?.isEvent) {
+            room.hostId = "server";
+            room.hostConnected = true;
+          } else {
+            room.hostId = null;
+            room.hostConnected = false;
+          }
+          if (room.battle?.aiHost) {
+            room.battle.aiHost.mode = "auto";
+            room.battle.aiHost.claimedBy = null;
+          }
         } else {
-          room.hostId = null;
-          room.hostConnected = false;
-        }
-        if (room.battle?.aiHost) {
-          room.battle.aiHost.mode = "auto";
-          room.battle.aiHost.claimedBy = null;
-        }
-      } else {
-        const replacement = Object.keys(room.players).find(
-          (pid) => pid !== playerId && !room.players[pid].disconnected
-        );
-        if (replacement) {
-          room.hostId = replacement;
+          const replacement = Object.keys(room.players).find(
+            (pid) => pid !== playerId && !room.players[pid].disconnected
+          );
+          if (replacement) {
+            room.hostId = replacement;
+          }
         }
       }
-    }
 
-    room.updatedAt = now;
-    io.to(roomId).emit("roomState", sanitizeRoom(room));
-    if (room.mode === "battle_ai") {
-      const active = getActivePlayerIds(room);
-      if (active.length === 0) {
-        clearAiBattleTimers(room);
-        room.battle.deadline = null;
-        room.battle.countdownEndsAt = null;
-        battleMode.resetBattleRound(room);
-        room.battle.secret = null;
-        room.battle.lastRevealedWord = null;
-        if (room.meta?.isEvent && isAiBattleEventActive()) {
-          ensureAiBattleEventRoom();
+      room.updatedAt = now;
+      await saveRoom(room);
+      io.to(roomId).emit("roomState", sanitizeRoom(room));
+      if (room.mode === "battle_ai") {
+        const active = getActivePlayerIds(room);
+        if (active.length === 0) {
+          clearAiBattleTimers(room);
+          room.battle.deadline = null;
+          room.battle.countdownEndsAt = null;
+          battleMode.resetBattleRound(room);
+          room.battle.secret = null;
+          room.battle.lastRevealedWord = null;
+          if (room.meta?.isEvent && isAiBattleEventActive()) {
+            void ensureAiBattleEventRoom();
+          }
+        } else if (
+          room.battle.aiHost?.mode === "auto" &&
+          !room.battle.started &&
+          !room.battle.countdownEndsAt
+        ) {
+          void maybeEnsureAiBattleRound(roomId);
         }
-      } else if (
-        room.battle.aiHost?.mode === "auto" &&
-        !room.battle.started &&
-        !room.battle.countdownEndsAt
-      ) {
-        maybeEnsureAiBattleRound(roomId);
       }
-    }
+    })();
   }, SOCKET_DISCONNECT_GRACE_MS);
   if (typeof timer.unref === "function") {
     timer.unref();
@@ -1304,8 +1404,8 @@ function updateStatsOnWin(room, winnerId) {
   });
 }
 
-function handleDuelTimeout(roomId) {
-  const room = rooms.get(roomId);
+async function handleDuelTimeout(roomId) {
+  const room = await getRoom(roomId);
   if (!room || room.mode !== "duel") return;
   duelMode.resolveDuelTimeout({ room });
   if (room.winner && room.winner !== "draw") {
@@ -1316,6 +1416,7 @@ function handleDuelTimeout(roomId) {
     });
   }
   duelMode.clearDuelTimer(room);
+  await saveRoom(room);
   io.to(roomId).emit("roomState", sanitizeRoom(room));
 }
 
@@ -1348,8 +1449,8 @@ function clearAiBattleTimers(room) {
   }
 }
 
-function scheduleAiBattleCountdown(roomId) {
-  const room = rooms.get(roomId);
+async function scheduleAiBattleCountdown(roomId) {
+  const room = await getRoom(roomId);
   if (!room || !isAiBattleRoom(room)) return;
   if (room.battle.aiHost?.mode !== "auto") return;
   if (room.battle.pendingStart) return;
@@ -1358,6 +1459,7 @@ function scheduleAiBattleCountdown(roomId) {
     clearAiBattleTimers(room);
     room.battle.countdownEndsAt = null;
     room.battle.deadline = null;
+    await saveRoom(room);
     return;
   }
   if (room._aiBattleCountdownTimer) {
@@ -1366,19 +1468,23 @@ function scheduleAiBattleCountdown(roomId) {
   const countdownEndsAt = Date.now() + AI_BATTLE_COUNTDOWN_MS;
   room.battle.countdownEndsAt = countdownEndsAt;
   room.updatedAt = Date.now();
+  await saveRoom(room);
   room._aiBattleCountdownTimer = setTimeout(() => {
-    room._aiBattleCountdownTimer = null;
-    const result = autoStartAiBattleRound(roomId);
-    if (!result.ok) {
-      room.battle.pendingStart = true;
-      if (room.battle.aiHost) room.battle.aiHost.pendingStart = true;
-      io.to(roomId).emit("roomState", sanitizeRoom(room));
-    }
+    void (async () => {
+      room._aiBattleCountdownTimer = null;
+      const result = await autoStartAiBattleRound(roomId);
+      if (!result.ok) {
+        room.battle.pendingStart = true;
+        if (room.battle.aiHost) room.battle.aiHost.pendingStart = true;
+        await saveRoom(room);
+        io.to(roomId).emit("roomState", sanitizeRoom(room));
+      }
+    })();
   }, AI_BATTLE_COUNTDOWN_MS);
 }
 
-function autoStartAiBattleRound(roomId) {
-  const room = rooms.get(roomId);
+async function autoStartAiBattleRound(roomId) {
+  const room = await getRoom(roomId);
   if (!room || !isAiBattleRoom(room))
     return { ok: false, error: "Room not available" };
   if (room.battle.aiHost?.mode !== "auto")
@@ -1424,15 +1530,16 @@ function autoStartAiBattleRound(roomId) {
     clearTimeout(room._aiBattleRoundTimer);
   }
   room._aiBattleRoundTimer = setTimeout(() => {
-    handleAiBattleTimeout(roomId);
+    void handleAiBattleTimeout(roomId);
   }, ROUND_MS);
 
+  await saveRoom(room);
   io.to(roomId).emit("roomState", sanitizeRoom(room));
   return { ok: true };
 }
 
-function handleAiBattleTimeout(roomId) {
-  const room = rooms.get(roomId);
+async function handleAiBattleTimeout(roomId) {
+  const room = await getRoom(roomId);
   if (!room || !isAiBattleRoom(room)) return;
   room._aiBattleRoundTimer = null;
   if (!room.battle.started) return;
@@ -1444,12 +1551,13 @@ function handleAiBattleTimeout(roomId) {
     room.hostId = room.meta?.isEvent ? "server" : null;
     room.hostConnected = room.meta?.isEvent ? true : false;
   }
-  scheduleAiBattleCountdown(roomId);
+  await saveRoom(room);
+  await scheduleAiBattleCountdown(roomId);
   io.to(roomId).emit("roomState", sanitizeRoom(room));
 }
 
-function maybeEnsureAiBattleRound(roomId) {
-  const room = rooms.get(roomId);
+async function maybeEnsureAiBattleRound(roomId) {
+  const room = await getRoom(roomId);
   if (!room || !isAiBattleRoom(room)) return;
   if (room.battle.aiHost?.mode !== "auto") return;
   if (room.battle.started) return;
@@ -1465,6 +1573,7 @@ function maybeEnsureAiBattleRound(roomId) {
       touched = true;
     }
     if (touched) {
+      await saveRoom(room);
       io.to(roomId).emit("roomState", sanitizeRoom(room));
     }
     return;
@@ -1477,11 +1586,12 @@ function maybeEnsureAiBattleRound(roomId) {
   }
 
   if (!room.battle.countdownEndsAt && !room._aiBattleCountdownTimer) {
-    scheduleAiBattleCountdown(roomId);
+    await scheduleAiBattleCountdown(roomId);
     touched = true;
   }
 
   if (touched) {
+    await saveRoom(room);
     io.to(roomId).emit("roomState", sanitizeRoom(room));
   }
 }
@@ -1502,8 +1612,27 @@ const io = new Server(httpServer, {
 });
 ioRef = io;
 
+async function broadcastRoomState(room) {
+  await saveRoom(room);
+  io.to(room.id).emit("roomState", sanitizeRoom(room));
+}
+
 // ---------- Socket authentication middleware ----------
 io.use(authenticateSocket);
+
+if (!config.isTest) {
+  const interval = setInterval(() => {
+    const now = Date.now();
+    for (const [socketId, hb] of socketHeartbeat.entries()) {
+      if (now - hb.lastHeartbeatAt > HEARTBEAT_STALE_MS) {
+        console.warn(
+          `[heartbeat] stale socket=${socketId} ageMs=${now - hb.lastHeartbeatAt}`,
+        );
+      }
+    }
+  }, HEARTBEAT_LOG_INTERVAL_MS);
+  if (typeof interval.unref === "function") interval.unref();
+}
 
 // ---------- Socket helpers ----------
 
@@ -1522,10 +1651,36 @@ async function getSocketProfileData(socket) {
 
 // ---------- Socket handlers ----------
 io.on("connection", (socket) => {
-  socket.on("syncRoom", ({ roomId }, cb) => {
-    const room = rooms.get(roomId);
+  socketHeartbeat.set(socket.id, {
+    connectedAt: Date.now(),
+    lastHeartbeatAt: Date.now(),
+  });
+  logReconnect("connected", socket, { userId: socket.userId || null });
+  socket.conn?.on?.("packet", (packet) => {
+    if (packet?.type === "pong") {
+      const hb = socketHeartbeat.get(socket.id);
+      if (hb) hb.lastHeartbeatAt = Date.now();
+    }
+  });
+
+  socket.on("heartbeat", (payload, cb) => {
+    const ts = Number(payload?.ts);
+    const now = Date.now();
+    const hb = socketHeartbeat.get(socket.id);
+    if (hb) hb.lastHeartbeatAt = now;
+    const driftMs = Number.isFinite(ts) ? Math.abs(now - ts) : null;
+    const ok = driftMs == null || driftMs < 2 * 60 * 1000;
+    cb?.({ ok, serverTime: now, driftMs });
+  });
+
+  socket.on("syncRoom", async ({ roomId }, cb) => {
+    const sanitized = sanitizeRoomId(
+      typeof roomId === "string" ? roomId : roomId != null ? String(roomId) : "",
+    );
+    if (!sanitized) return cb?.({ ok: false, error: "Room not found" });
+    const room = await getRoom(sanitized);
     if (!room) return cb?.({ ok: false, error: "Room not found" });
-    socket.join(roomId);
+    socket.join(sanitized);
     cb?.({ ok: true, state: sanitizeRoom(room) });
   });
 
@@ -1587,13 +1742,13 @@ io.on("connection", (socket) => {
       ...profile,
     };
 
-    rooms.set(id, room);
+    await saveRoom(room);
     socket.join(id);
     if (normalizedMode === "battle_ai") {
-      scheduleAiBattleCountdown(id);
+      await scheduleAiBattleCountdown(id);
     }
     cb?.({ roomId: id });
-    io.to(id).emit("roomState", sanitizeRoom(room));
+    await broadcastRoomState(room);
   });
 
   socket.on("joinRoom", async ({ name, roomId, playerId }, cb) => {
@@ -1610,7 +1765,7 @@ io.on("connection", (socket) => {
       return cb?.({ error: "Invalid name" });
     }
 
-    const room = rooms.get(sanitizedRoomId);
+    const room = await getRoom(sanitizedRoomId);
     if (!room) return cb?.({ error: "Room not found" });
 
     const stablePlayerId = normalizePlayerId(playerId);
@@ -1642,11 +1797,14 @@ io.on("connection", (socket) => {
       room.updatedAt = Date.now();
 
       socket.join(sanitizedRoomId);
-      io.to(sanitizedRoomId).emit("roomState", sanitizeRoom(room));
+      await broadcastRoomState(room);
+      console.log(
+        `[room-recovery] join-room resume room=${sanitizedRoomId} player=${targetId} source=${sourceId}`,
+      );
       if (room.mode === "battle_ai") {
-        maybeEnsureAiBattleRound(sanitizedRoomId);
+        await maybeEnsureAiBattleRound(sanitizedRoomId);
         if (room.meta?.isEvent && isAiBattleEventActive()) {
-          ensureAiBattleEventRoom();
+          void ensureAiBattleEventRoom();
         }
       }
       return cb?.({ ok: true, resumed: true, mode: room.mode });
@@ -1683,16 +1841,16 @@ io.on("connection", (socket) => {
 
     socket.join(sanitizedRoomId);
     cb?.({ ok: true, resumed: false, mode: room.mode });
-    io.to(sanitizedRoomId).emit("roomState", sanitizeRoom(room));
+    await broadcastRoomState(room);
     if (room.mode === "battle_ai") {
-      maybeEnsureAiBattleRound(sanitizedRoomId);
+      await maybeEnsureAiBattleRound(sanitizedRoomId);
       if (room.meta?.isEvent && isAiBattleEventActive()) {
-        ensureAiBattleEventRoom();
+        void ensureAiBattleEventRoom();
       }
     }
   });
 
-  socket.on("setSecret", ({ roomId, secret }, cb) => {
+  socket.on("setSecret", async ({ roomId, secret }, cb) => {
     // Sanitize inputs
     const sanitizedRoomId = sanitizeRoomId(roomId);
     const sanitizedSecret = sanitizeWord(secret);
@@ -1704,7 +1862,7 @@ io.on("connection", (socket) => {
       return cb?.({ error: "Invalid secret word" });
     }
 
-    const room = rooms.get(sanitizedRoomId);
+    const room = await getRoom(sanitizedRoomId);
     if (!room) return cb?.({ error: "Room not found" });
     if (room.mode !== "duel") return cb?.({ error: "Wrong mode" });
     const actorId = getPlayerIdBySocket(room, socket.id);
@@ -1718,21 +1876,23 @@ io.on("connection", (socket) => {
     });
     if (result?.error) return cb?.(result);
 
-    if (result?.started) {
+       if (result?.started) {
       const startResult = duelMode.startDuelRound({
         room,
         roundMs: ROUND_MS,
         scheduleTimeout: () =>
-          setTimeout(() => handleDuelTimeout(sanitizedRoomId), ROUND_MS),
+          setTimeout(() => {
+            void handleDuelTimeout(sanitizedRoomId);
+          }, ROUND_MS),
       });
       if (startResult?.error) return cb?.(startResult);
     }
 
-    io.to(sanitizedRoomId).emit("roomState", sanitizeRoom(room));
+    await broadcastRoomState(room);
     cb?.({ ok: true });
   });
 
-  socket.on("makeGuess", ({ roomId, guess }, cb) => {
+  socket.on("makeGuess", async ({ roomId, guess }, cb) => {
     if (!checkSocketRateLimit(socket.id, "makeGuess", 10)) {
       return cb?.({ error: "Too many guesses. Slow down!" });
     }
@@ -1747,7 +1907,7 @@ io.on("connection", (socket) => {
       return cb?.({ error: "Invalid guess" });
     }
 
-    const room = rooms.get(sanitizedRoomId);
+    const room = await getRoom(sanitizedRoomId);
     if (!room) return cb?.({ error: "Room not found" });
     const actorId = getPlayerIdBySocket(room, socket.id);
     if (!actorId) return cb?.({ error: "Player not in room" });
@@ -1767,7 +1927,7 @@ io.on("connection", (socket) => {
       });
       if (result?.error) return cb?.(result);
       if (result?.roundEnded) duelMode.clearDuelTimer(room);
-      io.to(sanitizedRoomId).emit("roomState", sanitizeRoom(room));
+      await broadcastRoomState(room);
       return cb?.({ ok: true, pattern: result?.pattern });
     }
 
@@ -1781,7 +1941,7 @@ io.on("connection", (socket) => {
         getOpponent,
       });
       if (result?.error) return cb?.(result);
-      io.to(sanitizedRoomId).emit("roomState", sanitizeRoom(room));
+      await broadcastRoomState(room);
       return cb?.({ ok: true, pattern: result?.pattern });
     }
 
@@ -1805,17 +1965,17 @@ io.on("connection", (socket) => {
           room.hostId = room.meta?.isEvent ? "server" : null;
           room.hostConnected = room.meta?.isEvent ? true : false;
         }
-        scheduleAiBattleCountdown(sanitizedRoomId);
+        await scheduleAiBattleCountdown(sanitizedRoomId);
       }
-      io.to(sanitizedRoomId).emit("roomState", sanitizeRoom(room));
+      await broadcastRoomState(room);
       return cb?.({ ok: true, pattern: result?.pattern });
     }
 
     return cb?.({ error: "Unsupported mode" });
   });
 
-  socket.on("duelPlayAgain", ({ roomId }, cb) => {
-    const room = rooms.get(roomId);
+  socket.on("duelPlayAgain", async ({ roomId }, cb) => {
+    const room = await getRoom(roomId);
     if (!room) return cb?.({ error: "Room not found" });
     if (room.mode !== "duel" && room.mode !== "shared")
       return cb?.({ error: "Wrong mode" });
@@ -1856,12 +2016,12 @@ io.on("connection", (socket) => {
       }
     }
 
-    io.to(roomId).emit("roomState", sanitizeRoom(room));
+    await broadcastRoomState(room);
     cb?.({ ok: true, bothRequested });
   });
 
-  socket.on("startShared", ({ roomId }, cb) => {
-    const room = rooms.get(roomId);
+  socket.on("startShared", async ({ roomId }, cb) => {
+    const room = await getRoom(roomId);
     if (!room) return cb?.({ error: "Room not found" });
     if (room.mode !== "shared")
       return cb?.({ error: "Room not found or wrong mode" });
@@ -1873,11 +2033,11 @@ io.on("connection", (socket) => {
     });
     if (result?.error) return cb?.(result);
 
-    io.to(roomId).emit("roomState", sanitizeRoom(room));
+    await broadcastRoomState(room);
     cb?.({ ok: true });
   });
 
-  socket.on("setHostWord", ({ roomId, secret }, cb) => {
+  socket.on("setHostWord", async ({ roomId, secret }, cb) => {
     // Sanitize inputs
     const sanitizedRoomId = sanitizeRoomId(roomId);
     const sanitizedSecret = sanitizeWord(secret);
@@ -1889,7 +2049,7 @@ io.on("connection", (socket) => {
       return cb?.({ error: "Invalid word" });
     }
 
-    const room = rooms.get(sanitizedRoomId);
+    const room = await getRoom(sanitizedRoomId);
     if (!room) return cb?.({ error: "Room not found" });
     if (room.mode !== "battle" && room.mode !== "battle_ai") {
       return cb?.({ error: "Wrong mode" });
@@ -1915,12 +2075,12 @@ io.on("connection", (socket) => {
       room.battle.countdownEndsAt = null;
     }
 
-    io.to(sanitizedRoomId).emit("roomState", sanitizeRoom(room));
+    await broadcastRoomState(room);
     cb?.({ ok: true });
   });
 
-  socket.on("startBattle", ({ roomId }, cb) => {
-    const room = rooms.get(roomId);
+  socket.on("startBattle", async ({ roomId }, cb) => {
+    const room = await getRoom(roomId);
     if (!room) return cb?.({ error: "Room not found" });
     if (room.mode !== "battle" && room.mode !== "battle_ai") {
       return cb?.({ error: "Wrong mode" });
@@ -1943,16 +2103,16 @@ io.on("connection", (socket) => {
         clearTimeout(room._aiBattleRoundTimer);
       }
       room._aiBattleRoundTimer = setTimeout(() => {
-        handleAiBattleTimeout(roomId);
+        void handleAiBattleTimeout(roomId);
       }, ROUND_MS);
     }
 
-    io.to(roomId).emit("roomState", sanitizeRoom(room));
+    await broadcastRoomState(room);
     cb?.({ ok: true });
   });
 
-  socket.on("aiBattleClaimHost", ({ roomId }, cb) => {
-    const room = rooms.get(roomId);
+  socket.on("aiBattleClaimHost", async ({ roomId }, cb) => {
+    const room = await getRoom(roomId);
     if (!room) return cb?.({ error: "Room not found" });
     if (room.mode !== "battle_ai") return cb?.({ error: "Wrong mode" });
     if (room.battle?.aiHost?.mode === "player") {
@@ -1981,12 +2141,12 @@ io.on("connection", (socket) => {
     room.battle.deadline = null;
     room.battle.pendingStart = false;
     room.updatedAt = Date.now();
-    io.to(roomId).emit("roomState", sanitizeRoom(room));
+    await broadcastRoomState(room);
     cb?.({ ok: true });
   });
 
-  socket.on("aiBattleReleaseHost", ({ roomId }, cb) => {
-    const room = rooms.get(roomId);
+  socket.on("aiBattleReleaseHost", async ({ roomId }, cb) => {
+    const room = await getRoom(roomId);
     if (!room) return cb?.({ error: "Room not found" });
     if (room.mode !== "battle_ai") return cb?.({ error: "Wrong mode" });
     if (room.battle?.aiHost?.mode !== "player") {
@@ -2016,13 +2176,13 @@ io.on("connection", (socket) => {
     room.battle.deadline = null;
     room.battle.pendingStart = false;
     room.updatedAt = Date.now();
-    io.to(roomId).emit("roomState", sanitizeRoom(room));
-    maybeEnsureAiBattleRound(roomId);
+    await broadcastRoomState(room);
+    void maybeEnsureAiBattleRound(roomId);
     cb?.({ ok: true });
   });
 
-  socket.on("playAgain", ({ roomId }, cb) => {
-    const room = rooms.get(roomId);
+  socket.on("playAgain", async ({ roomId }, cb) => {
+    const room = await getRoom(roomId);
     if (!room) return cb?.({ error: "Room not found" });
     if (room.mode !== "battle" && room.mode !== "battle_ai") {
       return cb?.({ error: "Wrong mode" });
@@ -2042,12 +2202,12 @@ io.on("connection", (socket) => {
       room.battle.countdownEndsAt = null;
       clearAiBattleTimers(room);
     }
-    io.to(roomId).emit("roomState", sanitizeRoom(room));
+    await broadcastRoomState(room);
     cb?.({ ok: true });
   });
 
-  socket.on("aiBattleStart", ({ roomId }, cb) => {
-    const room = rooms.get(roomId);
+  socket.on("aiBattleStart", async ({ roomId }, cb) => {
+    const room = await getRoom(roomId);
     if (!room) return cb?.({ error: "Room not found" });
     if (room.mode !== "battle_ai") return cb?.({ error: "Wrong mode" });
     if (room.battle.started) return cb?.({ error: "Round already running" });
@@ -2058,11 +2218,11 @@ io.on("connection", (socket) => {
     const active = getActivePlayerIds(room);
     if (active.length === 0) return cb?.({ error: "No active players" });
 
-    const started = autoStartAiBattleRound(roomId);
+    const started = await autoStartAiBattleRound(roomId);
     if (!started?.ok) {
       room.battle.pendingStart = true;
       if (room.battle.aiHost) room.battle.aiHost.pendingStart = true;
-      io.to(roomId).emit("roomState", sanitizeRoom(room));
+      await broadcastRoomState(room);
       return cb?.({
         error: started?.error || "Unable to start round",
       });
@@ -2070,17 +2230,26 @@ io.on("connection", (socket) => {
     cb?.(started);
   });
 
-  socket.on("resume", ({ roomId, oldId, playerId }, cb) => {
+  socket.on("resume", async ({ roomId, oldId, playerId }, cb) => {
+    const startedAt = Date.now();
+    const failResume = (error, code) => {
+      trackResumeResult({
+        ok: false,
+        code,
+        latencyMs: Date.now() - startedAt,
+      });
+      return resumeError(cb, error, code);
+    };
     const sanitizedRoomId = sanitizeRoomId(
       typeof roomId === "string" ? roomId : roomId != null ? String(roomId) : "",
     );
     if (!sanitizedRoomId) {
-      return resumeError(cb, "Invalid room ID", "INVALID_ROOM_ID");
+      return failResume("Invalid room ID", "INVALID_ROOM_ID");
     }
 
-    const room = rooms.get(sanitizedRoomId);
+    const room = await getRoom(sanitizedRoomId);
     if (!room) {
-      return resumeError(cb, "Room not found", "ROOM_NOT_FOUND");
+      return failResume("Room not found", "ROOM_NOT_FOUND");
     }
 
     let stablePlayerId = null;
@@ -2092,14 +2261,13 @@ io.on("connection", (socket) => {
     ) {
       const trimmed = String(rawPlayerId).trim();
       if (!isValidUuidPlayerId(trimmed)) {
-        return resumeError(cb, "Invalid player id", "INVALID_PLAYER_ID");
+        return failResume("Invalid player id", "INVALID_PLAYER_ID");
       }
       stablePlayerId = trimmed;
     }
 
     if (!config.isTest && stablePlayerId && !socket.userId) {
-      return resumeError(
-        cb,
+      return failResume(
         "Authentication required to resume",
         "AUTH_REQUIRED",
       );
@@ -2115,18 +2283,18 @@ io.on("connection", (socket) => {
         (pid) => room.players[pid]?.socketId === oldId,
       );
     }
+
     if (!sourceId) {
-      return resumeError(cb, "Old session not found", "SESSION_NOT_FOUND");
+      return failResume("Old session not found", "SESSION_NOT_FOUND");
     }
 
     const candidate = room.players[sourceId];
     if (!candidate) {
-      return resumeError(cb, "Old session not found", "SESSION_NOT_FOUND");
+      return failResume("Old session not found", "SESSION_NOT_FOUND");
     }
 
     if (!candidate.disconnected) {
-      return resumeError(
-        cb,
+      return failResume(
         "Player session is still active",
         "NOT_DISCONNECTED",
       );
@@ -2137,16 +2305,14 @@ io.on("connection", (socket) => {
       typeof candidate.disconnectedAt === "number" &&
       Date.now() - candidate.disconnectedAt > RESUME_MAX_DISCONNECT_MS
     ) {
-      return resumeError(
-        cb,
+      return failResume(
         "Reconnect window expired; join the room again",
         "RESUME_EXPIRED",
       );
     }
 
     if (stablePlayerId && candidate.playerId && candidate.playerId !== stablePlayerId) {
-      return resumeError(
-        cb,
+      return failResume(
         "Player id does not match this seat",
         "PLAYER_MISMATCH",
       );
@@ -2169,19 +2335,33 @@ io.on("connection", (socket) => {
     room.updatedAt = Date.now();
 
     socket.join(sanitizedRoomId);
-    io.to(sanitizedRoomId).emit("roomState", sanitizeRoom(room));
+    await broadcastRoomState(room);
     if (room.mode === "battle_ai") {
-      maybeEnsureAiBattleRound(sanitizedRoomId);
+      void maybeEnsureAiBattleRound(sanitizedRoomId);
     }
+    trackResumeResult({
+      ok: true,
+      code: "OK",
+      latencyMs: Date.now() - startedAt,
+    });
+    console.log(
+      `[room-recovery] resume success room=${sanitizedRoomId} player=${targetId} source=${sourceId} latencyMs=${Date.now() - startedAt}`,
+    );
     cb?.({ ok: true, mode: room.mode });
   });
 
-  socket.on("leaveRoom", ({ roomId } = {}, cb) => {
+  socket.on("leaveRoom", async ({ roomId } = {}, cb) => {
     const now = Date.now();
     let handled = false;
 
-    for (const [id, room] of rooms) {
-      if (roomId && id !== roomId) continue;
+    const requested =
+      roomId != null && roomId !== "" ? sanitizeRoomId(roomId) : null;
+    const idsToScan =
+      requested != null ? (requested ? [requested] : []) : await listRoomIds();
+
+    for (const id of idsToScan) {
+      const room = await getRoom(id);
+      if (!room) continue;
       const playerId = getPlayerIdBySocket(room, socket.id);
       const player = playerId ? room.players[playerId] : null;
       if (!player) continue;
@@ -2217,6 +2397,7 @@ io.on("connection", (socket) => {
       }
 
       room.updatedAt = now;
+      await saveRoom(room);
       socket.leave(id);
       io.to(id).emit("roomState", sanitizeRoom(room));
 
@@ -2230,14 +2411,14 @@ io.on("connection", (socket) => {
           room.battle.secret = null;
           room.battle.lastRevealedWord = null;
           if (room.meta?.isEvent && isAiBattleEventActive()) {
-            ensureAiBattleEventRoom();
+            void ensureAiBattleEventRoom();
           }
         } else if (
           room.battle.aiHost?.mode === "auto" &&
           !room.battle.started &&
           !room.battle.countdownEndsAt
         ) {
-          maybeEnsureAiBattleRound(id);
+          void maybeEnsureAiBattleRound(id);
         }
       }
 
@@ -2247,134 +2428,52 @@ io.on("connection", (socket) => {
     cb?.({ ok: handled });
   });
 
-  socket.on("disconnect", () => {
+  socket.on("disconnect", (reason) => {
+    logReconnect("disconnected", socket, { reason });
+    socketHeartbeat.delete(socket.id);
     clearSocketRateLimits(socket.id);
-    for (const [id, room] of rooms) {
-      const playerId = getPlayerIdBySocket(room, socket.id);
-      const player = playerId ? room.players[playerId] : null;
-      if (!player) continue;
-      // Hold a short grace window before marking disconnected to avoid
-      // brief network blips causing immediate failover.
-      scheduleDisconnectMark(id, playerId);
-    }
+    void (async () => {
+      for (const id of await listRoomIds()) {
+        const room = await getRoom(id);
+        if (!room) continue;
+        const playerId = getPlayerIdBySocket(room, socket.id);
+        const player = playerId ? room.players[playerId] : null;
+        if (!player) continue;
+        // Hold a short grace window before marking disconnected to avoid
+        // brief network blips causing immediate failover.
+        scheduleDisconnectMark(id, playerId);
+      }
+    })();
   });
 });
 
-const DISCONNECT_TTL_MS = 30 * 60 * 1000;
-
-const startRoomCleanupInterval = () =>
-  setInterval(() => {
-    const now = Date.now();
-    for (const [roomId, room] of rooms.entries()) {
-      if (room.meta?.isEvent && isAiBattleEventActive()) {
-        continue;
-      }
-      let updated = false;
-      for (const pid of Object.keys(room.players)) {
-        const player = room.players[pid];
-        if (
-          player.disconnected &&
-          player.disconnectedAt &&
-          now - player.disconnectedAt > DISCONNECT_TTL_MS
-        ) {
-          if (room.hostId === pid) {
-            if (room.mode === "battle_ai") {
-              room.hostId = null;
-              room.hostConnected = false;
-              if (room.battle?.aiHost) {
-                room.battle.aiHost.mode = "auto";
-                room.battle.aiHost.claimedBy = null;
-              }
-            } else {
-              const next = Object.keys(room.players).find(
-                (id) => !room.players[id].disconnected && id !== pid
-              );
-              if (next) room.hostId = next;
-            }
-          }
-          if (room.battle?.aiHost?.claimedBy === pid) {
-            room.battle.aiHost.claimedBy = null;
-            if (room.mode === "battle_ai") {
-              room.battle.aiHost.mode = "auto";
-            }
-          }
-          clearPendingDisconnect(roomId, pid);
-          delete room.players[pid];
-          updated = true;
-        }
-      }
-
-      if (updated) {
-        room.updatedAt = now;
-      }
-
-      const activeIds = Object.keys(room.players).filter(
-        (pid) => !room.players[pid].disconnected
-      );
-      const hostPlayer = room.players[room.hostId];
-
-      if (activeIds.length === 0) {
-        if (room.mode === "battle_ai") {
-          clearAiBattleTimers(room);
-          battleMode.resetBattleRound(room);
-          room.battle.secret = null;
-          room.battle.lastRevealedWord = null;
-          room.battle.deadline = null;
-          room.battle.countdownEndsAt = null;
-        } else if (room.mode === "duel" || room.mode === "shared") {
-          // Clean up duel timers before deleting room
-          duelMode.clearDuelTimer(room);
-        }
-        const oldestDisconnect = Math.min(
-          ...Object.values(room.players).map((p) =>
-            typeof p.disconnectedAt === "number" ? p.disconnectedAt : Infinity
-          )
-        );
-        if (
-          !hostPlayer ||
-          !hostPlayer.disconnectedAt ||
-          now - hostPlayer.disconnectedAt > HOST_DISCONNECT_GRACE_MS ||
-          now - oldestDisconnect > HOST_DISCONNECT_GRACE_MS
-        ) {
-          for (const pid of Object.keys(room.players)) {
-            clearPendingDisconnect(roomId, pid);
-          }
-          rooms.delete(roomId);
-        }
-        continue;
-      }
-
-      if (
-        (!hostPlayer || hostPlayer.disconnected) &&
-        room.mode !== "battle_ai"
-      ) {
-        const nextHost = activeIds[0];
-        if (nextHost) {
-          room.hostId = nextHost;
-          room.updatedAt = now;
-        }
-      }
-      if (
-        room.mode === "battle_ai" &&
-        room.battle.aiHost?.mode === "auto" &&
-        !room.battle.started &&
-        !room.battle.countdownEndsAt
-      ) {
-        maybeEnsureAiBattleRound(roomId);
-      }
-    }
-  }, 5 * 60 * 1000);
-
 const roomCleanupInterval =
-  !config.isTest ? startRoomCleanupInterval() : null;
+  !config.isTest
+    ? startRoomCleanupInterval({
+        listRoomIds,
+        getRoom,
+        saveRoom,
+        deleteRoom,
+        clearPendingDisconnect,
+        clearAiBattleTimers,
+        duelMode,
+        battleMode,
+        maybeEnsureAiBattleRound,
+        isAiBattleEventActive,
+        hostDisconnectGraceMs: HOST_DISCONNECT_GRACE_MS,
+      })
+    : null;
 
 const aiBattleEventInterval =
   isAiBattleEventActive() && !config.isTest
-    ? setInterval(() => ensureAiBattleEventRoom(), AI_BATTLE_EVENT_INTERVAL_MS)
+    ? setInterval(
+        () => void ensureAiBattleEventRoom(),
+        AI_BATTLE_EVENT_INTERVAL_MS,
+      )
     : null;
 
 if (isAiBattleEventActive()) {
-  ensureAiBattleEventRoom();
+  void ensureAiBattleEventRoom();
 }
 // ---------- Helpers ----------
 function getOpponent(room, socketId) {
