@@ -23,6 +23,7 @@ export default function NavHeaderV2({
   roomId = null,
   profileMenuVariant = "default",
   reconnecting = false,
+  reconnectAttempt = 0,
 }) {
   const [copied, setCopied] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
@@ -193,8 +194,14 @@ export default function NavHeaderV2({
                 exit={{ opacity: 0, scale: 0.9 }}
               >
                 <LoadingSpinner size="sm" variant="white" />
-                <span className="hidden sm:inline">Reconnecting...</span>
-                <span className="sm:hidden">Reconnecting</span>
+                <span className="hidden sm:inline">
+                  {reconnectAttempt > 0
+                    ? `Reconnecting… Attempt ${reconnectAttempt}`
+                    : "Reconnecting…"}
+                </span>
+                <span className="sm:hidden">
+                  {reconnectAttempt > 0 ? `Attempt ${reconnectAttempt}` : "Reconnecting"}
+                </span>
               </motion.div>
             )}
             {roomId && (

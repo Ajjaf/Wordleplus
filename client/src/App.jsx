@@ -86,7 +86,10 @@ export default function App() {
     },
     [navigateToGame],
   );
-  const { canRejoin, doRejoin, savedRoomId, reconnecting } = useSocketConnection(room, onGameResumed);
+  const { canRejoin, doRejoin, savedRoomId, reconnecting, reconnectAttempt } = useSocketConnection(
+    room,
+    onGameResumed,
+  );
 
   // Game actions by mode
   const actionsByMode = useGameActions();
@@ -420,6 +423,8 @@ export default function App() {
             right={screen === "game" ? rejoinNavControl : null}
             roomId={screen === "game" ? room?.id : null}
             profileMenuVariant="game"
+            reconnecting={reconnecting}
+            reconnectAttempt={reconnectAttempt}
           />
 
           <div className="relative flex-1 overflow-hidden">
@@ -491,6 +496,7 @@ export default function App() {
             right={!viewingHost ? rejoinNavControl : null}
             roomId={screen === "home" ? null : roomId}
             reconnecting={reconnecting}
+            reconnectAttempt={reconnectAttempt}
           />
 
           <div className="max-w-7xl mx-auto p-4 font-sans">

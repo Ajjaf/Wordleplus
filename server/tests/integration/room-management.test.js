@@ -139,13 +139,13 @@ describe("Room Management Integration", () => {
     await emitWithAck(c2, "joinRoom", { name: "Bob", roomId });
     await joinBroadcast;
 
-    const dcPromise = waitForEvent(c1, "roomState");
+    const dcPromise = waitForEvent(c1, "roomState", 9000);
     c2.disconnect();
     const state = await dcPromise;
 
     const bob = Object.values(state.players).find((p) => p.name === "Bob");
     expect(bob.disconnected).toBe(true);
-  });
+  }, 15000);
 
   it("transfers host on disconnect in battle mode", async () => {
     c1 = await createClient();
@@ -161,12 +161,12 @@ describe("Room Management Integration", () => {
     await emitWithAck(c2, "joinRoom", { name: "Player", roomId });
     await joinBroadcast;
 
-    const dcPromise = waitForEvent(c2, "roomState");
+    const dcPromise = waitForEvent(c2, "roomState", 9000);
     c1.disconnect();
     const state = await dcPromise;
 
     expect(state.hostId).toBe(c2.id);
-  });
+  }, 15000);
 
   // ---- Reconnection / Resume ----
 
@@ -184,7 +184,7 @@ describe("Room Management Integration", () => {
     await emitWithAck(c2, "joinRoom", { name: "Bob", roomId });
     await joinBroadcast;
 
-    const dcPromise = waitForEvent(c1, "roomState");
+    const dcPromise = waitForEvent(c1, "roomState", 9000);
     c2.disconnect();
     await dcPromise;
 
@@ -198,7 +198,7 @@ describe("Room Management Integration", () => {
     const state = await rejoinBroadcast;
     const bob = Object.values(state.players).find((p) => p.name === "Bob");
     expect(bob.disconnected).toBe(false);
-  });
+  }, 15000);
 
   // ---- Mode variants ----
 
